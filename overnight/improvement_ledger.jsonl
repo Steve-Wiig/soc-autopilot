@@ -325,3 +325,45 @@
 {"timestamp": "2026-09-04T20:25:58.858708", "file": "engine/defeat_ledger.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
 {"timestamp": "2026-09-04T20:25:58.888843", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
 {"timestamp": "2026-09-04T20:26:00.172254", "file": "engine/hash_chain_sealer.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T02:31:32.534738", "file": "engine/failure_autopsy.py", "category": "performance", "status": "REJECTED", "reason": "Failed generation/tests"}
+{"timestamp": "2026-09-05T02:31:33.896816", "file": "engine/ioc_extractor.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T02:31:33.956434", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T02:31:34.008088", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T02:35:26.623851", "file": "engine/failure_autopsy.py", "category": "maintainability", "status": "APPLIED", "reason": "Canary passed"}
+{"timestamp": "2026-09-05T02:39:33.774871", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T02:39:33.833458", "file": "engine/ioc_extractor.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:03:22.592773", "file": "engine/cer_critic.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:03:22.622348", "file": "engine/cer_critic.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:03:22.653536", "file": "engine/cer_critic.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:03:22.683702", "file": "engine/cer_critic.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:20:13.398232", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:20:13.428793", "file": "engine/defeat_ledger.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:20:13.457729", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:20:13.488744", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:34:11.582870", "file": "engine/enrichment_scheduler.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:34:11.637689", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:34:11.686901", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:34:11.721752", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:48:48.512355", "file": "engine/enrichment_scheduler.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:53:13.163263", "file": "engine/intake_wazuh.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:53:13.201046", "file": "engine/intake_wazuh.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:53:13.230721", "file": "engine/intake_wazuh.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:57:52.594357", "file": "engine/intake_wazuh.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:57:53.389567", "file": "engine/ioc_extractor.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:57:53.441383", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T04:57:53.473724", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T05:02:31.908065", "file": "engine/ioc_extractor.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T05:06:58.681243", "file": "engine/multi_file_patcher.py", "category": "performance", "status": "REJECTED", "reason": "Failed generation/tests"}
+{"timestamp": "2026-09-05T16:03:58.202294", "file": "engine/cer_critic.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T18:35:34.999228", "file": "engine/cer_critic.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.003201", "file": "engine/consensus_gate.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.009257", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.013835", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.018169", "file": "engine/failure_autopsy.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.022341", "file": "engine/hash_chain_sealer.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.034254", "file": "engine/intake_eve.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.037787", "file": "engine/intake_wazuh.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.039818", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T18:35:35.046457", "file": "engine/multi_file_patcher.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
+{"timestamp": "2026-09-05T20:42:42.484531", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T20:42:42.512636", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
