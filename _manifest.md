@@ -1,9 +1,9 @@
 # SOC Autopilot - Build Manifest
 
-MASTER SHA256: (current HEAD: 0715447)
-Full SHA: 0715447c375e79e27cc22f60a8e5085ac7bb711e
+MASTER SHA256: (current HEAD: 02bffd9)
+Full SHA: 02bffd910a228b273666fff4a63a4c317264e494
 Branch: refactor/p1-extract-modules
-Generated: 2026-09-06T18:18:12Z
+Generated: 2026-09-06T18:44:22Z
 
 ## Architecture Version: v11.11
 - Shadow Canary (10-stage safety pipeline)
