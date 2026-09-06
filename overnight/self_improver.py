@@ -689,7 +689,10 @@ def apply_auto_fix(file_path, issue, api_keys):
                 modified_files = apply_multi_file_patches(patches)
             else:
                 # Fallback to simple single-file replace if engine missing
-                modified_files = {file_path: original.replace(raw, raw)} # Dummy
+                # PATCH_ENGINE_UNAVAILABLE - no-op fallback is a governance bug
+                print('       ❌ PATCH_ENGINE_UNAVAILABLE: Cannot generate valid patch')
+                _record_ledger(file_path, issue, 'FAILED', 'Patch engine unavailable')
+                return False
         except Exception as e:
             if attempt == 0:
                 failed_attempt_1_raw = raw
@@ -975,7 +978,7 @@ def drain_backlog_loop(api_keys, budget, state, fixes_per_pass=4):
         time.sleep(15)
 
 # ============================================================
-# PHASE A & B (GEMINI / OPENROUTER)
+# ADVISORY GENERATION & B (GEMINI / OPENROUTER)
 # ============================================================
 def prefill_advisory_queue(files, api_keys, budget):
     QUEUE_DIR.mkdir(parents=True, exist_ok=True)
@@ -1059,7 +1062,7 @@ def _call_local_slm_fallback(prompt: str) -> str:
 
 def process_advisory_queue(api_keys, budget, state):
     pending = sorted(QUEUE_DIR.glob("*.json")) if QUEUE_DIR.exists() else []
-    print(f"======================================================================\nPHASE B: OPENROUTER PROCESSING ({len(pending)} pending advisories)\n======================================================================")
+    print(f"======================================================================\nSHADOW CANARY: OPENROUTER PROCESSING ({len(pending)} pending advisories)\n======================================================================")
     for i, qpath in enumerate(pending[:10], 1):
         if not budget.wait_if_needed("openrouter", timeout=120): break
         budget.record_call("openrouter")

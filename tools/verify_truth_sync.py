@@ -13,8 +13,8 @@ def check_docs():
     """Verify OVERNIGHT_PIPELINE.md doesn't reference deprecated Phase A/B."""
     doc_path = ROOT / "docs" / "OVERNIGHT_PIPELINE.md"
     if not doc_path.exists():
-        print("⚠️ docs/OVERNIGHT_PIPELINE.md missing")
-        return True # Skip if not created yet
+        print("❌ CRITICAL: docs/OVERNIGHT_PIPELINE.md missing")
+        return False
         
     text = doc_path.read_text().lower()
     
@@ -41,8 +41,8 @@ def check_manifest():
     """Verify _manifest.md references the actual current HEAD."""
     manifest_path = ROOT / "_manifest.md"
     if not manifest_path.exists():
-        print("⚠️ _manifest.md missing")
-        return True
+        print("❌ CRITICAL: _manifest.md missing")
+        return False
         
     text = manifest_path.read_text()
     
@@ -52,8 +52,8 @@ def check_manifest():
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip()[:7] # Short SHA
     except Exception:
-        print("⚠️ Could not determine git HEAD")
-        return True
+        print("❌ CRITICAL: Could not determine git HEAD")
+        return False
         
     if actual_head not in text:
         print(f"❌ TRUTH DRIFT: Manifest references stale SHA. Actual HEAD is {actual_head}")
@@ -71,3 +71,40 @@ if __name__ == "__main__":
         sys.exit(1)
     print("\n🎯 ALL TRUTH SYNC CHECKS PASSED")
     sys.exit(0)
+
+def check_source_code_for_deprecated_terms():
+    """Check source code files for deprecated architecture terms."""
+    deprecated_terms = ["phase a", "phase b", "gemini prefill", "v11.9"]
+    source_dirs = ["overnight/", "engine/", "orchestrator/", "memory/"]
+    
+    findings = []
+    from pathlib import Path
+    
+    for source_dir in source_dirs:
+        dir_path = Path(source_dir)
+        if not dir_path.exists():
+            continue
+            
+        for py_file in dir_path.glob("*.py"):
+            try:
+                content = py_file.read_text().lower()
+                for term in deprecated_terms:
+                    if term in content:
+                        findings.append((str(py_file), term))
+            except Exception:
+                pass
+    
+    return findings
+
+# Add source code check to main validation
+if __name__ == "__main__":
+    print("\n🔍 Checking source code for deprecated terms...")
+    source_findings = check_source_code_for_deprecated_terms()
+    
+    if source_findings:
+        print(f"❌ Found {len(source_findings)} deprecated terms in source:")
+        for filepath, term in source_findings[:10]:
+            print(f"  {filepath}: contains '{term}'")
+        exit(1)
+    else:
+        print("✅ No deprecated terms in source code")
