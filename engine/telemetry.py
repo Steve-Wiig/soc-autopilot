@@ -2,7 +2,7 @@ import os, json, time, uuid, sys, threading
 from pathlib import Path
 from datetime import datetime, timezone
 
-DEFAULT_BUFFER_ROOT = Path("/home/swiig/Documents/soc-autopilot/overnight/.telemetry_buffer")
+DEFAULT_BUFFER_ROOT = ROOT / "overnight/.telemetry_buffer"
 DEFAULT_ROTATE_BYTES = 1 * 1024 * 1024
 DEFAULT_MAX_BUFFER_BYTES = 50 * 1024 * 1024
 

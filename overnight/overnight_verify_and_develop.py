@@ -23,7 +23,7 @@ from pathlib import Path
 
 # Load .env file if it exists
 def load_env():
-    env_path = Path("/home/swiig/Documents/soc-autopilot/.env")
+    env_path = ROOT / ".env"
     if env_path.exists():
         for line in env_path.read_text().splitlines():
             line = line.strip()
@@ -32,7 +32,7 @@ def load_env():
                 os.environ.setdefault(key.strip(), value.strip())
 
 
-PROJECT_ROOT = Path("/home/swiig/Documents/soc-autopilot")
+PROJECT_ROOT = ROOT
 OVERNIGHT_DIR = PROJECT_ROOT / "overnight"
 REPORT_PATH = OVERNIGHT_DIR / "morning_report.md"
 TASKS_PATH = OVERNIGHT_DIR / "tasks_phase5.json"
@@ -439,7 +439,7 @@ def phase5_morning_report(verification_results, gaps, tasks, loop_result):
         report_lines.append("")
         report_lines.append("To run the loop manually:")
         report_lines.append("```bash")
-        report_lines.append("cd /home/swiig/Documents/soc-autopilot/overnight")
+        report_lines.append(f"cd {ROOT}/overnight")
         report_lines.append(f"cp {TASKS_PATH.name} tasks.json")
         report_lines.append("rm -f progress.json")
         report_lines.append('export GEMINI_API_KEY="YOUR_KEY"')

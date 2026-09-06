@@ -1,7 +1,9 @@
 """
 Unified Model Provider Abstraction (v2 - Production Grade)
-Implements true cascading failover with failure classification and telemetry.
+Implements true cascading failover with failure classification, telemetry,
+URL normalization, and authentication header support.
 """
+import os
 import time
 import json
 import requests
@@ -38,6 +40,7 @@ class ProviderConfig:
     base_url: str
     timeout: int = 60
     model: str = "default"
+    api_key_env: str = ""  # Environment variable name for API key
 
 class ModelProvider(ABC):
     @abstractmethod
@@ -47,17 +50,25 @@ class ModelProvider(ABC):
     def generate(self, prompt: str, **kwargs) -> str: pass
 
 class OpenAICompatibleProvider(ModelProvider):
-    """Handles Ollama, llama.cpp, vLLM, and OpenAI-compatible endpoints."""
+    """Handles Ollama, llama.cpp, vLLM, OpenRouter, and OpenAI-compatible endpoints."""
     def __init__(self, config: ProviderConfig):
         self.config = config
         self._last_health_check = 0
         self._healthy = False
 
+    def _normalize_base_url(self) -> str:
+        """Strip trailing slashes and /v1 to prevent double-path bugs."""
+        base = self.config.base_url.rstrip('/')
+        if base.endswith('/v1'):
+            base = base[:-3]
+        return base
+
     def is_healthy(self) -> bool:
         if time.time() - self._last_health_check < 30:
             return self._healthy
         try:
-            resp = requests.get(f"{self.config.base_url}/v1/models", timeout=5)
+            base = self._normalize_base_url()
+            resp = requests.get(f"{base}/v1/models", timeout=5)
             self._healthy = (resp.status_code == 200)
         except Exception:
             self._healthy = False
@@ -66,14 +77,28 @@ class OpenAICompatibleProvider(ModelProvider):
 
     def generate(self, prompt: str, **kwargs) -> str:
         """Generates response. Failure classification happens here, telemetry in Router."""
+        base = self._normalize_base_url()
+        
         payload = {
             "model": kwargs.get("model", self.config.model),
             "messages": [{"role": "user", "content": prompt}],
             "temperature": kwargs.get("temperature", 0.2)
         }
-        resp = requests.post(f"{self.config.base_url}/v1/chat/completions", 
-                             json=payload, timeout=self.config.timeout)
         
+        # Build headers with optional authentication
+        headers = {"Content-Type": "application/json"}
+        if self.config.api_key_env:
+            api_key = os.environ.get(self.config.api_key_env, "")
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+        
+        resp = requests.post(
+            f"{base}/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=self.config.timeout
+        )
+
         # Failure Classification
         if resp.status_code in (401, 403):
             raise PermissionError("AUTH_FAILURE")
@@ -128,11 +153,34 @@ class ModelRouter:
 def get_default_router() -> ModelRouter:
     router = ModelRouter()
     
-    # Cloud Providers (Primary)
-    router.register(OpenAICompatibleProvider(ProviderConfig("openrouter", "primary", "https://openrouter.ai/api/v1", 120)))
+    # Cloud Providers (Primary) - with authentication
+    router.register(OpenAICompatibleProvider(
+        ProviderConfig(
+            name="openrouter",
+            role="primary",
+            base_url="https://openrouter.ai/api",
+            timeout=120,
+            api_key_env="OPENROUTER_API_KEY"
+        )
+    ))
     
-    # Edge Providers (Triage/Experimental)
-    router.register(OpenAICompatibleProvider(ProviderConfig("android_qwen", "triage", "http://192.168.1.19:12434", 30, "qwen2.5-coder-1.5b-instruct-q6_k.gguf")))
-    router.register(OpenAICompatibleProvider(ProviderConfig("local_ollama", "triage", "http://localhost:11434", 60)))
+    # Edge Providers (Triage/Experimental) - no auth needed
+    router.register(OpenAICompatibleProvider(
+        ProviderConfig(
+            name="android_qwen",
+            role="triage",
+            base_url="http://192.168.1.19:12434",
+            timeout=30,
+            model="qwen2.5-coder-1.5b-instruct-q6_k.gguf"
+        )
+    ))
+    router.register(OpenAICompatibleProvider(
+        ProviderConfig(
+            name="local_ollama",
+            role="triage",
+            base_url="http://localhost:11434",
+            timeout=60
+        )
+    ))
     
     return router

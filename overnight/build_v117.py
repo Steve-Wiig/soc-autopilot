@@ -5,9 +5,9 @@ a complete, self-contained v11.11.0 master document.
 """
 from pathlib import Path
 
-v116_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.6.0_master.txt")
-v117_delta_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.11.0_master.txt")
-output_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.11.0_master.txt")
+v116_path = Path(str(ROOT / "LOCAL_SOC_SLM_Blueprint_v11.6.0_master.txt"))
+v117_delta_path = ROOT / "LOCAL_SOC_SLM_Blueprint_v11.11.0_master.txt"
+output_path = ROOT / "LOCAL_SOC_SLM_Blueprint_v11.11.0_master.txt"
 
 content = v116_path.read_text()
 

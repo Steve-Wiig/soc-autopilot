@@ -43,7 +43,7 @@ from overnight.llm_client import (
 # ============================================================
 # CONFIGURATION
 # ============================================================
-ROOT = Path("/home/swiig/Documents/soc-autopilot")
+ROOT = Path(str(ROOT))
 REVIEWS_DIR = ROOT / "overnight" / "reviews"
 PROGRESS_FILE = ROOT / "overnight" / "reviews" / "progress.json"
 SUMMARY_FILE = ROOT / "overnight" / "reviews" / "SUMMARY.md"

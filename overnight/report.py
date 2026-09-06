@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-ROOT = Path("/home/swiig/Documents/soc-autopilot")
+ROOT = Path(str(ROOT))
 prog = json.load(open(ROOT / "overnight/progress.json"))
 tasks = {t["id"]:t for t in json.load(open(ROOT / "overnight/tasks.json"))}
 

@@ -20,7 +20,7 @@ except ImportError:
     print("FAIL: requests not installed")
     sys.exit(2)
 
-ROOT = Path("/home/swiig/Documents/soc-autopilot")
+ROOT = Path(str(ROOT))
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent"
 MAX_ATTEMPTS = 3
 RATE_LIMIT_SLEEP = 7

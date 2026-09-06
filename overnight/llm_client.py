@@ -695,7 +695,7 @@ def load_api_keys():
     env_path = Path(__file__).resolve().parent.parent / ".env"
 
     if not env_path.exists():
-        env_path = Path("/home/swiig/Documents/soc-autopilot/.env")
+        env_path = ROOT / ".env"
 
     if env_path.exists():
         for line in env_path.read_text().splitlines():

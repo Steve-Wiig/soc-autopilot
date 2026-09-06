@@ -22,7 +22,7 @@ except ImportError:
     print("FAIL: requests not installed")
     sys.exit(2)
 
-PROJECT_ROOT = Path("/home/swiig/Documents/soc-autopilot")
+PROJECT_ROOT = Path(str(ROOT))
 import argparse as _ap
 from overnight.llm_client import generate_with_critique, load_api_keys, strip_fences
 _parser = _ap.ArgumentParser()

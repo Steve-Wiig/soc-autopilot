@@ -4,7 +4,7 @@ from pathlib import Path
 from collections import defaultdict
 
 NAS_DIR = Path("/mnt/backup-nas/soc-slm-telemetry")
-LOCAL_DIR = Path("/home/swiig/Documents/soc-autopilot/overnight/.telemetry_buffer")
+LOCAL_DIR = ROOT / "overnight/.telemetry_buffer"
 
 def load_events():
     events = []
