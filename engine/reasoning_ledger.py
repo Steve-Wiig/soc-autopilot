@@ -7,6 +7,7 @@ Writes to local buffer (fail-safe) AND directly to NAS if mounted.
 import json
 import time
 import os
+import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -18,15 +19,42 @@ def record_interaction(stage: str, prompt: str, raw_response: str, model: str = 
     BUFFER_DIR.mkdir(parents=True, exist_ok=True)
     local_file = BUFFER_DIR / "current.jsonl"
     
+    debug_preview = os.getenv(
+        "SOC_REASONING_DEBUG",
+        "false"
+    ).lower() == "true"
+
     event = {
         "ts": time.time(),
         "stage": stage,
         "model": model,
         "prompt_chars": len(prompt),
         "response_chars": len(raw_response) if raw_response else 0,
-        "prompt_preview": prompt[:500] + "..." if len(prompt) > 500 else prompt,
-        "response_preview": raw_response[:500] + "..." if raw_response and len(raw_response) > 500 else raw_response
+
+        # Privacy-preserving identifiers
+        "prompt_hash": hashlib.sha256(
+            prompt.encode("utf-8")
+        ).hexdigest(),
+
+        "response_hash": hashlib.sha256(
+            (raw_response or "").encode("utf-8")
+        ).hexdigest(),
     }
+
+    # Explicit operator opt-in only.
+    # Disabled by default to prevent accidental leakage.
+    if debug_preview:
+        event["prompt_preview"] = (
+            prompt[:500] + "..."
+            if len(prompt) > 500
+            else prompt
+        )
+
+        event["response_preview"] = (
+            raw_response[:500] + "..."
+            if raw_response and len(raw_response) > 500
+            else raw_response
+        )
     
     # 1. Always write to local buffer (fail-safe)
     try:
