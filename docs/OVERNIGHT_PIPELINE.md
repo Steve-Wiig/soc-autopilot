@@ -1,4 +1,4 @@
-# OVERNIGHT PIPELINE — Architecture & Operations Guide (v11.9)
+# OVERNIGHT PIPELINE — Architecture & Operations Guide (v11.11)
 
 ## 1. Overview
 
@@ -10,9 +10,9 @@ The overnight self-improving pipeline runs as a standalone cron job (`0 3 * * *`
 
 ---
 
-## 2. Phase Architecture
+## 2. Unified Queue (Advisory Generation)rchitecture
 
-### 2.1 Phase A — Gemini Pre-fill (`overnight/self_improver.py::phase_a_prefill`)
+### 2.1 Unified Queue (Advisory Generation) — Gemini Pre-fill (`overnight/self_improver.py::phase_a_prefill`)
 
 ```python
 async def phase_a_prefill(advisories: list[Advisory]) -> list[PrefillResult]:
@@ -28,9 +28,9 @@ async def phase_a_prefill(advisories: list[Advisory]) -> list[PrefillResult]:
 - **Purpose**: Generate initial fix drafts for all advisories in a single cheap pass.
 - **Model**: `gemini-1.5-flash` (1M token context, $0.075/1M input).
 - **Output**: `PrefillResult` objects serialized to `overnight/phase_a_prefill.jsonl`.
-- **Failure mode**: If Gemini quota exhausted, skip Phase A and proceed to Phase B with empty drafts.
+- **Failure mode**: If Gemini quota exhausted, skip Unified Queue (Advisory Generation) and proceed to Shadow Canary & Backlog Drain with empty drafts.
 
-### 2.2 Phase B — Analysis with Fallback Chain (`overnight/self_improver.py::phase_b_analyze`)
+### 2.2 Shadow Canary & Backlog Drain — Analysis with Fallback Chain (`overnight/self_improver.py::phase_b_analyze`)
 
 ```python
 async def phase_b_analyze(prefills: list[PrefillResult]) -> list[AnalysisResult]:
@@ -223,7 +223,7 @@ class OpenRouterQuota:
 
 - **Append-only**: Daytime workers `engine/queue_manager.py::enqueue_advisory()` append lines.
 - **Crash resilience**: JSONL survives partial writes; reader skips malformed lines.
-- **Decoupled analysis/fixing**: Phase A/B read queue; Phase C drains; no in-memory coupling.
+- **Decoupled analysis/fixing**: Unified Queue (Advisory Generation)/B read queue; Phase C drains; no in-memory coupling.
 
 ### 5.2 Fix Backlog (`overnight/fix_backlog.json`)
 
@@ -414,11 +414,11 @@ python -m overnight.cost_report --days 30
 
 | Symptom | Diagnosis | Resolution |
 |---------|-----------|------------|
-| Pipeline stuck at Phase B | All providers in cooldown | `cat overnight/llm_cooldown.json`; wait or manually clear |
+| Pipeline stuck at Shadow Canary & Backlog Drain | All providers in cooldown | `cat overnight/llm_cooldown.json`; wait or manually clear |
 | OpenRouter 429 despite quota | Header pre-emption missed | Check `x-ratelimit-reset` in logs; increase buffer |
 | `apply_auto_fix` timeout | Test suite hangs | Add `--timeout=60` to pytest; investigate flaky test; ensure `--testmon` is used |
 | Fix rejected: `pytest_failed` | Fix breaks existing tests | Review `fix_backlog.json` rejected entry; adjust fix plan |
-| Advisory re-queued repeatedly | Confidence < 0.85 or critique veto | Inspect Phase B analysis + critique; may need manual triage |
+| Advisory re-queued repeatedly | Confidence < 0.85 or critique veto | Inspect Shadow Canary & Backlog Drain analysis + critique; may need manual triage |
 | Pipeline exits with code 75 | All LLM providers exhausted (cooldown/error) | Systemd timer will retry automatically; check `llm_cooldown.json` |
 | `git commit` fails with "author identity unknown" | Git user not configured for pipeline user | Set `git config user.email/name` in systemd unit or `/etc/gitconfig` |
 
@@ -439,7 +439,7 @@ python -m overnight.cost_report --days 30
 | `overnight/fix_backlog.json` | Applied/pending/rejected fix history |
 | `overnight/openrouter_quota.json` | OpenRouter daily usage + lock state |
 | `overnight/llm_cooldown.json` | Per-provider cooldown timestamps |
-| `overnight/phase_a_prefill.jsonl` | Phase A intermediate output |
+| `overnight/phase_a_prefill.jsonl` | Unified Queue (Advisory Generation) intermediate output |
 | `overnight/phase_c_drain_report.json` | Phase C summary (applied/failed) |
 | `overnight/recover_backups.py` | Crash recovery for `.orig_backup` files |
 | `overnight/update_model_catalog.py` | Weekly model catalog refresh |
@@ -465,7 +465,7 @@ Install via: `pip install -r overnight/requirements.txt`
 ## 12. Integration Points
 
 - **Daytime intake**: `engine/queue_manager.py::enqueue_advisory()` → `overnight/advisory_queue.jsonl`
-- **Enrichment context**: `orchestrator/context_stitcher.py::build_context(advisory)` used in Phase A/B prompts
+- **Enrichment context**: `orchestrator/context_stitcher.py::build_context(advisory)` used in Unified Queue (Advisory Generation)/B prompts
 - **Model registry**: `orchestrator/model_registry.py` provides model metadata for curation
 - **Memory/RAG**: `memory/embeddings.py::search_similar(advisory.text, k=5)` injects historical fixes into prompts
 - **Retention**: `memory/retention.py` purges `fix_backlog.json` entries older than 90 days

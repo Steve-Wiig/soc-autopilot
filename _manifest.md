@@ -1,6 +1,6 @@
 # Blueprint Split Manifest
 GENERATED FROM: soc-autopilot
-MASTER SHA256: (current HEAD: ab8067b)
+MASTER SHA256: (current HEAD: 970f511)
 FILES WRITTEN: 25+
 TOTAL LINES: 4327+
 
