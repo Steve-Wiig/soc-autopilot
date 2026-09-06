@@ -3,6 +3,12 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from engine.telemetry_identity import event_identity
+
+
 ROOT = Path(__file__).resolve().parent.parent
 
 NAS_DIR = Path("/mnt/backup-nas/soc-slm-telemetry")
@@ -35,28 +41,7 @@ def load_events():
 
                         event = json.loads(line)
 
-                        # Stable identity for deduplication.
-                        # Different telemetry domains require different keys.
-
-                        if event.get("event_type") == "inference_attempt":
-                            identity = (
-                                "inference",
-                                event.get("provider"),
-                                event.get("role"),
-                                event.get("attempt_num"),
-                                event.get("timestamp") or event.get("ts"),
-                                event.get("success"),
-                                event.get("failure_class"),
-                            )
-                        else:
-                            identity = (
-                                "remediation",
-                                event.get("remediation_id"),
-                                event.get("ts"),
-                                event.get("target_file"),
-                                event.get("stage"),
-                                event.get("attempt_num"),
-                            )
+                        identity = event_identity(event)
 
                         if identity in seen_events:
                             continue
