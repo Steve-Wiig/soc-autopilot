@@ -201,35 +201,33 @@ import builtins as _builtins
 _BUILTINS = set(dir(_builtins)) | {'__name__', '__file__', '__doc__', 'self', 'cls', 'None', 'True', 'False'}
 
 def _check_for_ghost_names(source_code: str):
-    """AST check: ensure no new undefined names were introduced."""
+    """Check for hallucinated imports. Disabled aggressive local-var checking 
+    to prevent false positives on loop variables (i, e, row, etc.)."""
     try:
         tree = ast.parse(source_code)
     except SyntaxError:
-        return None  # Let pytest catch syntax errors
+        return []
 
-    defined = set(_BUILTINS)
-    used = set()
-
+    # Only check for hallucinated external imports. 
+    # Checking ast.Name nodes for local variables causes too many false positives.
+    hallucinated = []
+    known_stdlib = {'os', 'sys', 'json', 're', 'math', 'time', 'datetime', 'logging', 
+                    'sqlite3', 'hashlib', 'uuid', 'pathlib', 'typing', 'collections', 
+                    'contextlib', 'subprocess', 'argparse', 'tempfile', 'io'}
+    
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            defined.add(node.name)
-        elif isinstance(node, ast.Import):
+        if isinstance(node, ast.Import):
             for alias in node.names:
-                defined.add(alias.asname or alias.name.split('.')[0])
+                root_mod = alias.name.split('.')[0]
+                if root_mod not in known_stdlib and not root_mod.startswith(('engine', 'overnight', 'tools', 'orchestrator', 'memory')):
+                    hallucinated.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                defined.add(alias.asname or alias.name)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name): defined.add(target.id)
-        elif isinstance(node, ast.arg):
-            defined.add(node.arg)
-        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            used.add(node.id)
-
-    undefined = used - defined
-    return undefined if undefined else None
-
+            if node.module:
+                root_mod = node.module.split('.')[0]
+                if root_mod not in known_stdlib and not root_mod.startswith(('engine', 'overnight', 'tools', 'orchestrator', 'memory')):
+                    hallucinated.append(node.module)
+                    
+    return list(set(hallucinated))
 
 def _get_imported_signatures(file_path, max_sigs=8):
     """IMPROVEMENT #16: extract REAL signatures of imported symbols so the
@@ -281,29 +279,40 @@ def triage_backlog():
     leaf_items = [i for i in backlog if i["file"] != root_file]
     if root_items and len(root_items) < len(backlog): _save_json(FIX_BACKLOG, root_items + leaf_items)
 
+
 def _generate_tdd_test(issue_desc: str, target_file: str, api_keys: dict) -> str:
+    # AST_SIGNATURE_FIX_V1
+    sig_context = ""
     try:
-        with open(ROOT / target_file, 'r', encoding='utf-8') as f:
-            sigs = [l.strip() for l in f.readlines() if l.strip().startswith('def ')]
-            sig_context = "\n".join(sigs[:5])
+        target_path = ROOT / target_file
+        tree = ast.parse(target_path.read_text())
+        defs = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        if defs:
+            sigs = []
+            for d in defs[:10]:
+                args = [a.arg for a in d.args.args if a.arg not in ('self', 'cls')]
+                sigs.append(f"def {d.name}({', '.join(args)})")
+            sig_context = f"REAL FUNCTION SIGNATURES IN THIS FILE (DO NOT INVENT NEW ARGUMENTS):\n{chr(10).join(sigs)}\n"
     except Exception as e:
-        print(f"       ⚠️ TDD sig read failed: {e}")
+        print(f"       ⚠️ TDD AST sig read failed: {e}")
         sig_context = ""
-    
+
     prompt = (
         f"You are a senior QA engineer. Write a minimal failing pytest test for:\n"
         f"ISSUE: {issue_desc}\nTARGET FILE: {target_file}\n"
         f"PROJECT STRUCTURE: Files live in subdirectories (tools/, engine/, memory/).\n"
         f"IMPORT RULE: To import, you MUST use sys.path manipulation. Example:\n"
         f"import sys\nsys.path.insert(0, 'tools')  # or 'engine'\nfrom file_name import function_name\n\n"
-        f"ACTUAL SIGNATURES:\n{sig_context}\n"
+        f"{sig_context}\n"
         "Output ONLY the python code for the test function. No markdown.\n"
     )
-    raw = generate(prompt, api_keys, temperature=0.1)
+    raw = generate(prompt, api_keys, temperature=0.1, model_type="code")
     if not raw: return None
     code = strip_fences(raw)
     try: ast.parse(code); return code
     except SyntaxError: return None
+
+
 
 def _failed_test_ids(tb):
     """Extract the set of failing test IDs from a pytest traceback string."""
@@ -351,7 +360,7 @@ def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
     )
     
     try:
-        raw = generate(prompt, api_keys, temperature=0.1, max_tokens=1024)
+        raw = generate(prompt, api_keys, temperature=0.1, max_tokens=1024, model_type="json")
         if not raw:
             return ""
         
@@ -643,8 +652,15 @@ def apply_auto_fix(file_path, issue, api_keys):
         )
         if attempt == 1 and failed_attempt_1_raw:
             prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
-        raw = generate(prompt, api_keys, temperature=current_temp, max_tokens=current_max)
+        raw = generate(prompt, api_keys, temperature=current_temp, max_tokens=current_max, model_type="patch")
         if not raw: return False
+        
+        # NEW: Strip LLM prose, extract ONLY the Aider diff blocks
+        import re
+        diff_blocks = re.findall(r'(<<<<<<<.*?>>>>>>> REPLACE)', raw, re.DOTALL)
+        if diff_blocks:
+            raw = "\n".join(diff_blocks)
+            
         raw = strip_fences(raw)
 
         # Parse & Apply Patches

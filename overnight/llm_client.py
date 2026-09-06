@@ -29,13 +29,93 @@ GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
 RATE_LIMIT_SLEEP = 7
 MAX_RETRIES = 3
 
+# LLM_FIX_HELPERS_V1
+
+CODE_SYSTEM_PROMPT = """You are a senior Python engineer writing production-ready code for a SOC automation platform.
+RULES:
+- Output ONLY valid Python code
+- No markdown fences, no explanations, no preamble
+- No reasoning, analysis, planning, or thinking process
+- Do NOT start with Let me / Here / I will / First or any prose
+- The first non-empty line MUST be valid Python code
+- Use real sqlite3.connect(":memory:") for SQLite, not mocks
+- Expect RuntimeError not SystemExit (library code auto-fixed)
+- Import from actual modules, don't hallucinate"""
+
+PATCH_SYSTEM_PROMPT = """You are a senior Python engineer producing a machine-readable patch.
+Output ONLY Aider-style SEARCH/REPLACE blocks.
+
+Use exactly this format:
+<<<<<<< path/to/file.py
+[exact search text]
+=======
+[replacement text]
+>>>>>>> REPLACE
+
+RULES:
+- No prose
+- No explanations
+- No markdown fences
+- No line numbers
+- Preserve indentation exactly
+- The search block must match the existing file exactly
+- If you cannot produce a safe patch, output nothing"""
+
+JSON_SYSTEM_PROMPT = """You are a precise API assistant.
+Output ONLY valid JSON.
+No markdown fences.
+No prose.
+No comments.
+No trailing commas.
+The first non-empty character must be { or [."""
+
+DOCS_SYSTEM_PROMPT = """You are a technical writer.
+Output ONLY the document content.
+No reasoning, planning, or meta-commentary.
+Start directly with the content."""
+
+
+def _budget_record(provider):
+    try:
+        from overnight.budget_manager import APIBudgetManager
+        APIBudgetManager().record_call(provider)
+    except Exception:
+        pass
+
+
+def _budget_allow(provider, model=None):
+    try:
+        from overnight.budget_manager import APIBudgetManager
+        budget = APIBudgetManager()
+        if provider == "groq":
+            return budget.can_proceed_model_aware("groq", model)
+        return budget.can_proceed(provider)
+    except Exception:
+        return True
+
+
+def _openrouter_daily_exhausted():
+    try:
+        from overnight import openrouter_quota
+        st = openrouter_quota.status()
+        if not st.get("locked_until"):
+            return False
+        if st.get("used_today", 0) < openrouter_quota.DAILY_LIMIT:
+            return False
+        reason = str(st.get("lock_reason", ""))
+        return not reason.startswith("429")
+    except Exception:
+        return False
+
+
 # Dynamic fallback state
 _fallback_list = None
 _current_model = None
 _calls_since_primary_check = 0
 PRIMARY_RETRY_INTERVAL = 3
-CACHE_FILE = Path("/home/swiig/Documents/soc-autopilot/overnight/model_fallback_cache.json")
-GROQ_CACHE_FILE = Path("/home/swiig/Documents/soc-autopilot/overnight/groq_model_cache.json")
+BASE_DIR = Path(__file__).resolve().parent
+CACHE_FILE = BASE_DIR / "model_fallback_cache.json"
+GROQ_CACHE_FILE = BASE_DIR / "groq_model_cache.json"
 CACHE_TTL = 3600  # Refresh model list every hour
 
 # Ultimate fallback if discovery fails entirely
@@ -180,6 +260,9 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     """Call OpenRouter with dynamic model fallback on rate limits."""
     global _current_model, _calls_since_primary_check
 
+    if not api_key:
+        return ""
+
     # Hard RPD limit (funded tier: 1000) — skip entirely if exhausted/locked
     from overnight import openrouter_quota
     if not openrouter_quota.is_available():
@@ -218,10 +301,21 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
             print(f"    📏 Large prompt ({len(prompt)} chars) → high-capacity models only")
             models_to_try = big_models
 
+    attempts = 0
+    max_attempts = 1 if not allow_fallback else 3
+
     for try_model in models_to_try:
-        # Count every attempt against the 50 RPD quota
+        attempts += 1
+        if attempts > max_attempts:
+            break
+
+        # Count every attempt against the daily quota
         from overnight import openrouter_quota
+        if not openrouter_quota.is_available():
+            break
         openrouter_quota.record_attempt()
+        if not openrouter_quota.is_available():
+            break
         
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -256,8 +350,12 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
                     else:
                         print(f"    🔄 Using fallback: {try_model}")
                 _current_model = try_model
+                _budget_record("openrouter")
                 return content
 
+            elif resp.status_code in (401, 403):
+                print(f"    ❌ OpenRouter auth failure for {try_model}: {resp.status_code}")
+                return ""
             elif resp.status_code == 429:
                 print(f"    ⚠️  {try_model} rate-limited. Locking OpenRouter (duration per openrouter_quota.LOCK_HOURS).")
                 openrouter_quota.force_lock(f"429 on {try_model}")
@@ -285,9 +383,16 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     return ""
 
 
+
 def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
     """Call Gemini (Google)."""
-    headers = {"Content-Type": "application/json"}
+    if not api_key:
+        return ""
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
+    }
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
@@ -295,25 +400,40 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
 
     for attempt in range(MAX_RETRIES):
         try:
-            resp = requests.post(f"{GEMINI_URL}?key={api_key}", json=payload, headers=headers, timeout=90)
+            resp = requests.post(GEMINI_URL, json=payload, headers=headers, timeout=90)
+
             if resp.status_code == 429:
                 wait = 60 * (attempt + 1)
                 print(f"    [Gemini] Rate limited. Waiting {wait}s...")
                 time.sleep(wait)
                 continue
+
+            if resp.status_code in (400, 401, 403):
+                print(f"    [Gemini] Auth/request error: {resp.status_code}")
+                return ""
+
             resp.raise_for_status()
-            return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            data = resp.json()
+
+            candidates = data.get("candidates") or []
+            if not candidates:
+                return ""
+
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if not parts:
+                return ""
+
+            _budget_record("gemini")
+            return parts[0].get("text", "")
         except Exception as e:
             print(f"    [Gemini] API error: {e}")
             if attempt < MAX_RETRIES - 1:
                 time.sleep(10)
+
     return ""
 
 
 
-# ============================================================
-# GROQ PROVIDER (fast inference, separate rate limits)
-# ============================================================
 def discover_groq_models(api_key):
     """Query Groq API for available free models."""
     try:
@@ -492,6 +612,9 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                 continue  # server says remaining=0; don't probe until reset
             if _in_cooldown(try_model):
                 continue  # don't waste a request probing a cooled-down model
+            if not _budget_allow("groq", try_model):
+                continue  # budget manager says no
+
 
             # Fresh sizing per model (a 413-shrink must not leak to the next model)
             body = prompt[:9000]
@@ -523,17 +646,8 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                                   + usage.get("completion_tokens", 0)) or needed
                         _groq_record(try_model, tokens)
                         content = data["choices"][0]["message"]["content"]
-                        if "**Answer**" in content:
-                            ap = content.split("**Answer**")[-1].strip()
-                            if ap:
-                                content = ap
                         _groq_429_count[try_model] = 0  # success resets backoff
-                        # Record Groq call in budget manager
-                        try:
-                            from overnight.budget_manager import APIBudgetManager
-                            APIBudgetManager().record_call("groq")
-                        except Exception:
-                            pass  # non-critical
+                        _budget_record("groq")
                         print(f"    ✅ Groq ({try_model}) responded ({len(content)} chars)")
                         return content
 
@@ -572,30 +686,37 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
             time.sleep(8)  # token-window recovery
 
     return ""
+
 def load_api_keys():
     """Load API keys from .env file."""
-    env_path = Path(__file__).parent.parent / ".env"
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+
     if not env_path.exists():
         env_path = Path("/home/swiig/Documents/soc-autopilot/.env")
 
     if env_path.exists():
         for line in env_path.read_text().splitlines():
             line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, value = line.split("=", 1)
-                os.environ.setdefault(key.strip(), value.strip())
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            if line.startswith("export "):
+                line = line[len("export "):]
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            os.environ.setdefault(key, value)
 
     return {
         "openrouter": os.getenv("OPENROUTER_API_KEY", ""),
         "gemini": os.getenv("GEMINI_API_KEY", ""),
         "groq": os.getenv("GROQ_API_KEY", ""),
+        "mistral": os.getenv("MISTRAL_API_KEY", ""),
     }
 
 
 
-# ============================================================
-# PHASE 1: GEMINI PRE-ANALYSIS (advisory, not authoritative)
-# ============================================================
 def gemini_pre_analysis(file_path, content, api_keys):
     """Use Gemini's abundant free tier for preliminary analysis.
     Returns advisory notes passed to primary model as non-authoritative context.
@@ -603,9 +724,10 @@ def gemini_pre_analysis(file_path, content, api_keys):
     prompt = f"""You are doing a preliminary code review. Read this file and provide
 your initial observations about potential issues, improvements, or concerns.
 
-FILE: 
+FILE: {file_path}
 
-GHOSTBUSTER PROTOCOL: You MUST NOT report stylistic issues, missing docstrings, type hints, naming conventions, or code complexity. ONLY report genuine logic bugs, security vulnerabilities, or broken tests. If the code is logically sound, return an empty list or 'No issues'.{file_path}
+GHOSTBUSTER PROTOCOL: You MUST NOT report stylistic issues, missing docstrings, type hints, naming conventions, or code complexity. ONLY report genuine logic bugs, security vulnerabilities, or broken tests. If the code is logically sound, return an empty list or 'No issues'.
+
 CODE:
 {content[:6000]}
 
@@ -623,88 +745,117 @@ Keep it brief - this is a preliminary pass, not a final review."""
     return ""
 
 
-def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0.2, allow_fallback=True):
 
-    # DYNAMIC EFFICACY ROUTING
-    try:
-        from pathlib import Path
-        import json
-        _matrix_file = Path(__file__).parent.parent / "engine" / "model_priority.json"
-        if _matrix_file.exists():
-            _priority = json.loads(_matrix_file.read_text()).get("models", [])
-            if isinstance(models, list):
-                models = sorted(models, key=lambda m: _priority.index(m) if m in _priority else 999)
-    except Exception:
-        pass
-
+def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0.2, allow_fallback=True, system_prompt=None):
     """Generate content with multi-provider fallback.
-    
-    Order: OpenRouter → Groq → wait & retry
-    Gemini is NEVER used for generation (reserved for critique).
-    """
-    if model_type == "code":
-        system_prompt = """You are a senior Python engineer writing production-ready code for a SOC automation platform.
-RULES:
-- Output ONLY valid Python code
-- No markdown fences, no explanations, no preamble
-No reasoning, analysis, planning, or thinking process
-Do NOT start with Let me / Here / I will / First or any prose
-The first non-empty line MUST be valid Python code
-- Use real sqlite3.connect(":memory:") for SQLite, not mocks
-- Expect RuntimeError not SystemExit (library code auto-fixed)
-- Import from actual modules, don't hallucinate"""
-    elif model_type == "docs":
-        system_prompt = ("You are a technical writer. Output ONLY the document content. "
-                     "No reasoning, planning, or meta-commentary. Start directly with the content.")
-    else:
-        system_prompt = None
 
-    # Step 1: Try OpenRouter (Nemotron + dynamic fallbacks)
-    result = _call_openrouter(prompt, api_keys.get("openrouter", ""),
-                              system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature,
-                              allow_fallback=allow_fallback)
-    if result:
-        generate.last_model_used = "openrouter"
-        # REASONING LEDGER: Record the black box interaction
+    Order: OpenRouter -> Groq -> Mistral -> wait & retry.
+    Gemini is reserved for critique/pre-analysis by default.
+    """
+    if system_prompt is None:
+        lowered = prompt.lower()
+
+        if model_type == "code" and (
+            "aider-style search/replace" in lowered
+            or "<<<<<<<" in prompt
+        ):
+            model_type = "patch"
+        elif model_type == "code" and (
+            "json object" in lowered
+            or "json array" in lowered
+            or "output only a json object" in lowered
+        ):
+            model_type = "json"
+
+        if model_type == "patch":
+            system_prompt = PATCH_SYSTEM_PROMPT
+        elif model_type == "json":
+            system_prompt = JSON_SYSTEM_PROMPT
+        elif model_type == "docs":
+            system_prompt = DOCS_SYSTEM_PROMPT
+        elif model_type == "code":
+            system_prompt = CODE_SYSTEM_PROMPT
+        else:
+            system_prompt = None
+
+    def _finalize(provider, result):
+        if not result:
+            return ""
+        generate.last_model_used = provider
         try:
             from engine.reasoning_ledger import record_interaction
-            model_used = getattr(generate, "last_model_used", "unknown")
-            record_interaction("heavy_generation", prompt, result, model_used)
+            record_interaction("heavy_generation", prompt, result, provider)
         except Exception:
             pass
         return result
 
-    # Step 2: OpenRouter saturated → try Groq immediately (only if fallback allowed)
+    result = _call_openrouter(
+        prompt,
+        api_keys.get("openrouter", ""),
+        system_prompt=system_prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        allow_fallback=allow_fallback,
+    )
+    if result:
+        return _finalize("openrouter", result)
+
     if not allow_fallback:
-        print(f"    ⏳ Primary model unavailable, fallback disabled. Deferring to next cycle.")
+        print("    ⏳ Primary model unavailable, fallback disabled. Deferring to next cycle.")
         return ""
-    print(f"    🔄 OpenRouter busy → trying Groq")
-    result = _call_groq(prompt, api_keys.get("groq", ""),
-                        system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature)
-    if result:
-        generate.last_model_used = "groq"
-        return result
 
-    # Step 3: Groq saturated -> try Mistral
-    print(f"    🔄 Groq busy → trying Mistral")
-    result = _call_mistral(prompt, api_keys.get("mistral", ""),
-                           system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature)
-    if result:
-        generate.last_model_used = "mistral"
-        return result
+    if _openrouter_daily_exhausted():
+        print("    🛑 OpenRouter daily quota exhausted. Deferring instead of burning Groq/Mistral.")
+        return ""
 
-    # Step 3: Both busy → brief wait, one final retry
-    print(f"    ⏳ OpenRouter, Groq, and Mistral busy. Waiting 30s...")
+    print("    🔄 OpenRouter busy → trying Groq")
+    result = _call_groq(
+        prompt,
+        api_keys.get("groq", ""),
+        system_prompt=system_prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    if result:
+        return _finalize("groq", result)
+
+    print("    🔄 Groq busy → trying Mistral")
+    result = _call_mistral(
+        prompt,
+        api_keys.get("mistral", ""),
+        system_prompt=system_prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    if result:
+        return _finalize("mistral", result)
+
+    if _openrouter_daily_exhausted():
+        print("    ⏳ Providers busy and OpenRouter daily quota locked. Deferring to next cycle.")
+        return ""
+
+    print("    ⏳ OpenRouter, Groq, and Mistral busy. Waiting 30s...")
     time.sleep(30)
-    
-    result = _call_openrouter(prompt, api_keys.get("openrouter", ""),
-                              system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature)
+
+    result = _call_openrouter(
+        prompt,
+        api_keys.get("openrouter", ""),
+        system_prompt=system_prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
     if result:
-        generate.last_model_used = "openrouter"
-        return result
-    
-    return _call_groq(prompt, api_keys.get("groq", ""),
-                      system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature)
+        return _finalize("openrouter", result)
+
+    result = _call_groq(
+        prompt,
+        api_keys.get("groq", ""),
+        system_prompt=system_prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    return _finalize("groq", result)
+
 
 
 def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperature=0.2):
@@ -736,7 +887,9 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
         if not budget.can_proceed("mistral"):
             print("    🔒 Mistral budget exhausted")
             return ""
-        budget.wait_if_needed("mistral", timeout=30)
+        if not budget.wait_if_needed("mistral", timeout=30):
+            print("    🔒 Mistral budget wait timeout")
+            return ""
         
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         budget.record_call("mistral")
@@ -753,14 +906,22 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
         print(f"    ⚠️ Mistral exception: {e}")
         return ""
 
+
 def strip_fences(text):
     """Remove markdown code fences."""
     if not text:
         return ""
     text = text.strip()
-    text = re.sub(r'^```(?:python|markdown|yaml|sql|xml)?\s*\n', '', text)
-    text = re.sub(r'\n```\s*$', '', text)
+
+    m = re.search(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?(.*?)\n?```[ \t]*$", text, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+
+    text = re.sub(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?", "", text)
+    text = re.sub(r"\n?```[ \t]*$", "", text)
     return text.strip()
+
+
 
 
 def critique(code, task_description, api_keys):
@@ -775,18 +936,24 @@ CODE:
 Check for: hallucinated imports, wrong signatures, deprecated APIs, logic bugs.
 
 Respond with:
-- APPROVE if production-ready
-- REVISE:<fixes needed> if changes required"""
+APPROVE if production-ready
+REVISE:<fixes needed> if changes required"""
 
     critique_text = _call_gemini(critique_prompt, api_keys.get("gemini", ""),
-                                  max_tokens=1000, temperature=0.1)
+                                 max_tokens=1000, temperature=0.1)
     if not critique_text:
         return True, "No critique available"
 
-    critique_text = critique_text.strip()
-    if critique_text.startswith("APPROVE"):
+    critique_text = strip_fences(critique_text).strip()
+    first_line = critique_text.splitlines()[0].upper() if critique_text else ""
+
+    if first_line.startswith("APPROVE"):
         return True, critique_text
+    if "APPROVE" in first_line:
+        return True, critique_text
+
     return False, critique_text
+
 
 
 def generate_with_critique(prompt, task_description, api_keys, model_type="code", max_iterations=2, max_tokens=8192):
