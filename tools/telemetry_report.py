@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
+ROOT = Path(__file__).resolve().parent.parent
+
 NAS_DIR = Path("/mnt/backup-nas/soc-slm-telemetry")
 LOCAL_DIR = ROOT / "overnight/.telemetry_buffer"
 

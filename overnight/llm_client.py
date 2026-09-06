@@ -694,9 +694,6 @@ def load_api_keys():
     """Load API keys from .env file."""
     env_path = Path(__file__).resolve().parent.parent / ".env"
 
-    if not env_path.exists():
-        env_path = ROOT / ".env"
-
     if env_path.exists():
         for line in env_path.read_text().splitlines():
             line = line.strip()

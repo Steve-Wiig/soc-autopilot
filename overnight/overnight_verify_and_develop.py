@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
 # Load .env file if it exists
 def load_env():
     env_path = ROOT / ".env"
