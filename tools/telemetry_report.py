@@ -35,14 +35,28 @@ def load_events():
 
                         event = json.loads(line)
 
-                        # Stable identity for pre-event_id telemetry.
-                        identity = (
-                            event.get("remediation_id"),
-                            event.get("ts"),
-                            event.get("target_file"),
-                            event.get("stage"),
-                            event.get("attempt_num"),
-                        )
+                        # Stable identity for deduplication.
+                        # Different telemetry domains require different keys.
+
+                        if event.get("event_type") == "inference_attempt":
+                            identity = (
+                                "inference",
+                                event.get("provider"),
+                                event.get("role"),
+                                event.get("attempt_num"),
+                                event.get("timestamp") or event.get("ts"),
+                                event.get("success"),
+                                event.get("failure_class"),
+                            )
+                        else:
+                            identity = (
+                                "remediation",
+                                event.get("remediation_id"),
+                                event.get("ts"),
+                                event.get("target_file"),
+                                event.get("stage"),
+                                event.get("attempt_num"),
+                            )
 
                         if identity in seen_events:
                             continue
