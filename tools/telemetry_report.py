@@ -10,14 +10,49 @@ LOCAL_DIR = ROOT / "overnight/.telemetry_buffer"
 
 def load_events():
     events = []
-    for d in [NAS_DIR, LOCAL_DIR / "outbox", LOCAL_DIR]:
-        if d.exists():
-            for f in d.rglob("*.jsonl"):
-                try:
-                    with open(f) as fp:
-                        for line in fp:
-                            if line.strip(): events.append(json.loads(line))
-                except Exception: pass
+    seen_files = set()
+    seen_events = set()
+
+    # LOCAL_DIR already recursively includes outbox.
+    # Do not scan LOCAL_DIR/outbox separately.
+    sources = [NAS_DIR, LOCAL_DIR]
+
+    for d in sources:
+        if not d.exists():
+            continue
+
+        for f in d.rglob("*.jsonl"):
+            if f in seen_files:
+                continue
+
+            seen_files.add(f)
+
+            try:
+                with open(f) as fp:
+                    for line in fp:
+                        if not line.strip():
+                            continue
+
+                        event = json.loads(line)
+
+                        # Stable identity for pre-event_id telemetry.
+                        identity = (
+                            event.get("remediation_id"),
+                            event.get("ts"),
+                            event.get("target_file"),
+                            event.get("stage"),
+                            event.get("attempt_num"),
+                        )
+
+                        if identity in seen_events:
+                            continue
+
+                        seen_events.add(identity)
+                        events.append(event)
+
+            except Exception:
+                pass
+
     return events
 
 def generate_report(events):
