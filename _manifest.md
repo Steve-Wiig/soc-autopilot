@@ -1,7 +1,7 @@
 # SOC Autopilot - Build Manifest
 
-MASTER SHA256: (current HEAD: 9b43789)
-Full SHA: 9b43789b24ae1f7d9c5bace0f0f8006d8cd55b50
+MASTER SHA256: (current HEAD: 477303f)
+Full SHA: 477303f08ff7f5fab3fb6d0e4530958bcd4100e7
 Branch: refactor/p1-extract-modules
 Generated: 2026-09-06T04:59:03Z
 
