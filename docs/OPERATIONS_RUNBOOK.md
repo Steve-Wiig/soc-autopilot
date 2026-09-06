@@ -85,7 +85,7 @@ python -m engine.slm_triage_worker --workers 8 --model-config config/models.yaml
 python -m engine.queue_manager --status
 ```
 
-### 1.4 Start Overnight Self-Improving Pipeline (v11.9)
+### 1.4 Start Overnight Self-Improving Pipeline (v11.11)
 
 ```bash
 # Schedule via cron (runs 02:00 daily)
@@ -412,7 +412,7 @@ python -m engine.slm_triage_worker --workers 8 --model-config config/models.yaml
 
 ## 6. Rotating API Keys
 
-### 6.1 Rotate OpenRouter API Key (v11.9)
+### 6.1 Rotate OpenRouter API Key (v11.11)
 
 ```bash
 # 1. Generate new key at https://openrouter.ai/keys
@@ -477,7 +477,7 @@ python -m memory.embeddings --rotate-key --provider openai --new-key "sk-NEW_KEY
 python -m memory.embeddings --test-connection
 ```
 
-### 6.4 Update OpenRouter Quota Tracking (v11.9)
+### 6.4 Update OpenRouter Quota Tracking (v11.11)
 
 ```bash
 # Check current quota status (openrouter_quota is a helper under engine/ that reads from quota_ledger)
@@ -540,7 +540,7 @@ print('Fallback:', 'OK' if r2 else 'FAIL')
 
 ---
 
-## 7. Overnight Self-Improving Pipeline Operations (v11.9)
+## 7. Overnight Self-Improving Pipeline Operations (v11.11)
 
 ### 7.1 Pipeline Overview
 
@@ -951,9 +951,9 @@ These are non-negotiable rules discovered during actual autonomous operation. Ig
 ### 7. Reuse Proven Entry Points
 **Symptom:** Writing custom wrapper scripts that reproduce initialization logic often misses edge cases handled by the main CLI.
 **Resolution:** Prefer the tested `--drain-backlog` CLI entry point over custom ad-hoc wrappers.
-# soc-autopilot Operator Manual v11.9
+# soc-autopilot Operator Manual v11.11
 
-## ⚠️ Breaking Changes (v11.9)
+## ⚠️ Breaking Changes (v11.11)
 
 - **Removed**: `engine/intake_syslog.py` — Migrate to `intake_wazuh.py` or `intake_eve.py` immediately.
 - **Schema Change**: `sanitization_pipeline.py` now requires `config/sanitization_rules.yaml` v2 schema (adds `pii_entity_types` field).
@@ -1210,7 +1210,7 @@ sqlite3 /var/lib/soc/hash_chain.db "SELECT seal_id, timestamp, event_count, root
 
 ---
 
-## 8. Overnight Self-Improving Pipeline (v11.9)
+## 8. Overnight Self-Improving Pipeline (v11.11)
 
 ### 8.1 Pipeline Overview
 
@@ -1526,7 +1526,7 @@ python -m engine.hash_chain_sealer verify --full
 
 ---
 
-## 13. Version-Specific Notes (v11.9)
+## 13. Version-Specific Notes (v11.11)
 
 - **Breaking**: `sanitization_pipeline.py` now requires `config/sanitization_rules.yaml` v2 schema (adds `pii_entity_types` field)
 - **New**: `quota_ledger.py` tracks per-model token usage; integrate with billing via `quota_ledger.export_billing()`
@@ -1539,7 +1539,7 @@ python -m engine.hash_chain_sealer verify --full
 **Document Version**: 11.9.0  
 **Last Updated**: 2025-01-15  
 **Maintainer**: SOC Engineering Team  
-**Classification**: INTERNAL - OPERATIONAL# soc-autopilot Deployment Runbook v11.9
+**Classification**: INTERNAL - OPERATIONAL# soc-autopilot Deployment Runbook v11.11
 
 ## 1. Prerequisites
 
@@ -1788,7 +1788,7 @@ engine:
     pii_patterns_file: "config/pii_patterns.yaml"
     max_event_size_mb: 10
   slm_triage_worker:
-    model: "local-slm-v11.9"
+    model: "local-slm-v11.11"
     batch_size: 32
     timeout_seconds: 30
   quota_ledger:
@@ -1828,7 +1828,7 @@ orchestrator:
         fallback_order: 2
       - name: "vllm"
         base_url: "http://localhost:8000"
-        models: ["local-slm-v11.9"]
+        models: ["local-slm-v11.11"]
         fallback_order: 3
 
 memory:
@@ -2067,7 +2067,7 @@ sudo systemctl enable --now soc-slm-orchestrator@model_registry
 sudo systemctl enable --now soc-slm-memory@embeddings
 sudo systemctl enable --now soc-slm-memory@retention
 
-# Phase 5: Overnight Pipeline (v11.9)
+# Phase 5: Overnight Pipeline (v11.11)
 sudo systemctl enable --now soc-slm-overnight.timer
 
 # Verify all active
@@ -2093,7 +2093,7 @@ python tools/redis_check.py --host localhost --port 6379
 python tools/engine_check.py --module intake_wazuh --port 5140
 python tools/engine_check.py --module intake_eve --port 5141
 python tools/engine_check.py --module sanitization_pipeline --test-pii
-python tools/engine_check.py --module slm_triage_worker --model local-slm-v11.9
+python tools/engine_check.py --module slm_triage_worker --model local-slm-v11.11
 python tools/engine_check.py --module quota_ledger --provider openrouter
 python tools/engine_check.py --module queue_manager --depth-check
 python tools/engine_check.py --module enrichment_scheduler --test-ioc
@@ -2108,7 +2108,7 @@ python tools/orchestrator_check.py --module model_registry --test-fallback
 python tools/memory_check.py --module embeddings --model BAAI/bge-large-en-v1.5 --dim 1024
 python tools/memory_check.py --module retention --test-policy
 
-# Overnight pipeline (v11.9)
+# Overnight pipeline (v11.11)
 python tools/overnight_check.py --module self_improver --dry-run
 python tools/overnight_check.py --module llm_client --test-fallback --test-rate-limit
 python tools/overnight_check.py --module openrouter_quota --check-daily
@@ -2146,7 +2146,7 @@ python tools/overnight_check.py --module fix_backlog --validate-json
 ### 10.1 Validation Script
 ```bash
 cd /opt/soc-slm
-python tools/spike_validator.py --requirements docs/requirements_spike_v11.9.yaml --output spike_report.json
+python tools/spike_validator.py --requirements docs/requirements_spike_v11.11.yaml --output spike_report.json
 ```
 
 ### 10.2 Key Spike Requirements (Subset)
@@ -2182,7 +2182,7 @@ python tools/spike_validator.py --requirements docs/requirements_spike_v11.9.yam
 ```bash
 # Run all 117 spike validations (takes ~45 minutes)
 python tools/spike_validator.py \
-  --requirements docs/requirements_spike_v11.9.yaml \
+  --requirements docs/requirements_spike_v11.11.yaml \
   --parallel 4 \
   --timeout 3600 \
   --output /opt/soc-slm/logs/spike_validation_$(date +%Y%m%d_%H%M%S).json \
@@ -2196,7 +2196,7 @@ python tools/spike_validator.py \
 
 ---
 
-## 11. v11.9 Overnight Self-Improving Pipeline
+## 11. v11.11 Overnight Self-Improving Pipeline
 
 ### 11.1 Pipeline Components
 ```
@@ -2253,7 +2253,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 from
 
-## Recent Architectural Updates (v11.9.x)
+## Recent Architectural Updates (v11.11.x)
 
 ### Environment Variables
 The `TriageQueueManager` is now fully configurable via environment variables. If not provided, it falls back to safe defaults:

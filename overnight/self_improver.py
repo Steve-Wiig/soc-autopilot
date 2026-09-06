@@ -613,7 +613,7 @@ def apply_auto_fix(file_path, issue, api_keys):
                 print(f"       ⚠️ TDD Red Phase FAILED: Test passes immediately. Rejecting vacuous test.")
                 test_path.unlink()
             else:
-                print(f"       🔴 TDD Red Phase CONFIRMED: Test fails as expected.")
+                print(f"       🔴 TDD Red Backlog DrainONFIRMED: Test fails as expected.")
                 tdd_block = f"ACCEPTANCE CRITERIA (Make this test pass):\n```python\n{tdd_test_code}\n```\n\n"
                 tdd_kept_path = test_path
         except Exception: pass
