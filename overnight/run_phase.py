@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-ROOT = Path(str(ROOT))
+ROOT = Path(__file__).resolve().parent.parent
 TASKS_BACKUP = ROOT / "overnight" / "tasks_phase6.json.backup"
 
 def run_phase(phase_file):

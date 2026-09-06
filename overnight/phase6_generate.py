@@ -22,7 +22,7 @@ except ImportError:
     print("FAIL: requests not installed")
     sys.exit(2)
 
-PROJECT_ROOT = Path(str(ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 import argparse as _ap
 from overnight.llm_client import generate_with_critique, load_api_keys, strip_fences
 _parser = _ap.ArgumentParser()

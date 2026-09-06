@@ -43,7 +43,7 @@ from overnight.llm_client import (
 # ============================================================
 # CONFIGURATION
 # ============================================================
-ROOT = Path(str(ROOT))
+ROOT = Path(__file__).resolve().parent.parent
 REVIEWS_DIR = ROOT / "overnight" / "reviews"
 PROGRESS_FILE = ROOT / "overnight" / "reviews" / "progress.json"
 SUMMARY_FILE = ROOT / "overnight" / "reviews" / "SUMMARY.md"

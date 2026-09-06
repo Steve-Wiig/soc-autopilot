@@ -1,7 +1,7 @@
 import ast, hashlib, json, os, re, subprocess, sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(str(ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE_DIR   = PROJECT_ROOT / "overnight" / "evidence"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 

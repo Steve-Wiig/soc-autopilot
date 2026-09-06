@@ -2,9 +2,12 @@ import subprocess
 import pytest
 from pathlib import Path
 
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 def test_shadow_branch_captures_current_branch():
     """Verify shadow canary uses actual branch, not hardcoded master."""
-    si_path = Path("overnight/self_improver.py")
+    si_path = REPO_ROOT / "overnight" / "self_improver.py"
     content = si_path.read_text()
     
     # Check that BASE_BRANCH is captured
@@ -29,7 +32,7 @@ def test_shadow_branch_captures_current_branch():
 
 def test_apply_auto_fix_has_branch_guard():
     """Verify apply_auto_fix checks branch state before proceeding."""
-    si_path = Path("overnight/self_improver.py")
+    si_path = REPO_ROOT / "overnight" / "self_improver.py"
     content = si_path.read_text()
     
     # Find apply_auto_fix function

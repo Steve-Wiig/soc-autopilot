@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
-ROOT = Path(str(ROOT))
+ROOT = Path(__file__).resolve().parent.parent
 USAGE_FILE = ROOT / "overnight" / "api_usage.json"
 
 # ============================================================
