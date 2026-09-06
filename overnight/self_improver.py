@@ -565,6 +565,15 @@ def apply_auto_fix(file_path, issue, api_keys):
     try: original = file_path.read_text()
     except Exception: return False
 
+    # Branch safety check
+    try:
+        branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+        if not branch:
+            print("❌ Detached HEAD detected, aborting")
+            return False
+    except Exception:
+        pass
+
     if is_ast_defeated(original): return False
     if issue.get('category', '').lower() in ['style', 'documentation']: return False
 
@@ -641,20 +650,23 @@ def apply_auto_fix(file_path, issue, api_keys):
         
         prompt = (
             "You are a senior Python engineer. Fix the issue below.\n"
-            "Output ONLY Aider-style SEARCH/REPLACE blocks.\n"
-            "Format: <<<<<<< path/to/file.py\n[exact search text]\n=======\n[replace]\n>>>>>>> REPLACE\n\n"
-            "CRITICAL RULES FOR THE SEARCH BLOCK:\n"
-            "1. Copy lines EXACTLY as they appear between the ``` markers in CURRENT FILE.\n"
-            "2. Do NOT add line numbers. Do NOT re-indent. Do NOT reformat.\n"
-            "3. Preserve every space and newline exactly.\n\n"
-            f"{tdd_block}"
+            "Output ONLY Aider-style SEARCH/REPLACE blocks.\n\n"
+            "CRITICAL RULES:\n"
+            "1. Copy EXACT existing code from the file into SEARCH block (preserve whitespace).\n"
+            "2. Write corrected code in REPLACE block.\n"
+            "3. NEVER output placeholder text like '[exact search text]' or '[replace text]'.\n"
+            "4. Use REAL code from the file, not template examples.\n\n"
+            "EXAMPLE of valid response:\n"
+            "<<<<<<< engine/example.py\n"
+            "    temperature = 0.1\n"
+            "    max_tokens = 200\n"
+            "=======\n"
+            "    temperature = kwargs.get('temperature', 0.1)\n"
+            "    max_tokens = kwargs.get('max_tokens', 200)\n"
+            ">>>>>>> REPLACE\n\n"
             f"ISSUE: {issue.get('description', '')}\n\n"
-            f"{forensic_context}"
-            f"{api_sigs}"
-            f"BASELINE TRACEBACK:\n```{baseline_tb}```\n\n"
-            f"{f'CRITICAL STRATEGY SHIFT: {critic_constraint}' if critic_constraint else ''}\n"
-            f"CURRENT FILE:\n```\n{pruned}\n```\n\n"
-            f"FILE PATH: {file_path.relative_to(ROOT)}"
+            f"FILE CONTENT:\n{original[:6000]}\n\n"
+            "Now generate the actual SEARCH/REPLACE blocks for this fix:\n"
         )
         if attempt == 1 and failed_attempt_1_raw:
             prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
@@ -747,13 +759,20 @@ def apply_auto_fix(file_path, issue, api_keys):
             
             try:
                 print(f"       🦜 Routing to Shadow Canary ({shadow_branch})...")
-                subprocess.run(["git", "checkout", "master"], cwd=ROOT, capture_output=True)
+                # Capture actual working branch
+                BASE_BRANCH = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+                if not BASE_BRANCH:
+                    print("❌ ERROR: Detached HEAD state. Aborting.")
+                    return False
+                print(f"🔒 Shadow Canary base: {BASE_BRANCH}")
+                
+                subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
                 subprocess.run(["git", "checkout", "-b", shadow_branch], cwd=ROOT, check=True, capture_output=True)
                 subprocess.run(["git", "add", *modified_paths], cwd=ROOT, check=True, capture_output=True)
                 subprocess.run(["git", "commit", "-m", f"shadow: {file_path.name}"], cwd=ROOT, check=True, capture_output=True)
                 
                 if run_canary(modified_paths):
-                    subprocess.run(["git", "checkout", "master"], cwd=ROOT, check=True, capture_output=True)
+                    subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, check=True, capture_output=True)
                     subprocess.run(["git", "merge", shadow_branch], cwd=ROOT, check=True, capture_output=True)
                     subprocess.run(["git", "branch", "-d", shadow_branch], cwd=ROOT, check=True, capture_output=True)
                     print(f"       🟢 CANARY PASSED: Merged to master")
@@ -763,14 +782,14 @@ def apply_auto_fix(file_path, issue, api_keys):
                     return True
                 else:
                     for path, content in backups.items(): path.write_text(content)
-                    subprocess.run(["git", "checkout", "master"], cwd=ROOT, capture_output=True)
+                    subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
                     subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
                     print(f"       🔴 CANARY FAILED: Reverted disk and shadow branch")
                     return False
                     
             except Exception as e:
                 for path, content in backups.items(): path.write_text(content)
-                subprocess.run(["git", "checkout", "master"], cwd=ROOT, capture_output=True)
+                subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
                 subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
                 print(f"       ⚠️ Shadow Git Error: {e}")
                 return False
