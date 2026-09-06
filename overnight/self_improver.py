@@ -247,7 +247,7 @@ def _get_imported_signatures(file_path, max_sigs=8):
             except Exception:
                 continue
             for alias in node.names:
-                m = re.search(r'(def\s+' + re.escape(alias.name) + r'\s*\([^)]*\)[^:]*:)', mod_src)
+                m = re.search(r'(def\s+' + re.escape(alias.name) + r'\s*\([^)]*\)[^:]*:)', mod_src, re.DOTALL)
                 if m:
                     sigs.append(m.group(1).replace('\n', ' '))
                 if len(sigs) >= max_sigs:
@@ -267,8 +267,14 @@ def triage_backlog():
         if not line.strip(): continue
         try:
             tb = json.loads(line).get("traceback", "")
-            for full_path, rel_path in re.findall(r'File "([^"]*blueprint/([^"]+\.py))"', tb):
-                if "/tests/" not in rel_path and "site-packages" not in full_path: suspects[rel_path] += 1
+            for match in re.finditer(r'File "([^"]+)"', tb):
+                full_path = match.group(1)
+                if "site-packages" in full_path or "/tests/" in full_path: continue
+                for vdir in ('engine/', 'overnight/', 'tools/', 'orchestrator/', 'memory/'):
+                    if vdir in full_path:
+                        rel_path = vdir + full_path.split(vdir, 1)[1]
+                        suspects[rel_path] += 1
+                        break
         except Exception: pass
     if not suspects: return
     root_file, count = suspects.most_common(1)[0]
@@ -1077,7 +1083,7 @@ def process_advisory_queue(api_keys, budget, state):
 
 def discover_files():
     files = []
-    for d in ["engine", "orchestrator", "memory", "tools"]:
+    for d in ["engine", "orchestrator", "memory", "tools", "overnight"]:
         dp = ROOT / d
         if dp.exists(): files += [f for f in dp.rglob("*.py") if f.name != "__init__.py"]
     return sorted(files, key=lambda f: f.stat().st_size)
