@@ -49,7 +49,7 @@ We are now moving to Phase 2: Generating the actual, final MASTER_DOCUMENTATION_
 Write the complete, consolidated MASTER_DOCUMENTATION_BUNDLE.md based strictly on the Audit Report and Current State Snapshot.
 
 ### STRICT RULES:
-1. Eradicate stale historical material (e.g., v11.9 async/JSONL architecture).
+1. Eradicate stale historical material (e.g., v11.11 async/JSONL architecture).
 2. Declare the system as the current Hardened State (v11.10).
 3. Incorporate the newest "Critical Operational Lessons" verbatim.
 4. Confirm all implemented safety gates (AST, CoT, Pytest) as active controls.

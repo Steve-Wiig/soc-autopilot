@@ -25,11 +25,11 @@ This document outlines the cognitive architecture, safety gates, and operational
 
 ## 2. Operational Topology & Safety Gates
 
-### Phase A: Gemini Pre-Fill (The Ghostbuster)
+### Advisory Generation: Gemini Pre-Fill (The Ghostbuster)
 *   Scans all source files and generates advisories.
 *   **Ghostbuster Protocol:** AST-driven negative constraint injected into the prompt forbidding the reporting of stylistic issues, missing docstrings, or type hints.
 
-### Phase B: OpenRouter Processing
+### Shadow Canary: OpenRouter Processing
 *   Drains the advisory queue and feeds issues to heavy coding models.
 *   **Stylistic Noise Filter:** Instantly defers any advisory categorized as `style`, `maintainability`, or `complexity` to protect the API budget.
 

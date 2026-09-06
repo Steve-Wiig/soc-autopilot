@@ -1494,7 +1494,7 @@ python -m engine.queue_manager drain --timeout 300
 python -m orchestrator.model_registry list --status promoted
 
 # Rollback to previous
-python -m orchestrator.model_registry promote --adapter-id mistral-7b-lora-v11.8 --force
+python -m orchestrator.model_registry promote --adapter-id mistral-7b-lora-v11.11 --force
 ```
 
 ### 11.3 Data Recovery

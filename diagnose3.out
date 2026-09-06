@@ -1,0 +1,2622 @@
+=== SOURCE SEARCH: LOCK / QUOTA / RATE LIMIT ===
+./engine/slm_triage_worker.py:136:    empty_queue_backoff = 1
+./engine/slm_triage_worker.py:163:            time.sleep(empty_queue_backoff)
+./engine/slm_triage_worker.py:164:            empty_queue_backoff = min(empty_queue_backoff * 2, MAX_BACKOFF)
+./engine/slm_triage_worker.py:167:        # Job found, reset backoff
+./engine/slm_triage_worker.py:168:        empty_queue_backoff = 1
+./engine/slm_triage_worker.py:172:        # Retry logic with exponential backoff for SLM call
+./engine/slm_triage_worker.py:228:    parser.add_argument("--base-delay", type=float, default=1.0, help="Base delay in seconds for exponential backoff")
+./engine/quota_ledger.py:13:    return os.environ.get("QUOTA_LEDGER_DB_PATH", "quota_ledger.db")
+./engine/quota_ledger.py:27:    """Base exception for quota ledger errors."""
+./engine/quota_ledger.py:32:    """Raised when an adapter's quota is exceeded."""
+./engine/quota_ledger.py:106:    """Initializes the quota ledger database and creates the table if it does not exist."""
+./engine/quota_ledger.py:111:                CREATE TABLE IF NOT EXISTS quota_ledger (
+./engine/quota_ledger.py:132:                CREATE TABLE IF NOT EXISTS quota_audit (
+./engine/quota_ledger.py:145:                CREATE INDEX IF NOT EXISTS idx_quota_audit_adapter_id ON quota_audit(adapter_id)
+./engine/quota_ledger.py:148:                CREATE INDEX IF NOT EXISTS idx_quota_audit_timestamp ON quota_audit(timestamp)
+./engine/quota_ledger.py:180:        ApprovalValidationError: If approval is invalid, expired, or exhausted.
+./engine/quota_ledger.py:212:def check_quota(adapter_id: str, estimated_tokens: int, db_path: Optional[str] = None) -> bool:
+./engine/quota_ledger.py:213:    """Checks if an adapter has sufficient quota for a given token usage.
+./engine/quota_ledger.py:229:                "SELECT daily_limit, job_limit, tokens_used_today, last_reset_date FROM quota_ledger WHERE adapter_id = ?",
+./engine/quota_ledger.py:244:        raise QuotaLedgerError(f"Database error during quota check: {e}") from e
+./engine/quota_ledger.py:267:                "SELECT tokens_used_today, last_reset_date FROM quota_ledger WHERE adapter_id = ?",
+./engine/quota_ledger.py:283:                    "UPDATE quota_ledger SET tokens_used_today = ?, last_reset_date = ? WHERE adapter_id = ?",
+./engine/quota_ledger.py:287:                    "INSERT INTO quota_audit (adapter_id, timestamp, tokens_delta, operation, previous_total, new_total, approval_token, approval_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+./engine/quota_ledger.py:323:    """Parses command line arguments and executes the requested quota management operation.
+./engine/quota_ledger.py:328:            1 = check failed (quota exceeded or adapter not found)
+./engine/quota_ledger.py:332:    parser.add_argument("--db-path", default=DB_PATH, help="Path to SQLite database (default: quota_ledger.db or QUOTA_LEDGER_DB_PATH env var)")
+./engine/quota_ledger.py:347:        if check_quota(args.check[0], int(args.check[1]), db_path):
+./engine/writeback/wazuh_proposals.py:196:            # Prepend retry batch so they're tried first, but with backoff via timer
+./engine/writeback/wazuh_proposals.py:319:        True if the key is permitted for proposal, False if blocked by denylist.
+./engine/writeback/wazuh_proposals.py:361:        ProposalRejectedError: If key is blocked by denylist.
+./engine/queue_manager.py:365:                # Max attempts exhausted - should fail
+./engine/queue_manager.py:431:        # Fail stale jobs that have exhausted attempts
+./engine/enrichment_scheduler.py:34:    """Raised when an enrichment provider is not configured in the quota ledger."""
+./engine/enrichment_scheduler.py:380:def update_quota(
+./engine/enrichment_scheduler.py:386:    """Decrements the quota for a specific provider in the SQLite database.
+./engine/enrichment_scheduler.py:391:        cost: The amount to decrement from the quota.
+./engine/enrichment_scheduler.py:395:        ValueError: If the provider has insufficient quota or is not found.
+./engine/enrichment_scheduler.py:403:            "UPDATE quota_ledger SET remaining = remaining - ? WHERE provider = ? AND remaining >= ?",
+./engine/enrichment_scheduler.py:407:            cursor.execute("SELECT remaining FROM quota_ledger WHERE provider = ?", (provider,))
+./engine/enrichment_scheduler.py:410:                raise ValueError(f"Provider '{provider}' not found in quota_ledger")
+./engine/enrichment_scheduler.py:412:                raise ValueError(f"Insufficient quota for provider '{provider}': {row[0]} remaining, {cost} required")
+./engine/enrichment_scheduler.py:418:def _check_batch_quota(
+./engine/enrichment_scheduler.py:424:    """Validates that all providers in the batch have sufficient quota.
+./engine/enrichment_scheduler.py:426:    Fetches quota for all providers in batch to verify configuration,
+./engine/enrichment_scheduler.py:427:    fetches cost only for providers that need quota checked, then validates
+./engine/enrichment_scheduler.py:433:        providers_needed: Subset of providers that actually need quota checked.
+./engine/enrichment_scheduler.py:437:        ProviderNotConfiguredError: If a provider is not in quota_ledger.
+./engine/enrichment_scheduler.py:439:    quota_map = _fetch_provider_values(sq_conn, providers_in_batch, "quota_ledger", "remaining", cursor)
+./engine/enrichment_scheduler.py:443:        if provider not in quota_map:
+./engine/enrichment_scheduler.py:444:            raise ProviderNotConfiguredError(f"Provider '{provider}' not configured in quota_ledger")
+./engine/enrichment_scheduler.py:448:        remaining = quota_map.get(provider, 0)
+./engine/enrichment_scheduler.py:449:        if remaining < cost:
+./engine/enrichment_scheduler.py:450:            raise ValueError(f"Insufficient quota for provider '{provider}': {remaining} remaining, {cost} required")
+./engine/hash_chain_sealer.py:121:        the cursor is exhausted.
+./tests/test_quota_ledger.py:9:from engine.quota_ledger import init_db, check_quota, record_usage
+./tests/test_quota_ledger.py:13:    db_file = tmp_path / "quota_ledger.db"
+./tests/test_quota_ledger.py:14:    with patch("engine.quota_ledger.DB_PATH", str(db_file)):
+./tests/test_quota_ledger.py:17:        conn.execute("INSERT INTO quota_ledger VALUES ('test_adapter', 1000, 500, 0, '2000-01-01')")
+./tests/test_quota_ledger.py:24:    with patch("engine.quota_ledger.DB_PATH", str(db_file)):
+./tests/test_quota_ledger.py:27:        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='quota_ledger'")
+./tests/test_quota_ledger.py:31:def test_check_quota_success(setup_db):
+./tests/test_quota_ledger.py:32:    with patch("engine.quota_ledger.DB_PATH", str(setup_db)):
+./tests/test_quota_ledger.py:33:        assert check_quota("test_adapter", 100) is True
+./tests/test_quota_ledger.py:35:def test_check_quota_exceeds_daily(setup_db):
+./tests/test_quota_ledger.py:36:    with patch("engine.quota_ledger.DB_PATH", str(setup_db)):
+./tests/test_quota_ledger.py:37:        assert check_quota("test_adapter", 2000) is False
+./tests/test_quota_ledger.py:39:def test_check_quota_exceeds_job(setup_db):
+./tests/test_quota_ledger.py:40:    with patch("engine.quota_ledger.DB_PATH", str(setup_db)):
+./tests/test_quota_ledger.py:41:        assert check_quota("test_adapter", 600) is False
+./tests/test_quota_ledger.py:44:    with patch("engine.quota_ledger.DB_PATH", str(setup_db)):
+./tests/test_quota_ledger.py:47:        row = conn.execute("SELECT tokens_used_today FROM quota_ledger WHERE adapter_id='test_adapter'").fetchone()
+./tests/test_quota_ledger.py:53:    script_path = Path(__file__).parent.parent / "engine" / "quota_ledger.py"
+./tests/test_quota_ledger.py:60:    script_path = Path(__file__).parent.parent / "engine" / "quota_ledger.py"
+./tests/test_patch_parser.py:70:def test_scope_budget_exceeded_rejected():
+./tests/test_enrichment_scheduler.py:2:Uses real in-memory SQLite with correct schema (remaining column).
+./tests/test_enrichment_scheduler.py:11:from engine.enrichment_scheduler import update_quota, get_db_connections
+./tests/test_enrichment_scheduler.py:14:def _make_quota_db():
+./tests/test_enrichment_scheduler.py:17:    # The implementation uses: SELECT remaining FROM quota_ledger
+./tests/test_enrichment_scheduler.py:18:    # and: UPDATE quota_ledger SET remaining = remaining - ?
+./tests/test_enrichment_scheduler.py:20:        CREATE TABLE IF NOT EXISTS quota_ledger (
+./tests/test_enrichment_scheduler.py:22:            remaining INTEGER DEFAULT 100
+./tests/test_enrichment_scheduler.py:25:    conn.execute("INSERT INTO quota_ledger (provider, remaining) VALUES ('gemini', 90)")
+./tests/test_enrichment_scheduler.py:30:def test_update_quota_increments_used():
+./tests/test_enrichment_scheduler.py:31:    """update_quota should decrement the remaining counter."""
+./tests/test_enrichment_scheduler.py:32:    conn = _make_quota_db()
+./tests/test_enrichment_scheduler.py:33:    update_quota(conn, "gemini", 5)
+./tests/test_enrichment_scheduler.py:34:    # Verify via direct SQL (check_quota deprecated/removed)
+./tests/test_enrichment_scheduler.py:36:    cur.execute("SELECT remaining FROM quota_ledger WHERE provider = 'gemini'")
+./tests/test_enrichment_scheduler.py:37:    remaining = cur.fetchone()[0]
+./tests/test_enrichment_scheduler.py:38:    assert remaining == 85  # 90 - 5
+./tests/test_dynamic_vram_budget_check.py:10:from tools.dynamic_vram_budget_check import get_gpu_info, parse_mem_value, main
+./tests/test_dynamic_vram_budget_check.py:17:@patch("tools.dynamic_vram_budget_check.subprocess.run")
+./tests/test_dynamic_vram_budget_check.py:24:@patch("tools.dynamic_vram_budget_check.subprocess.run")
+./tests/test_dynamic_vram_budget_check.py:29:@patch("tools.dynamic_vram_budget_check.get_gpu_info")
+./tests/test_dynamic_vram_budget_check.py:34:@patch("tools.dynamic_vram_budget_check.get_gpu_info")
+./tests/test_dynamic_vram_budget_check.py:42:@patch("tools.dynamic_vram_budget_check.get_gpu_info")
+./tests/test_dynamic_vram_budget_check.py:43:def test_main_pass_within_budget(mock_get_gpu):
+./tests/test_dynamic_vram_budget_check.py:63:@patch("tools.dynamic_vram_budget_check.get_gpu_info")
+./tests/test_dynamic_vram_budget_check.py:64:def test_main_fail_exceeds_budget(mock_get_gpu):
+./tests/test_dynamic_vram_budget_check.py:84:    tool_path = Path(__file__).parent.parent / "tools" / "dynamic_vram_budget_check.py"
+./overnight/self_improver.py:15:from overnight.budget_manager import APIBudgetManager
+./overnight/self_improver.py:897:    done, remaining, deferred = 0, [], _load_json(DEFERRED_BACKLOG)
+./overnight/self_improver.py:899:        if done >= max_fixes: remaining.append(item); continue
+./overnight/self_improver.py:902:        # Intercept stylistic advisories BEFORE checking cloud budget
+./overnight/self_improver.py:909:            print(f"       🔀 Intercepted stylistic fix. Routing to Local SLM (Port 11435). Bypassing cloud budget.")
+./overnight/self_improver.py:911:            if item in remaining: remaining.remove(item)
+./overnight/self_improver.py:920:            else: remaining.append(item)
+./overnight/self_improver.py:921:    _save_json(FIX_BACKLOG, remaining)
+./overnight/self_improver.py:925:def drain_backlog_loop(api_keys, budget, state, fixes_per_pass=4):
+./overnight/self_improver.py:929:        print(f"\n[Pass {pass_num}] {len(_load_json(FIX_BACKLOG))} fixes remaining...")
+./overnight/self_improver.py:939:def prefill_advisory_queue(files, api_keys, budget):
+./overnight/self_improver.py:944:        if not budget.wait_if_needed("gemini", timeout=120): break
+./overnight/self_improver.py:945:        budget.record_call("gemini")
+./overnight/self_improver.py:960:def _check_cooldown(file_path: str, advisory_notes: str):
+./overnight/self_improver.py:985:                if failures >= 3: return True, f"Death loop cooldown ({failures} failures in 24h)"
+./overnight/self_improver.py:988:        return True, f"Death loop cooldown (error: {type(e).__name__})"
+./overnight/self_improver.py:1019:def process_advisory_queue(api_keys, budget, state):
+./overnight/self_improver.py:1023:        if not budget.wait_if_needed("openrouter", timeout=120): break
+./overnight/self_improver.py:1024:        budget.record_call("openrouter")
+./overnight/self_improver.py:1035:            skip, reason = _check_cooldown(data["file_path"], data.get("advisory_notes", ""))
+./overnight/self_improver.py:1082:    budget = APIBudgetManager()
+./overnight/self_improver.py:1094:                    drain_backlog_loop(keys, budget, None, fixes_per_pass=a.fixes_per_pass)
+./overnight/self_improver.py:1096:                    process_advisory_queue(keys, budget, None)
+./overnight/self_improver.py:1098:                    prefill_advisory_queue(files, keys, budget)
+./overnight/self_improver.py:1099:                    process_advisory_queue(keys, budget, None)
+./overnight/self_improver.py:1100:                    drain_backlog_loop(keys, budget, None, fixes_per_pass=a.fixes_per_pass)
+./overnight/self_improver.py:1104:            print(budget.report())
+./overnight/self_improver.py:1111:            drain_backlog_loop(keys, budget, None, fixes_per_pass=a.fixes_per_pass)
+./overnight/self_improver.py:1113:            process_advisory_queue(keys, budget, None)
+./overnight/self_improver.py:1115:            prefill_advisory_queue(files, keys, budget)
+./overnight/self_improver.py:1116:            process_advisory_queue(keys, budget, None)
+./overnight/self_improver.py:1117:            drain_backlog_loop(keys, budget, None, fixes_per_pass=a.fixes_per_pass)
+./overnight/self_improver.py:1119:        print(budget.report())
+./overnight/llm_client.py:180:    """Call OpenRouter with dynamic model fallback on rate limits."""
+./overnight/llm_client.py:183:    # Hard RPD limit (funded tier: 1000) — skip entirely if exhausted/locked
+./overnight/llm_client.py:184:    from overnight import openrouter_quota
+./overnight/llm_client.py:185:    if not openrouter_quota.is_available():
+./overnight/llm_client.py:186:        print(f"    🔒 OpenRouter locked/exhausted ({openrouter_quota.remaining()} left) — skipping")
+./overnight/llm_client.py:212:    # wasting quota. Route large prompts (>~25k chars ≈ >800 lines) to
+./overnight/llm_client.py:222:        # Count every attempt against the 50 RPD quota
+./overnight/llm_client.py:223:        from overnight import openrouter_quota
+./overnight/llm_client.py:224:        openrouter_quota.record_attempt()
+./overnight/llm_client.py:262:                print(f"    ⚠️  {try_model} rate-limited. Locking OpenRouter (duration per openrouter_quota.LOCK_HOURS).")
+./overnight/llm_client.py:263:                openrouter_quota.force_lock(f"429 on {try_model}")
+./overnight/llm_client.py:264:                break  # STOP trying other OpenRouter models, quota is exhausted!
+./overnight/llm_client.py:271:                print(f"    ❌ {try_model} quota exhausted → next")
+./overnight/llm_client.py:315:# GROQ PROVIDER (fast inference, separate rate limits)
+./overnight/llm_client.py:411:_groq_cooldown = {}
+./overnight/llm_client.py:412:_groq_429_count = {}  # model -> consecutive 429 count  # model -> timestamp until which it's rate-limited
+./overnight/llm_client.py:436:        rr = headers.get("x-ratelimit-remaining-requests")
+./overnight/llm_client.py:437:        rt = headers.get("x-ratelimit-remaining-tokens")
+./overnight/llm_client.py:440:        sr = headers.get("x-ratelimit-reset-requests")
+./overnight/llm_client.py:441:        st = headers.get("x-ratelimit-reset-tokens")
+./overnight/llm_client.py:461:    """Call Groq with cooldown tracking so we never waste requests probing
+./overnight/llm_client.py:462:    models that are already rate-limited."""
+./overnight/llm_client.py:479:    def _in_cooldown(m):
+./overnight/llm_client.py:480:        return _groq_cooldown.get(m, 0) > time.time()
+./overnight/llm_client.py:489:    for pass_num in range(2):  # pass 1: try ready models; pass 2: after cooldown wait
+./overnight/llm_client.py:492:                continue  # server says remaining=0; don't probe until reset
+./overnight/llm_client.py:493:            if _in_cooldown(try_model):
+./overnight/llm_client.py:530:                        _groq_429_count[try_model] = 0  # success resets backoff
+./overnight/llm_client.py:531:                        # Record Groq call in budget manager
+./overnight/llm_client.py:533:                            from overnight.budget_manager import APIBudgetManager
+./overnight/llm_client.py:546:                    # Exponential backoff when the same model keeps rejecting us
+./overnight/llm_client.py:550:                    _groq_cooldown[try_model] = time.time() + wait
+./overnight/llm_client.py:552:                    print(f"    ⚠️  Groq {try_model} rate-limited (hit x{n}) → backoff {wait}s")
+./overnight/llm_client.py:564:        # Nothing succeeded this pass — wait for the earliest cooldown, then retry
+./overnight/llm_client.py:566:        active = [t for t in _groq_cooldown.values() if t > now]
+./overnight/llm_client.py:734:        from overnight.budget_manager import APIBudgetManager
+./overnight/llm_client.py:735:        budget = APIBudgetManager()
+./overnight/llm_client.py:736:        if not budget.can_proceed("mistral"):
+./overnight/llm_client.py:737:            print("    🔒 Mistral budget exhausted")
+./overnight/llm_client.py:739:        budget.wait_if_needed("mistral", timeout=30)
+./overnight/llm_client.py:742:        budget.record_call("mistral")
+./overnight/budget_manager.py:6:Enforces free-tier limits and gracefully pauses/stops when budget is low.
+./overnight/budget_manager.py:9:    from overnight.budget_manager import APIBudgetManager
+./overnight/budget_manager.py:11:    budget = APIBudgetManager()
+./overnight/budget_manager.py:13:    if not budget.can_proceed("openrouter"):
+./overnight/budget_manager.py:14:        print("Budget exhausted, stopping")
+./overnight/budget_manager.py:17:    budget.record_call("openrouter")
+./overnight/budget_manager.py:21:    python3 overnight/budget_manager.py              # Show current usage
+./overnight/budget_manager.py:22:    python3 overnight/budget_manager.py --reset      # Reset all counters
+./overnight/budget_manager.py:40:#   Gemini: https://ai.google.dev/gemini-api/docs/rate-limits
+./overnight/budget_manager.py:148:    def get_remaining(self, provider: str) -> Dict[str, int]:
+./overnight/budget_manager.py:149:        """Get remaining budget for all windows."""
+./overnight/budget_manager.py:159:        """Get rate limits for a specific Groq model.
+./overnight/budget_manager.py:291:            remaining = self.get_remaining(provider)
+./overnight/budget_manager.py:295:                        f"(remaining: {remaining['per_minute']})")
+./overnight/budget_manager.py:297:                        f"(remaining: {remaining['per_hour']})")
+./overnight/budget_manager.py:299:                        f"(remaining: {remaining['per_day']})")
+./overnight/budget_manager.py:316:# CONVENIENCE: Decorator for budget-aware API calls
+./overnight/budget_manager.py:318:def budget_aware(provider: str, max_wait: int = 120):
+./overnight/budget_manager.py:320:    Decorator that enforces budget limits before calling an API function.
+./overnight/budget_manager.py:323:        budget = APIBudgetManager()
+./overnight/budget_manager.py:325:        @budget_aware("openrouter")
+./overnight/budget_manager.py:331:            budget = APIBudgetManager()
+./overnight/budget_manager.py:332:            if not budget.wait_if_needed(provider, timeout=max_wait):
+./overnight/budget_manager.py:334:                    f"API budget exhausted for {provider}. "
+./overnight/budget_manager.py:338:            budget.record_call(provider)
+./overnight/budget_manager.py:357:    budget = APIBudgetManager()
+./overnight/budget_manager.py:360:        budget.reset()
+./overnight/budget_manager.py:365:                provider: budget.get_usage(provider)
+./overnight/budget_manager.py:366:                for provider in budget.limits
+./overnight/budget_manager.py:368:            remaining = {
+./overnight/budget_manager.py:369:                provider: budget.get_remaining(provider)
+./overnight/budget_manager.py:370:                for provider in budget.limits
+./overnight/budget_manager.py:372:            print(json.dumps({"usage": usage, "remaining": remaining}, indent=2))
+./overnight/budget_manager.py:374:            print(budget.report())
+./overnight/docstring_injector.py:57:    """Call Gemini API with retry and backoff. Returns text response."""
+./overnight/refeed_bundle.py:46:| OpenRouter quota: `$10 USD/day` vs `50 RPD` vs `500K tokens` (3 models) | 1000 RPD (funded tier), 24h lock on exhaustion, UTC rollover |
+./overnight/refeed_bundle.py:81:  token-aware pacing, cooldown tracking, exponential backoff, rate-limit header
+./overnight/refeed_bundle.py:83:- overnight/openrouter_quota.py: 1000 RPD funded tier, 24h lock, UTC rollover,
+./overnight/build_v117.py:214:Main iterative generation engine. Multi-sweep, critic feedback, API budget cap.
+./overnight/build_v117.py:246:60-second exponential backoff on HTTP 429.
+./overnight/build_v117.py:247:Hard budget cap of 850 API calls per run.
+./overnight/build_v117.py:338:dynamic_vram_budget_check.py Exit 3: No GPU on VM.
+./overnight/build_v117.py:353:API budget cap enforced.
+./overnight/openrouter_quota.py:3:OpenRouter quota tracker for the 50 RPD free-tier hard limit.
+./overnight/openrouter_quota.py:5:- Tracks every attempt (success AND 429 — both count against quota)
+./overnight/openrouter_quota.py:6:- Locks OpenRouter for 24h once exhausted
+./overnight/openrouter_quota.py:15:QUOTA_FILE = Path(__file__).resolve().parent / "openrouter_quota.json"
+./overnight/openrouter_quota.py:26:    return {"used_today": 0, "day": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "locked_until": None}
+./overnight/openrouter_quota.py:40:        data = {"used_today": 0, "day": today, "locked_until": None}
+./overnight/openrouter_quota.py:41:    if data.get("locked_until"):
+./overnight/openrouter_quota.py:43:            lock_dt = datetime.fromisoformat(data["locked_until"])
+./overnight/openrouter_quota.py:47:                data["locked_until"] = None
+./overnight/openrouter_quota.py:49:            data["locked_until"] = None
+./overnight/openrouter_quota.py:53:def remaining():
+./overnight/openrouter_quota.py:60:    if data.get("locked_until"):
+./overnight/openrouter_quota.py:63:        data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
+./overnight/openrouter_quota.py:70:    """Count one request (success or 429). Lock when exhausted."""
+./overnight/openrouter_quota.py:74:    if data["used_today"] >= DAILY_LIMIT and not data.get("locked_until"):
+./overnight/openrouter_quota.py:75:        data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
+./overnight/openrouter_quota.py:76:        print(f"    🔒 OpenRouter quota exhausted ({data['used_today']}/{DAILY_LIMIT}). Locked 24h.")
+./overnight/openrouter_quota.py:85:        "remaining": remaining(),
+./overnight/openrouter_quota.py:86:        "locked_until": d.get("locked_until"),
+./overnight/openrouter_quota.py:94:    data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
+./overnight/openrouter_quota.py:96:    # Mark as fully used so it stays locked even if time resets
+./overnight/openrouter_quota.py:99:    print(f"    🔒 OpenRouter force-locked for 24h ({reason})")
+./overnight/openrouter_quota.py:105:    print(f"OpenRouter quota: {s['used_today']}/{DAILY_LIMIT} used, {s['remaining']} remaining")
+./overnight/openrouter_quota.py:106:    print(f"Locked until: {s['locked_until'] or 'not locked'}")
+./overnight/overnight_verify_and_develop.py:43:API_BUDGET = 200      # Conservative budget for overnight run
+./overnight/overnight_verify_and_develop.py:343:    log(f"  Starting loop_v3.py with budget={API_BUDGET}, sweeps={MAX_SWEEPS}")
+./overnight/phase6_generate.py:4:Uses Gemini API with rate limiting, syntax validation, and test verification.
+./overnight/refeed_bundle_v3.py:27:    "overnight/openrouter_quota.py": ROOT / "overnight/openrouter_quota.py",
+./overnight/refeed_bundle_v3.py:61:      - openrouter_quota.py: is_available(), record_attempt(), remaining(),
+./overnight/refeed_bundle_v3.py:72:    overnight/openrouter_quota.py
+./tools/system_doctor.py:89:        from overnight.budget_manager import APIBudgetManager
+./tools/system_doctor.py:90:        budget = APIBudgetManager()
+./tools/system_doctor.py:91:        print(budget.report())
+./tools/system_doctor.py:93:        print(f"Error loading budget: {e}")
+./tools/embedding_prefix_idempotency_check.py:94:    backoff_delays = [1, 2, 4]
+./tools/embedding_prefix_idempotency_check.py:95:    for attempt, delay in enumerate(backoff_delays, start=1):
+./tools/embedding_prefix_idempotency_check.py:114:            if attempt == len(backoff_delays):
+./tools/analyze_drain_log.py:50:            "passes": list[dict]                   # Each: {"pass_number": int, "remaining": int, "applied": int}
+./tools/analyze_drain_log.py:79:                {"pass_number": 1, "remaining": 42, "applied": 15},
+./tools/analyze_drain_log.py:80:                {"pass_number": 2, "remaining": 27, "applied": 8},
+./tools/analyze_drain_log.py:81:                {"pass_number": 3, "remaining": 19, "applied": 5}
+./tools/analyze_drain_log.py:115:        pass_match = re.search(r"\[Pass (\d+)\] (\d+) fixes remaining", line)
+./tools/analyze_drain_log.py:120:                "remaining": int(pass_match.group(2)),
+./tools/dynamic_vram_budget_check.py:15:"""Default fraction of total GPU memory to use as VRAM budget (90%).
+./tools/dynamic_vram_budget_check.py:22:    """Result of VRAM budget check."""
+./tools/dynamic_vram_budget_check.py:25:    budget_mb: int
+./tools/dynamic_vram_budget_check.py:42:    VRAM budget checking.
+./tools/dynamic_vram_budget_check.py:95:def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
+./tools/dynamic_vram_budget_check.py:97:    Check GPU VRAM usage against a budget.
+./tools/dynamic_vram_budget_check.py:116:            budget_mb=0,
+./tools/dynamic_vram_budget_check.py:131:        env_budget = os.getenv('VRAM_BUDGET_MB')
+./tools/dynamic_vram_budget_check.py:132:        if env_budget:
+./tools/dynamic_vram_budget_check.py:134:                budget_mb = int(env_budget)
+./tools/dynamic_vram_budget_check.py:135:                if budget_mb <= 0:
+./tools/dynamic_vram_budget_check.py:141:                    budget_mb=0,
+./tools/dynamic_vram_budget_check.py:146:            budget_mb = int(total_mb * DEFAULT_VRAM_BUDGET_RATIO)
+./tools/dynamic_vram_budget_check.py:152:            budget_mb=0,
+./tools/dynamic_vram_budget_check.py:157:    if used_mb > budget_mb:
+./tools/dynamic_vram_budget_check.py:161:            budget_mb=budget_mb,
+./tools/dynamic_vram_budget_check.py:162:            message=f"FAIL: VRAM usage {used_mb}MB exceeds budget {budget_mb}MB",
+./tools/dynamic_vram_budget_check.py:169:        budget_mb=budget_mb,
+./tools/dynamic_vram_budget_check.py:170:        message=f"PASS: VRAM usage {used_mb}MB within budget {budget_mb}MB",
+./tools/dynamic_vram_budget_check.py:198:    CLI entry point for VRAM budget check.
+./tools/dynamic_vram_budget_check.py:208:        result = check_vram_budget(gpu_data=mock_gpu_data)
+./tools/dynamic_vram_budget_check.py:212:    result = check_vram_budget()
+./tools/sanitization_entropy_check.py:307:        # Pass 2: Verification of remaining high-entropy tokens
+
+=== SOURCE SEARCH: OPENROUTER ===
+./engine/consensus_gate.py:71:    # JUDGE 1: OpenRouter (Heavy Model)
+./engine/failure_autopsy.py:36:            # Use the robust generate function which handles OpenRouter/Groq/Gemini fallbacks
+./overnight/llm_client.py:4:Instead of hardcoding model IDs (which break when OpenRouter changes them),
+./overnight/llm_client.py:5:this queries OpenRouter's API to find currently-available free instruct models
+./overnight/llm_client.py:73:    """Query OpenRouter for currently available free instruct models."""
+./overnight/llm_client.py:180:    """Call OpenRouter with dynamic model fallback on rate limits."""
+./overnight/llm_client.py:186:        print(f"    🔒 OpenRouter locked/exhausted ({openrouter_quota.remaining()} left) — skipping")
+./overnight/llm_client.py:262:                print(f"    ⚠️  {try_model} rate-limited. Locking OpenRouter (duration per openrouter_quota.LOCK_HOURS).")
+./overnight/llm_client.py:264:                break  # STOP trying other OpenRouter models, quota is exhausted!
+./overnight/llm_client.py:282:    # All OpenRouter models saturated — return empty immediately
+./overnight/llm_client.py:284:    print(f"    ⚠️  All OpenRouter models saturated")
+./overnight/llm_client.py:642:    Order: OpenRouter → Groq → wait & retry
+./overnight/llm_client.py:662:    # Step 1: Try OpenRouter (Nemotron + dynamic fallbacks)
+./overnight/llm_client.py:677:    # Step 2: OpenRouter saturated → try Groq immediately (only if fallback allowed)
+./overnight/llm_client.py:681:    print(f"    🔄 OpenRouter busy → trying Groq")
+./overnight/llm_client.py:697:    print(f"    ⏳ OpenRouter, Groq, and Mistral busy. Waiting 30s...")
+./overnight/budget_manager.py:39:#   OpenRouter: https://openrouter.ai/settings/limits
+./overnight/refeed_bundle.py:42:| `orchestrator/llm_client.py` with Ollama/vLLM/LM Studio providers | `overnight/llm_client.py` — providers are OpenRouter, Groq, Gemini |
+./overnight/refeed_bundle.py:46:| OpenRouter quota: `$10 USD/day` vs `50 RPD` vs `500K tokens` (3 models) | 1000 RPD (funded tier), 24h lock on exhaustion, UTC rollover |
+./overnight/refeed_bundle.py:49:| LLMProvider Protocol with claude-3.5-sonnet primary | free Nemotron via OpenRouter -> Groq compound fallback -> Gemini for prefill/critique |
+./overnight/refeed_bundle.py:80:- overnight/llm_client.py: OpenRouter -> Groq fallback, Gemini for prefill + critique,
+./overnight/refeed_bundle.py:126:    print("Calling 500B Nemotron via generate() [OpenRouter -> Groq fallback]...")
+./overnight/openrouter_quota.py:3:OpenRouter quota tracker for the 50 RPD free-tier hard limit.
+./overnight/openrouter_quota.py:6:- Locks OpenRouter for 24h once exhausted
+./overnight/openrouter_quota.py:58:    """True if OpenRouter can be used right now."""
+./overnight/openrouter_quota.py:76:        print(f"    🔒 OpenRouter quota exhausted ({data['used_today']}/{DAILY_LIMIT}). Locked 24h.")
+./overnight/openrouter_quota.py:92:    """Instantly lock OpenRouter for 24h (used when we hit a 429)."""
+./overnight/openrouter_quota.py:99:    print(f"    🔒 OpenRouter force-locked for 24h ({reason})")
+./overnight/openrouter_quota.py:105:    print(f"OpenRouter quota: {s['used_today']}/{DAILY_LIMIT} used, {s['remaining']} remaining")
+./overnight/code_reviewer.py:5:Uses NVIDIA Nemotron (via OpenRouter) to analyze code and suggest improvements,
+./overnight/code_reviewer.py:429:    # ---- STEP 1: OpenRouter primary analysis (authoritative) ----
+./overnight/code_reviewer.py:430:    print(f"\n  [1/3] 🤖 OpenRouter primary analysis...")
+./overnight/refeed_bundle_v3.py:116:    print("Calling 500B Nemotron via generate() [OpenRouter -> Groq fallback]...")
+./tools/llm_analyze.py:3:LLM Analysis Tool - Send large text corpora to high-context LLMs via OpenRouter.
+./tools/llm_analyze.py:7:the OpenRouter API. It is designed for tasks that exceed local VRAM context limits.
+./tools/llm_analyze.py:16:    - openai (OpenAI Python client, used for OpenRouter compatibility)
+./tools/llm_analyze.py:21:    OPENROUTER_API_KEY: Required. API key for OpenRouter authentication.
+./tools/llm_analyze.py:91:    file), sends the request to OpenRouter via the OpenAI-compatible API, and
+./tools/llm_analyze.py:97:        --model: OpenRouter model ID (default: qwen/qwen-2.5-72b-instruct).
+./tools/llm_analyze.py:106:        OPENROUTER_API_KEY: Required API key for OpenRouter authentication.
+./tools/llm_analyze.py:113:        description="Send a large text file to a high-context LLM via OpenRouter for analysis."
+./tools/llm_analyze.py:119:        help="OpenRouter model ID (default: qwen/qwen-2.5-72b-instruct)"
+./tools/llm_analyze.py:183:    print(f"\n🚀 Sending to OpenRouter model: {args.model}")
+
+=== SOURCE SEARCH: PATCH PARSER ===
+./engine/patch_parser.py:74:        raise PatchParseError("No valid SEARCH/REPLACE blocks found in LLM output.")
+./engine/multi_file_patcher.py:4:Applies atomic multi-file SEARCH/REPLACE blocks with LENIENT FUZZY MATCHING.
+./overnight/self_improver.py:629:            "Output ONLY Aider-style SEARCH/REPLACE blocks.\n"
+./overnight/self_improver.py:677:                    f"=== RAW MODEL OUTPUT (0 SEARCH/REPLACE blocks parsed) ===\n{raw[:6000]}\n")
+./overnight/self_improver.py:679:            print(f"       ⚠️ 0 SEARCH/REPLACE blocks parsed (format issue). Raw dumped to overnight/last_failed_raw.txt")
+./overnight/self_improver.py:677:                    f"=== RAW MODEL OUTPUT (0 SEARCH/REPLACE blocks parsed) ===\n{raw[:6000]}\n")
+./overnight/self_improver.py:679:            print(f"       ⚠️ 0 SEARCH/REPLACE blocks parsed (format issue). Raw dumped to overnight/last_failed_raw.txt")
+./engine/patch_parser.py:5:Enforces Aider-style contract: <<<<<<< SEARCH ... ======= ... >>>>>>> REPLACE
+./overnight/self_improver.py:629:            "Output ONLY Aider-style SEARCH/REPLACE blocks.\n"
+./engine/patch_parser.py:5:Enforces Aider-style contract: <<<<<<< SEARCH ... ======= ... >>>>>>> REPLACE
+./engine/patch_parser.py:21:SEARCH_BLOCK_MARKER = "<<<<<<< SEARCH"
+./engine/multi_file_patcher.py:22:        r'<<<<<<<\s+(.*?)\s*\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE',
+./tests/test_patch_parser.py:20:        parse_patch_blocks("<<<<<<< SEARCH\nfoo\n>>>>>>> REPLACE")
+./tests/test_patch_parser.py:23:    patch = "<<<<<<< SEARCH\n    print(\"Hello, World!\")\n=======\n    print(\"Hello, LOCAL-SOC!\")\n>>>>>>> REPLACE"
+./tests/test_patch_parser.py:30:        "<<<<<<< SEARCH\n"
+./tests/test_patch_parser.py:44:    patch = "<<<<<<< SEARCH\ncompletely_different_function():\n    pass\n=======\nmalicious_code()\n>>>>>>> REPLACE"
+./tests/test_patch_parser.py:50:        "<<<<<<< SEARCH\n"
+./tests/test_patch_parser.py:57:        "<<<<<<< SEARCH\n"
+./tests/test_patch_parser.py:73:    patch = f"<<<<<<< SEARCH\n{large_search}\n=======\n{large_replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:15:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:24:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:33:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_proven_fix_memory.py:38:            "<<<<<<< SEARCH\nold_code\n=======\nnew_code\n>>>>>>> REPLACE",
+./overnight/self_improver.py:630:            "Format: <<<<<<< path/to/file.py\n[exact search text]\n=======\n[replace]\n>>>>>>> REPLACE\n\n"
+./overnight/self_improver.py:645:            prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
+./engine/patch_parser.py:5:Enforces Aider-style contract: <<<<<<< SEARCH ... ======= ... >>>>>>> REPLACE
+./engine/patch_parser.py:22:DIVIDER_MARKER = "======="
+./engine/patch_parser.py:60:            raise PatchParseError("Unterminated SEARCH block: Missing '=======' divider.")
+./engine/multi_file_patcher.py:22:        r'<<<<<<<\s+(.*?)\s*\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE',
+./tests/test_patch_parser.py:19:    with pytest.raises(PatchParseError, match="Missing '=======' divider"):
+./tests/test_patch_parser.py:23:    patch = "<<<<<<< SEARCH\n    print(\"Hello, World!\")\n=======\n    print(\"Hello, LOCAL-SOC!\")\n>>>>>>> REPLACE"
+./tests/test_patch_parser.py:33:        "=======\n"
+./tests/test_patch_parser.py:44:    patch = "<<<<<<< SEARCH\ncompletely_different_function():\n    pass\n=======\nmalicious_code()\n>>>>>>> REPLACE"
+./tests/test_patch_parser.py:53:        "=======\n"
+./tests/test_patch_parser.py:61:        "=======\n"
+./tests/test_patch_parser.py:73:    patch = f"<<<<<<< SEARCH\n{large_search}\n=======\n{large_replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:15:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:24:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:33:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_proven_fix_memory.py:38:            "<<<<<<< SEARCH\nold_code\n=======\nnew_code\n>>>>>>> REPLACE",
+./overnight/self_improver.py:43:# ============================================================
+./overnight/self_improver.py:45:# ============================================================
+./overnight/self_improver.py:52:# ============================================================
+./overnight/self_improver.py:56:# ============================================================
+./overnight/self_improver.py:148:# ============================================================
+./overnight/self_improver.py:150:# ============================================================
+./overnight/self_improver.py:324:# ============================================================
+./overnight/self_improver.py:327:# ============================================================
+./overnight/self_improver.py:396:# ============================================================
+./overnight/self_improver.py:400:# ============================================================
+./overnight/self_improver.py:484:# ============================================================
+./overnight/self_improver.py:488:# ============================================================
+./overnight/self_improver.py:546:# ============================================================
+./overnight/self_improver.py:548:# ============================================================
+./overnight/self_improver.py:630:            "Format: <<<<<<< path/to/file.py\n[exact search text]\n=======\n[replace]\n>>>>>>> REPLACE\n\n"
+./overnight/self_improver.py:777:# ============================================================
+./overnight/self_improver.py:781:# ============================================================
+./overnight/self_improver.py:891:# ============================================================
+./overnight/self_improver.py:893:# ============================================================
+./overnight/self_improver.py:936:# ============================================================
+./overnight/self_improver.py:938:# ============================================================
+./overnight/self_improver.py:1021:    print(f"======================================================================\nPHASE B: OPENROUTER PROCESSING ({len(pending)} pending advisories)\n======================================================================")
+./overnight/llm_client.py:19:# ============================================================
+./overnight/llm_client.py:21:# ============================================================
+./overnight/llm_client.py:48:# ============================================================
+./overnight/llm_client.py:50:# ============================================================
+./overnight/llm_client.py:176:# ============================================================
+./overnight/llm_client.py:178:# ============================================================
+./overnight/llm_client.py:314:# ============================================================
+./overnight/llm_client.py:316:# ============================================================
+./overnight/llm_client.py:596:# ============================================================
+./overnight/llm_client.py:598:# ============================================================
+./overnight/budget_manager.py:35:# ============================================================
+./overnight/budget_manager.py:37:# ============================================================
+./overnight/budget_manager.py:83:    # ============================================================
+./overnight/budget_manager.py:85:    # ============================================================
+./overnight/budget_manager.py:110:    # ============================================================
+./overnight/budget_manager.py:112:    # ============================================================
+./overnight/budget_manager.py:136:    # ============================================================
+./overnight/budget_manager.py:138:    # ============================================================
+./overnight/budget_manager.py:280:    # ============================================================
+./overnight/budget_manager.py:282:    # ============================================================
+./overnight/budget_manager.py:315:# ============================================================
+./overnight/budget_manager.py:317:# ============================================================
+./overnight/budget_manager.py:346:# ============================================================
+./overnight/budget_manager.py:348:# ============================================================
+./overnight/refeed_bundle.py:23:# ============================================================
+./overnight/refeed_bundle.py:25:# ============================================================
+./overnight/refeed_bundle.py:61:# ============================================================
+./overnight/refeed_bundle.py:63:# ============================================================
+./overnight/refeed_bundle.py:107:# ============================================================
+./overnight/refeed_bundle.py:109:# ============================================================
+./overnight/build_v117.py:45:    "- Operational documentation generation is append-only or draft-only and is\nqueued at low priority so it never displaces high-severity alert triage.\n================================================================================",
+./overnight/build_v117.py:53:================================================================================"""
+./overnight/build_v117.py:119:amend_62_end = content.find("================================================================================\nSECTION 30:")
+./overnight/build_v117.py:121:================================================================================
+./overnight/build_v117.py:123:================================================================================
+./overnight/build_v117.py:199:================================================================================
+./overnight/build_v117.py:201:================================================================================
+./overnight/build_v117.py:356:    "================================================================================\nAPPENDIX M — OPEN SOURCE SECURITY SOFTWARE & API DOCUMENTATION",
+./overnight/build_v117.py:357:    section_39_text + "\n================================================================================\nAPPENDIX M — OPEN SOURCE SECURITY SOFTWARE & API DOCUMENTATION"
+./overnight/build_v117.py:397:    "================================================================================\nAPPENDIX O — CI VERIFICATION TOOL CONTRACTS & SKELETONS",
+./overnight/build_v117.py:398:    r118_text + "\n================================================================================\nAPPENDIX O — CI VERIFICATION TOOL CONTRACTS & SKELETONS"
+./overnight/build_v117.py:469:    "================================================================================\nAPPENDIX Q — RUNBOOKS & FAILURE MODE ANALYSIS",
+./overnight/build_v117.py:470:    p13_text + "\n================================================================================\nAPPENDIX Q — RUNBOOKS & FAILURE MODE ANALYSIS"
+./overnight/code_reviewer.py:43:# ============================================================
+./overnight/code_reviewer.py:45:# ============================================================
+./overnight/code_reviewer.py:70:# ============================================================
+./overnight/code_reviewer.py:72:# ============================================================
+./overnight/code_reviewer.py:105:# ============================================================
+./overnight/code_reviewer.py:107:# ============================================================
+./overnight/code_reviewer.py:139:# ============================================================
+./overnight/code_reviewer.py:141:# ============================================================
+./overnight/code_reviewer.py:299:# ============================================================
+./overnight/code_reviewer.py:301:# ============================================================
+./overnight/code_reviewer.py:398:# ============================================================
+./overnight/code_reviewer.py:400:# ============================================================
+./overnight/code_reviewer.py:631:# ============================================================
+./overnight/code_reviewer.py:633:# ============================================================
+./overnight/code_reviewer.py:787:# ============================================================
+./overnight/code_reviewer.py:789:# ============================================================
+./overnight/refeed_bundle_v3.py:21:# ============================================================
+./overnight/refeed_bundle_v3.py:23:# ============================================================
+./overnight/refeed_bundle_v3.py:42:# ============================================================
+./overnight/refeed_bundle_v3.py:44:# ============================================================
+./overnight/refeed_bundle_v3.py:95:# ============================================================
+./overnight/refeed_bundle_v3.py:97:# ============================================================
+./engine/patch_parser.py:5:Enforces Aider-style contract: <<<<<<< SEARCH ... ======= ... >>>>>>> REPLACE
+./engine/patch_parser.py:23:REPLACE_BLOCK_MARKER = ">>>>>>> REPLACE"
+./engine/patch_parser.py:67:            raise PatchParseError("Unterminated REPLACE block: Missing '>>>>>>> REPLACE' marker.")
+./engine/multi_file_patcher.py:22:        r'<<<<<<<\s+(.*?)\s*\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE',
+./tests/test_patch_parser.py:20:        parse_patch_blocks("<<<<<<< SEARCH\nfoo\n>>>>>>> REPLACE")
+./tests/test_patch_parser.py:23:    patch = "<<<<<<< SEARCH\n    print(\"Hello, World!\")\n=======\n    print(\"Hello, LOCAL-SOC!\")\n>>>>>>> REPLACE"
+./tests/test_patch_parser.py:36:        ">>>>>>> REPLACE"
+./tests/test_patch_parser.py:44:    patch = "<<<<<<< SEARCH\ncompletely_different_function():\n    pass\n=======\nmalicious_code()\n>>>>>>> REPLACE"
+./tests/test_patch_parser.py:56:        ">>>>>>> REPLACE\n\n"
+./tests/test_patch_parser.py:65:        ">>>>>>> REPLACE"
+./tests/test_patch_parser.py:73:    patch = f"<<<<<<< SEARCH\n{large_search}\n=======\n{large_replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:15:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:24:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_fuzzy_matcher.py:33:    raw = f"<<<<<<< m.py\n{search}\n=======\n{replace}\n>>>>>>> REPLACE"
+./tests/pipeline/test_proven_fix_memory.py:38:            "<<<<<<< SEARCH\nold_code\n=======\nnew_code\n>>>>>>> REPLACE",
+./overnight/self_improver.py:630:            "Format: <<<<<<< path/to/file.py\n[exact search text]\n=======\n[replace]\n>>>>>>> REPLACE\n\n"
+./overnight/self_improver.py:645:            prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
+./overnight/self_improver.py:675:                (ROOT / "overnight" / "last_failed_raw.txt").write_text(
+./overnight/self_improver.py:679:            print(f"       ⚠️ 0 SEARCH/REPLACE blocks parsed (format issue). Raw dumped to overnight/last_failed_raw.txt")
+
+=== SOURCE SEARCH: GHOST NAMES ===
+./overnight/self_improver.py:203:def _check_for_ghost_names(source_code: str):
+./overnight/self_improver.py:685:        # 👻 GHOST NAME GATE: Reject patches that use undefined names (saves Pytest runs)
+./overnight/self_improver.py:686:        ghost_violations = {}
+./overnight/self_improver.py:688:            ghosts = _check_for_ghost_names(new_content)
+./overnight/self_improver.py:689:            if ghosts:
+./overnight/self_improver.py:690:                ghost_violations[path.name] = ghosts
+./overnight/self_improver.py:692:        if ghost_violations:
+./overnight/self_improver.py:693:            ghosts_str = ", ".join([f"{k}({', '.join(v)})" for k,v in ghost_violations.items()])
+./overnight/self_improver.py:694:            print(f"       👻 GHOST NAMES DETECTED: {ghosts_str}")
+./overnight/self_improver.py:697:                critic_constraint = f"Generated code uses undefined names ({ghosts_str}). Add the missing imports or use existing ones."
+./overnight/llm_client.py:608:GHOSTBUSTER PROTOCOL: You MUST NOT report stylistic issues, missing docstrings, type hints, naming conventions, or code complexity. ONLY report genuine logic bugs, security vulnerabilities, or broken tests. If the code is logically sound, return an empty list or 'No issues'.{file_path}
+
+=== SOURCE SEARCH: TDD RED PHASE ===
+./tests/test_pytest_fingerprint_correctness.py:1:"""Regression tests for pytest baseline cache fingerprint correctness.
+./tests/test_pytest_fingerprint_correctness.py:15:    """Create a minimal git repo for isolated fingerprint testing."""
+./tests/test_pytest_fingerprint_correctness.py:22:def _compute_fingerprint_for(root, relevant_prefixes=("tests/", "engine/")):
+./tests/test_pytest_fingerprint_correctness.py:23:    """Compute fingerprint using the same logic as _get_repo_fingerprint."""
+./tests/test_pytest_fingerprint_correctness.py:57:    the SAME fingerprint under the old (truncated) logic.
+./tests/test_pytest_fingerprint_correctness.py:73:    def old_fingerprint():
+./tests/test_pytest_fingerprint_correctness.py:82:    fp_before = old_fingerprint()
+./tests/test_pytest_fingerprint_correctness.py:87:    fp_after = old_fingerprint()
+./tests/test_pytest_fingerprint_correctness.py:89:    # OLD BUG: fingerprints are identical despite content change
+./tests/test_pytest_fingerprint_correctness.py:91:        "Old logic should produce same fingerprint for changes beyond 4096"
+./tests/test_pytest_fingerprint_correctness.py:96:    """Test C: After fix, changing bytes > 4096 MUST change the fingerprint."""
+./tests/test_pytest_fingerprint_correctness.py:109:    fp_before = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:114:    fp_after = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:117:        "Fixed fingerprint must detect changes beyond 4096 bytes"
+./tests/test_pytest_fingerprint_correctness.py:122:    """Test B/C: Adding an untracked test file MUST change the fingerprint."""
+./tests/test_pytest_fingerprint_correctness.py:131:    fp_before = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:136:    fp_after = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:144:    """Test D: Unchanged state MUST produce the same fingerprint (cache hit)."""
+./tests/test_pytest_fingerprint_correctness.py:153:    fp1 = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:154:    fp2 = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:157:        "Unchanged state must produce identical fingerprint (cache hit)"
+./tests/test_pytest_fingerprint_correctness.py:162:def test_deleted_file_changes_fingerprint(tmp_path):
+./tests/test_pytest_fingerprint_correctness.py:163:    """Deleting a tracked test file MUST change the fingerprint."""
+./tests/test_pytest_fingerprint_correctness.py:172:    fp_before = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:176:    fp_after = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:184:    """Changes to non-pytest-relevant files MUST NOT change the fingerprint."""
+./tests/test_pytest_fingerprint_correctness.py:194:    fp_before = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:199:    fp_after = _compute_fingerprint_for(repo)
+./tests/test_pytest_fingerprint_correctness.py:202:        "Non-pytest files should not affect the fingerprint"
+./tests/pipeline/test_tdd_red_phase.py:2:Regression test for Improvement #2: TDD Red Phase Verification
+./tests/pipeline/test_tdd_red_phase.py:4:BEFORE: Generated TDD tests were accepted without verifying they fail.
+./tests/pipeline/test_tdd_red_phase.py:27:def test_vacuous_tdd_test_rejected(tdd_env):
+./tests/pipeline/test_tdd_red_phase.py:28:    """A TDD test that passes immediately must be rejected (not red).
+./tests/pipeline/test_tdd_red_phase.py:30:    Flow: baseline FAILS -> TDD generated -> red phase check PASSES -> reject test.
+./tests/pipeline/test_tdd_red_phase.py:42:            return "AssertionError: baseline failure"  # Baseline FAILS -> proceed to TDD
+./tests/pipeline/test_tdd_red_phase.py:43:        return None  # Red phase check PASSES -> test is vacuous -> reject
+./tests/pipeline/test_tdd_red_phase.py:46:         patch("overnight.self_improver._get_repo_fingerprint", return_value="unique-test-fp"), \
+./tests/pipeline/test_tdd_red_phase.py:54:    # The vacuous test file must have been deleted
+./tests/pipeline/test_tdd_red_phase.py:56:    assert not test_file.exists(), "Vacuous TDD test should have been rejected and deleted"
+./tests/pipeline/test_tdd_red_phase.py:60:    """A TDD test that fails (red phase) must be accepted as acceptance criteria.
+./tests/pipeline/test_tdd_red_phase.py:62:    Flow: baseline FAILS -> TDD generated -> red phase check FAILS -> keep test.
+./tests/pipeline/test_tdd_red_phase.py:74:            return "AssertionError: baseline failure"  # Baseline FAILS -> proceed to TDD
+./tests/pipeline/test_tdd_red_phase.py:78:         patch("overnight.self_improver._get_repo_fingerprint", return_value="unique-test-fp"), \
+./tests/pipeline/test_tdd_red_phase.py:89:    assert test_file.exists(), "Valid TDD test (red phase confirmed) should be kept"
+./tests/pipeline/test_baseline_caching.py:7:        (repo_fingerprint, targets).
+./tests/pipeline/test_baseline_caching.py:22:    si._baseline_cache = {"fingerprint": None, "result": None, "targets": None}
+./tests/pipeline/test_baseline_caching.py:24:    si._baseline_cache = {"fingerprint": None, "result": None, "targets": None}
+./tests/pipeline/test_baseline_caching.py:28:    """Two calls with same fingerprint + targets = one pytest run."""
+./tests/pipeline/test_baseline_caching.py:33:    with patch.object(si, '_get_repo_fingerprint', return_value='fp_abc123'), \
+./tests/pipeline/test_baseline_caching.py:44:    """Changed fingerprint = cache miss, pytest re-runs."""
+./tests/pipeline/test_baseline_caching.py:47:    fingerprints = iter(['fp_abc123', 'fp_xyz789'])
+./tests/pipeline/test_baseline_caching.py:50:    with patch.object(si, '_get_repo_fingerprint', side_effect=lambda: next(fingerprints)), \
+./tests/pipeline/test_baseline_caching.py:56:    assert mock_run.call_count == 2, "pytest must re-run when fingerprint changes"
+./tests/pipeline/test_baseline_caching.py:65:    with patch.object(si, '_get_repo_fingerprint', return_value='fp_abc123'), \
+./overnight/self_improver.py:54:# Memoizes pytest results by (repo_fingerprint, targets).
+./overnight/self_improver.py:57:_baseline_cache = {"fingerprint": None, "result": None, "targets": None}
+./overnight/self_improver.py:59:def _get_repo_fingerprint():
+./overnight/self_improver.py:102:    fp = _get_repo_fingerprint()
+./overnight/self_improver.py:106:        _baseline_cache["fingerprint"] == fp and 
+./overnight/self_improver.py:108:        print(f"       ♻️  pytest cache hit (fingerprint: {fp[:8] if fp else 'none'}...)")
+./overnight/self_improver.py:113:        "fingerprint": fp, 
+./overnight/self_improver.py:149:# HELPER ENGINES (Sniper, Pruner, Triage, TDD)
+./overnight/self_improver.py:290:        print(f"       ⚠️ TDD sig read failed: {e}")
+./overnight/self_improver.py:574:    print(f"       🔴 Baseline failure captured ({len(baseline_tb)} chars)")
+./overnight/self_improver.py:576:    # 2. TDD SUB-AGENT
+./overnight/self_improver.py:577:    print(f"       🧪 Spawning TDD Sub-Agent...")
+./overnight/self_improver.py:586:            # If it passes immediately, the test is vacuous and cannot validate the fix.
+./overnight/self_improver.py:589:                print(f"       ⚠️ TDD Red Phase FAILED: Test passes immediately. Rejecting vacuous test.")
+./overnight/self_improver.py:592:                print(f"       🔴 TDD Red Phase CONFIRMED: Test fails as expected.")
+./tools/sanitize_tests.py:5:Quarantines broken auto-generated TDD tests so they don't break pytest collection.
+./tools/sanitize_tests.py:34:        print(f"🧹 SANITIZER: Quarantined {quarantined} broken TDD tests to tests/quarantine/")
+
+=== SOURCE SEARCH: HALLUCINATED EVE TEST ===
+./tests/test_tdd_auto_intake_eve.py:15:        cursor = conn.execute('SELECT COUNT(*) FROM eve_rows')
+./tests/test_tdd_auto_intake_eve.py:8:def test_process_eve_file_bulk_insert_memory():
+./tests/test_tdd_auto_intake_eve.py:14:        process_eve_file(path, conn=conn)
+./engine/intake_wazuh.py:15:DB_PATH = os.getenv('TRIAGE_DB_PATH', './data/triage_queue.db')
+./engine/intake_wazuh.py:101:        CREATE TABLE IF NOT EXISTS triage_queue (
+./engine/intake_wazuh.py:126:            conn.execute(f"CREATE INDEX {index_name} ON triage_queue({cols})")
+./engine/intake_wazuh.py:189:        INSERT INTO triage_queue (
+./engine/slm_triage_worker.py:34:    cursor.execute("PRAGMA table_info(triage_queue)")
+./engine/slm_triage_worker.py:38:        cursor.execute("ALTER TABLE triage_queue ADD COLUMN priority INTEGER DEFAULT ?", (DEFAULT_PRIORITY,))
+./engine/slm_triage_worker.py:40:            UPDATE triage_queue
+./engine/slm_triage_worker.py:63:            ON triage_queue(status, priority, created_at)
+./engine/slm_triage_worker.py:107:            "UPDATE triage_queue SET last_heartbeat_at = ?, lease_expires_at = ? WHERE id = ?",
+./engine/slm_triage_worker.py:122:        "UPDATE triage_queue SET status = 'pending', lease_expires_at = NULL WHERE status = 'processing' AND lease_expires_at < ?",
+./engine/slm_triage_worker.py:145:                UPDATE triage_queue 
+./engine/slm_triage_worker.py:151:                    SELECT id FROM triage_queue 
+./engine/slm_triage_worker.py:201:                conn.execute("UPDATE triage_queue SET status = 'completed' WHERE id = ?", (job_id,))
+./engine/slm_triage_worker.py:213:                    conn.execute("UPDATE triage_queue SET status = 'failed', failure_reason = ? WHERE id = ?", (str(e), job_id))
+./engine/slm_triage_worker.py:218:                conn.execute("UPDATE triage_queue SET status = 'failed', failure_reason = ? WHERE id = ?", (str(e), job_id))
+./engine/queue_manager.py:105:        CREATE TABLE IF NOT EXISTS triage_queue (
+./engine/queue_manager.py:121:        CREATE TABLE IF NOT EXISTS triage_queue_approvals (
+./engine/queue_manager.py:127:            FOREIGN KEY (job_id) REFERENCES triage_queue (id) ON DELETE CASCADE
+./engine/queue_manager.py:130:        CREATE INDEX IF NOT EXISTS idx_triage_queue_status_severity_created
+./engine/queue_manager.py:131:            ON triage_queue (status, severity, created_at);
+./engine/queue_manager.py:133:        CREATE INDEX IF NOT EXISTS idx_triage_queue_lease_expires
+./engine/queue_manager.py:134:            ON triage_queue (lease_expires_at) WHERE status = 'processing';
+./engine/queue_manager.py:149:        row = self.cursor.execute("SELECT severity FROM triage_queue WHERE id = ?", (job_id,)).fetchone()
+./engine/queue_manager.py:157:            "SELECT 1 FROM triage_queue_approvals WHERE job_id = ? AND target_status = ?",
+./engine/queue_manager.py:206:            INSERT OR REPLACE INTO triage_queue_approvals (job_id, target_status, approved_by)
+./engine/queue_manager.py:231:            "SELECT COUNT(*) FROM triage_queue WHERE status = 'pending'"
+./engine/queue_manager.py:236:                INSERT INTO triage_queue
+./engine/queue_manager.py:247:            INSERT INTO triage_queue (severity, payload_ref, last_modified_by)
+./engine/queue_manager.py:286:            UPDATE triage_queue
+./engine/queue_manager.py:293:                SELECT id FROM triage_queue
+./engine/queue_manager.py:324:            UPDATE triage_queue
+./engine/queue_manager.py:343:            SELECT id, severity, attempts FROM triage_queue
+./engine/queue_manager.py:354:                    UPDATE triage_queue
+./engine/queue_manager.py:371:                            UPDATE triage_queue
+./engine/queue_manager.py:385:                            UPDATE triage_queue
+./engine/queue_manager.py:404:                        UPDATE triage_queue
+./engine/queue_manager.py:418:            UPDATE triage_queue
+./engine/queue_manager.py:434:            SELECT id, severity FROM triage_queue
+./engine/queue_manager.py:450:                UPDATE triage_queue
+./engine/queue_manager.py:483:            UPDATE triage_queue
+./engine/queue_manager.py:494:                UPDATE triage_queue
+./engine/intake_eve.py:11:DB_PATH = os.getenv('SOC_DB_PATH', '/var/lib/soc/triage_queue.db')
+./engine/intake_eve.py:111:    """Initializes the SQLite database and creates the triage_queue table if it does not exist.
+./engine/intake_eve.py:124:                    CREATE TABLE IF NOT EXISTS triage_queue (
+./engine/intake_eve.py:150:                    "CREATE INDEX IF NOT EXISTS idx_triage_status ON triage_queue(status)"
+./engine/intake_eve.py:153:                    "CREATE INDEX IF NOT EXISTS idx_triage_lease ON triage_queue(lease_expires_at)"
+./engine/intake_eve.py:265:    """Inserts a single sanitized event into the triage_queue table.
+./engine/intake_eve.py:274:        "INSERT INTO triage_queue (payload, severity) VALUES (?, ?)",
+./engine/intake_eve.py:321:                    "INSERT INTO triage_queue (payload, severity) VALUES (?, ?)",
+./engine/intake_eve.py:331:    """Retrieves pending events from the triage_queue.
+./engine/intake_eve.py:342:        "SELECT id, payload, severity, attempts FROM triage_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
+./engine/intake_eve.py:361:        "UPDATE triage_queue SET status = 'leased', lease_expires_at = datetime('now', '+' || ? || 'seconds') WHERE id = ? AND status = 'pending'",
+./engine/intake_eve.py:378:        "UPDATE triage_queue SET status = 'completed' WHERE id = ? AND status = 'leased'",
+./tests/test_queue_manager.py:21:        "SELECT severity FROM triage_queue WHERE status = 'processing'"
+./tests/test_queue_manager.py:32:        "SELECT payload_ref FROM triage_queue WHERE status = 'processing'"
+./tests/test_queue_manager.py:43:        "SELECT status, shed_reason FROM triage_queue WHERE payload_ref = ?",
+./tests/test_queue_manager.py:56:        "SELECT status FROM triage_queue WHERE payload_ref = ?",
+./tests/test_queue_manager.py:67:        "SELECT attempts, status, lease_expires_at FROM triage_queue WHERE status = 'processing'"
+./tests/test_queue_manager.py:83:        "SELECT shed_reason FROM triage_queue WHERE status = 'shed'"
+./tests/test_intake_wazuh.py:14:    db_file = tmp_path / "triage_queue.db"
+./tests/test_intake_wazuh.py:17:        CREATE TABLE triage_queue (
+./tests/test_intake_wazuh.py:58:    row = conn.execute("SELECT severity FROM triage_queue").fetchone()
+./tests/test_intake_wazuh.py:76:    # Since the script tries to write to /var/lib/local-soc/triage_queue.db, 
+./tests/test_slm_triage_worker.py:16:        CREATE TABLE triage_queue (
+./tests/test_slm_triage_worker.py:44:    db_conn.execute("INSERT INTO triage_queue (id, status) VALUES (1, 'processing')")
+./tests/test_slm_triage_worker.py:49:    row = db_conn.execute("SELECT last_heartbeat_at, lease_expires_at FROM triage_queue WHERE id = 1").fetchone()
+./tests/test_slm_triage_worker.py:56:        "INSERT INTO triage_queue (id, status, lease_expires_at) VALUES (1, 'processing', ?)",
+./tests/test_slm_triage_worker.py:63:    row = db_conn.execute("SELECT status FROM triage_queue WHERE id = 1").fetchone()
+./tests/test_slm_triage_worker.py:73:        mock_conn.execute("CREATE TABLE triage_queue (id INTEGER PRIMARY KEY, status TEXT, severity TEXT, created_at TIMESTAMP, started_at TIMESTAMP, attempts INTEGER DEFAULT 0, last_heartbeat_at TIMESTAMP, lease_expires_at TIMESTAMP)")
+
+=== FUNCTION MAP: overnight/self_improver.py ===
+46:def _load_json(path):
+50:def _save_json(path, data): path.write_text(json.dumps(data, indent=2))
+59:def _get_repo_fingerprint():
+100:def run_pytest_cached(targets, timeout=60):
+120:def _record_ledger(file_path, issue, status, reason=""):
+133:def _escalate_to_manual(file_path, issue, reason):
+151:def _get_test_targets(file_path):
+158:def _prune_ast_context(source: str, issue_desc: str, max_chars: int = 20000) -> str:
+174:    def render(nodes):
+192:def _choose_context(original, issue_desc, raw_cap=24000):
+203:def _check_for_ghost_names(source_code: str):
+234:def _get_imported_signatures(file_path, max_sigs=8):
+264:def triage_backlog():
+284:def _generate_tdd_test(issue_desc: str, target_file: str, api_keys: dict) -> str:
+308:def _failed_test_ids(tb):
+315:def run_pytest(targets, timeout=60):
+328:def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
+403:def _safe_relative_path(file_path):
+410:def _store_proven_fix(file_path, issue, diff_text, forensic_context):
+426:def _retrieve_similar_fixes(issue, max_examples=2):
+491:def _store_failed_fix(file_path, issue, diff_text, constraint):
+507:def _retrieve_failed_patterns(issue, max_examples=2):
+549:def apply_auto_fix(file_path, issue, api_keys):
+782:def compute_scorecard():
+894:def drain_fix_backlog(api_keys, max_fixes=3):
+925:def drain_backlog_loop(api_keys, budget, state, fixes_per_pass=4):
+939:def prefill_advisory_queue(files, api_keys, budget):
+954:def normalize_advisory(text: str) -> str:
+960:def _check_cooldown(file_path: str, advisory_notes: str):
+964:    def norm(t):
+991:def _classify_and_route_local(advisory_notes: str) -> bool:
+1006:def _call_local_slm_fallback(prompt: str) -> str:
+1019:def process_advisory_queue(api_keys, budget, state):
+1062:def discover_files():
+1069:def main():
+
+=== SELF_IMPROVER: lines 1-120 ===
+1: import hashlib
+2: import string
+3: #!/usr/bin/env python3
+4: """
+5: soc-autopilot: Autonomous Engineering System
+6: A Staff-Level, Self-Healing, Test-Driven, Causal-Triage Autonomous Engineering System.
+7: """
+8: import sys, json, subprocess, time, argparse, ast, re, os, hashlib, uuid
+9: from pathlib import Path
+10: from datetime import datetime
+11: from collections import Counter
+12: 
+13: sys.path.insert(0, str(Path(__file__).parent.parent))
+14: from overnight.llm_client import generate, load_api_keys, strip_fences, gemini_pre_analysis, _call_gemini
+15: from overnight.budget_manager import APIBudgetManager
+16: from overnight.code_reviewer import review_file, extract_json_from_response, build_review_prompt, get_file_context
+17: 
+18: ROOT = Path(__file__).resolve().parent.parent
+19: QUEUE_DIR = ROOT / "overnight" / "advisory_queue" / "pending"
+20: FIX_BACKLOG = ROOT / "overnight" / "fix_backlog.json"
+21: DEFERRED_BACKLOG = ROOT / "overnight" / "fix_backlog_deferred.json"
+22: LESSONS_FILE = ROOT / "overnight" / "lessons_learned.json"
+23: 
+24: SAFE_CATEGORIES = {"maintainability", "blueprint_compliance", "performance"}
+25: SAFE_SEVERITIES = {"low", "informational", "medium"}
+26: 
+27: # Try to import advanced engines (degrade gracefully if missing)
+28: try: from engine.defeat_ledger import is_ast_defeated, check_and_record_defeat
+29: except ImportError: is_ast_defeated = lambda x: False; check_and_record_defeat = lambda *a, **k: None
+30: 
+31: try: from engine.multi_file_patcher import parse_multi_file_diff, apply_multi_file_patches
+32: except ImportError: parse_multi_file_diff = None; apply_multi_file_patches = None
+33: 
+34: try: from engine.reasoning_ledger import record_interaction
+35: except ImportError: record_interaction = lambda *a, **k: None
+36: 
+37: try: from engine.cer_critic import generate_strategic_constraint
+38: except ImportError: generate_strategic_constraint = lambda *a, **k: "Adopt a different algorithmic strategy."
+39: 
+40: try: from engine.failure_autopsy import perform_autopsy
+41: except ImportError: perform_autopsy = lambda *a, **k: ""
+42: 
+43: # ============================================================
+44: # QUEUE & STATE MANAGEMENT
+45: # ============================================================
+46: def _load_json(path):
+47:     try: return json.loads(path.read_text()) if path.exists() else []
+48:     except Exception: return []
+49: 
+50: def _save_json(path, data): path.write_text(json.dumps(data, indent=2))
+51: 
+52: # ============================================================
+53: # PYTEST CACHING (Improvement #4)
+54: # Memoizes pytest results by (repo_fingerprint, targets).
+55: # Invalidates when a fix is committed via Shadow Canary.
+56: # ============================================================
+57: _baseline_cache = {"fingerprint": None, "result": None, "targets": None}
+58: 
+59: def _get_repo_fingerprint():
+60:     """Hash relevant repo files (tracked + untracked) to detect state changes.
+61:     
+62:     Includes full file content (not truncated) and untracked files to prevent
+63:     false cache hits when test/engine code changes beyond the 4KB mark or
+64:     when new untracked test files are added.
+65:     """
+66:     try:
+67:         # Get tracked files
+68:         res1 = subprocess.run(
+69:             ["git", "ls-tree", "-r", "HEAD", "--name-only"],
+70:             capture_output=True, text=True, cwd=ROOT, timeout=10
+71:         )
+72:         tracked = set(f.strip() for f in res1.stdout.splitlines() if f.strip()) if res1.returncode == 0 else set()
+73: 
+74:         # Get untracked files (respecting .gitignore)
+75:         res2 = subprocess.run(
+76:             ["git", "ls-files", "--others", "--exclude-standard"],
+77:             capture_output=True, text=True, cwd=ROOT, timeout=10
+78:         )
+79:         untracked = set(f.strip() for f in res2.stdout.splitlines() if f.strip()) if res2.returncode == 0 else set()
+80: 
+81:         # Only hash relevant code directories to avoid invalidating cache on docs/README changes
+82:         relevant_prefixes = ("tests/", "engine/", "overnight/", "memory/", "orchestrator/", "tools/")
+83:         
+84:         h = hashlib.sha256()
+85:         for f in sorted(tracked | untracked):
+86:             if not any(f.startswith(p) for p in relevant_prefixes):
+87:                 continue
+88:             h.update(f.encode())
+89:             p_file = ROOT / f
+90:             if p_file.exists():
+91:                 h.update(p_file.read_bytes())
+92:             else:
+93:                 h.update(b"__DELETED__")
+94:         return h.hexdigest()
+95:     except Exception:
+96:         return None
+97: 
+98: 
+99: 
+100: def run_pytest_cached(targets, timeout=60):
+101:     """Cached pytest for baseline checks. Sniper Scope must use uncached run_pytest."""
+102:     fp = _get_repo_fingerprint()
+103:     targets_key = tuple(sorted(targets))
+104:     
+105:     if (fp is not None and
+106:         _baseline_cache["fingerprint"] == fp and 
+107:         _baseline_cache["targets"] == targets_key):
+108:         print(f"       ♻️  pytest cache hit (fingerprint: {fp[:8] if fp else 'none'}...)")
+109:         return _baseline_cache["result"]
+110:     
+111:     result = run_pytest(targets, timeout=timeout)
+112:     _baseline_cache.update({
+113:         "fingerprint": fp, 
+114:         "result": result, 
+115:         "targets": targets_key
+116:     })
+117:     return result
+118: 
+119: 
+120: def _record_ledger(file_path, issue, status, reason=""):
+
+=== SELF_IMPROVER: lines 450-750 ===
+450:         
+451:         scored = []
+452:         for entry in entries:
+453:             score = 0
+454:             if entry.get("category", "").lower() == target_category:
+455:                 score += 10
+456:             entry_words = set(entry.get("advisory", "").lower().split())
+457:             overlap = len(target_words & entry_words)
+458:             score += min(overlap, 5)
+459:             if score > 0:
+460:                 scored.append((score, entry))
+461:         
+462:         scored.sort(key=lambda x: x[0], reverse=True)
+463:         top_matches = [e for _, e in scored[:max_examples]]
+464:         
+465:         if not top_matches:
+466:             return ""
+467:         
+468:         # Format as few-shot examples
+469:         parts = ["PROVEN FIX EXAMPLES (from past successful fixes in this codebase):"]
+470:         for i, match in enumerate(top_matches, 1):
+471:             parts.append(f"\nExample {i} ({match.get('category')}, {match.get('file')}):")
+472:             parts.append(f"Advisory: {match.get('advisory', '')[:100]}")
+473:             if match.get("forensic_summary"):
+474:                 parts.append(f"Analysis: {match['forensic_summary'][:150]}")
+475:             parts.append(f"Fix applied:\n{match.get('fix_diff', '')[:800]}")
+476:         
+477:         parts.append("\nApply a similar pattern to the current advisory.\n\n")
+478:         return "\n".join(parts)
+479:         
+480:     except Exception:
+481:         return ""  # Non-blocking
+482: 
+483: 
+484: # ============================================================
+485: # NEGATIVE MEMORY (Improvement #14)
+486: # Stores FAILED fixes so the system avoids repeating the same mistakes.
+487: # Symmetric counterpart to proven_fix memory (positive learning).
+488: # ============================================================
+489: FAILED_FIXES_PATH = ROOT / "overnight" / "failed_fixes.jsonl"
+490: 
+491: def _store_failed_fix(file_path, issue, diff_text, constraint):
+492:     """Store a failed fix attempt as a negative pattern to avoid."""
+493:     try:
+494:         entry = {
+495:             "timestamp": datetime.now().isoformat(),
+496:             "category": issue.get("category", "unknown"),
+497:             "file": _safe_relative_path(file_path),
+498:             "advisory": issue.get("description", "")[:200],
+499:             "failed_diff": diff_text[:1500],
+500:             "constraint": constraint[:300] if constraint else ""
+501:         }
+502:         with open(FAILED_FIXES_PATH, "a") as f:
+503:             f.write(json.dumps(entry) + "\n")
+504:     except Exception:
+505:         pass  # Non-blocking
+506: 
+507: def _retrieve_failed_patterns(issue, max_examples=2):
+508:     """Retrieve similar past failures to inject as AVOID warnings."""
+509:     try:
+510:         if not FAILED_FIXES_PATH.exists():
+511:             return ""
+512:         entries = []
+513:         for line in FAILED_FIXES_PATH.read_text().strip().split("\n"):
+514:             if line.strip():
+515:                 try: entries.append(json.loads(line))
+516:                 except Exception: pass
+517:         if not entries:
+518:             return ""
+519:         target_category = issue.get("category", "").lower()
+520:         target_words = set(issue.get("description", "").lower().split())
+521:         scored = []
+522:         for entry in entries:
+523:             score = 0
+524:             if entry.get("category", "").lower() == target_category:
+525:                 score += 10
+526:             overlap = len(target_words & set(entry.get("advisory", "").lower().split()))
+527:             score += min(overlap, 5)
+528:             if score > 0:
+529:                 scored.append((score, entry))
+530:         scored.sort(key=lambda x: x[0], reverse=True)
+531:         top = [e for _, e in scored[:max_examples]]
+532:         if not top:
+533:             return ""
+534:         parts = ["PAST FAILED APPROACHES (do NOT repeat these mistakes):"]
+535:         for i, m in enumerate(top, 1):
+536:             parts.append(f"\nFailed attempt {i} ({m.get('category')}, {m.get('file')}):")
+537:             if m.get("constraint"):
+538:                 parts.append(f"Why it failed: {m['constraint'][:200]}")
+539:             parts.append(f"Bad patch (AVOID this pattern):\n{m.get('failed_diff', '')[:500]}")
+540:         parts.append("\nLearn from these failures. Do NOT repeat the same mistakes.\n\n")
+541:         return "\n".join(parts)
+542:     except Exception:
+543:         return ""  # Non-blocking
+544: 
+545: 
+546: # ============================================================
+547: # CORE FIX ENGINE
+548: # ============================================================
+549: def apply_auto_fix(file_path, issue, api_keys):
+550:     try: original = file_path.read_text()
+551:     except Exception: return False
+552: 
+553:     if is_ast_defeated(original): return False
+554:     if issue.get('category', '').lower() in ['style', 'documentation']: return False
+555: 
+556:     targets = _get_test_targets(file_path)
+557:     
+558:     # 1. RED-GREEN BASELINE
+559:     baseline_tb = run_pytest_cached(targets)
+560:     if baseline_tb is None:
+561:         category = issue.get('category', '').lower()
+562:         # Functional bugs with passing tests are truly stale (already fixed)
+563:         if category in ['bug', 'correctness', 'style', 'documentation', '']:
+564:             print(f"       ✅ Baseline tests passed. Stale advisory.")
+565:             _record_ledger(file_path, issue, "STALE", "Baseline passed")
+566:             return True
+567:         else:
+568:             # Security/Performance/Reliability flaws don't always have failing tests.
+569:             # Do not drop them. Escalate to manual review.
+570:             print(f"       ⚠️ Baseline passed, but category is '{category}'. Escalating (lacks regression test).")
+571:             _escalate_to_manual(file_path, issue, f"Passed baseline but lacks regression test for {category} defect.")
+572:             _record_ledger(file_path, issue, "ESCALATED", "Lacks regression test")
+573:             return True
+574:     print(f"       🔴 Baseline failure captured ({len(baseline_tb)} chars)")
+575: 
+576:     # 2. TDD SUB-AGENT
+577:     print(f"       🧪 Spawning TDD Sub-Agent...")
+578:     tdd_test_code = _generate_tdd_test(issue.get('description', ''), str(file_path.relative_to(ROOT)), api_keys)
+579:     tdd_kept_path = None
+580:     tdd_block = ""
+581:     if tdd_test_code:
+582:         test_path = ROOT / "tests" / f"test_tdd_auto_{file_path.stem}.py"
+583:         try:
+584:             test_path.write_text(tdd_test_code)
+585:             # RED PHASE VERIFICATION: The test MUST fail before we apply the fix.
+586:             # If it passes immediately, the test is vacuous and cannot validate the fix.
+587:             red_check = run_pytest([str(test_path.relative_to(ROOT))])
+588:             if red_check is None:
+589:                 print(f"       ⚠️ TDD Red Phase FAILED: Test passes immediately. Rejecting vacuous test.")
+590:                 test_path.unlink()
+591:             else:
+592:                 print(f"       🔴 TDD Red Phase CONFIRMED: Test fails as expected.")
+593:                 tdd_block = f"ACCEPTANCE CRITERIA (Make this test pass):\n```python\n{tdd_test_code}\n```\n\n"
+594:                 tdd_kept_path = test_path
+595:         except Exception: pass
+596: 
+597:     # 3. GENERATION LOOP
+598:     critic_constraint = ""
+599:     failed_attempt_1_raw = ""
+600:     current_temp = 0.2
+601:     current_max = 4096
+602:     
+603:     # FORENSIC ANALYSIS PHASE (Improvement #5)
+604:     print(f"       🔬 Running forensic analysis...")
+605:     forensic_context = _forensic_analysis(issue, original, baseline_tb, api_keys)
+606:     api_sigs = _get_imported_signatures(file_path)
+607:     
+608:     # PROVEN FIX RETRIEVAL (Improvement #6)
+609:     proven_examples = _retrieve_similar_fixes(issue)
+610:     if proven_examples:
+611:         forensic_context += proven_examples
+612:         print(f"       📚 Retrieved {proven_examples.count('Example')} proven fix example(s)")
+613: 
+614:     # NEGATIVE MEMORY RETRIEVAL (Improvement #14)
+615:     failed_patterns = _retrieve_failed_patterns(issue)
+616:     if failed_patterns:
+617:         forensic_context += failed_patterns
+618:         print(f"       🚫 Retrieved {failed_patterns.count('Failed attempt')} failed pattern(s) to avoid")
+619:     if forensic_context:
+620:         print(f"       🔬 Forensic context: {forensic_context.split(chr(10))[1][:60]}...")
+621:     else:
+622:         print(f"       🔬 Forensic analysis unavailable (falling back to direct generation)")
+623: 
+624:     for attempt in range(2):
+625:         pruned = _choose_context(original, issue.get('description', ''))
+626:         
+627:         prompt = (
+628:             "You are a senior Python engineer. Fix the issue below.\n"
+629:             "Output ONLY Aider-style SEARCH/REPLACE blocks.\n"
+630:             "Format: <<<<<<< path/to/file.py\n[exact search text]\n=======\n[replace]\n>>>>>>> REPLACE\n\n"
+631:             "CRITICAL RULES FOR THE SEARCH BLOCK:\n"
+632:             "1. Copy lines EXACTLY as they appear between the ``` markers in CURRENT FILE.\n"
+633:             "2. Do NOT add line numbers. Do NOT re-indent. Do NOT reformat.\n"
+634:             "3. Preserve every space and newline exactly.\n\n"
+635:             f"{tdd_block}"
+636:             f"ISSUE: {issue.get('description', '')}\n\n"
+637:             f"{forensic_context}"
+638:             f"{api_sigs}"
+639:             f"BASELINE TRACEBACK:\n```{baseline_tb}```\n\n"
+640:             f"{f'CRITICAL STRATEGY SHIFT: {critic_constraint}' if critic_constraint else ''}\n"
+641:             f"CURRENT FILE:\n```\n{pruned}\n```\n\n"
+642:             f"FILE PATH: {file_path.relative_to(ROOT)}"
+643:         )
+644:         if attempt == 1 and failed_attempt_1_raw:
+645:             prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
+646:         raw = generate(prompt, api_keys, temperature=current_temp, max_tokens=current_max)
+647:         if not raw: return False
+648:         raw = strip_fences(raw)
+649: 
+650:         # Parse & Apply Patches
+651:         modified_files = {}
+652:         try:
+653:             if parse_multi_file_diff:
+654:                 patches = parse_multi_file_diff(raw, ROOT)
+655:                 modified_files = apply_multi_file_patches(patches)
+656:             else:
+657:                 # Fallback to simple single-file replace if engine missing
+658:                 modified_files = {file_path: original.replace(raw, raw)} # Dummy
+659:         except Exception as e:
+660:             if attempt == 0:
+661:                 failed_attempt_1_raw = raw
+662:                 print(f"       🩸 AUTOPSY: Analyzing patch failure...")
+663:                 critic_constraint = perform_autopsy(raw, str(e), api_keys)
+664:                 print(f"       🧠 Constraint: {critic_constraint[:80]}...")
+665:                 # DYNAMIC TUNING
+666:                 if "truncat" in critic_constraint.lower(): current_max = 8192; current_temp = 0.1
+667:                 elif "algorithm" in critic_constraint.lower() or "logic" in critic_constraint.lower(): current_temp = 0.6
+668:                 else: current_temp = 0.1
+669:                 continue
+670:             return False
+671: 
+672:         # GUARD: If patch produced no changes, skip pytest and retry
+673:         if not modified_files:
+674:             try:
+675:                 (ROOT / "overnight" / "last_failed_raw.txt").write_text(
+676:                     f"=== ADVISORY ===\n{issue.get('description','')}\n\n"
+677:                     f"=== RAW MODEL OUTPUT (0 SEARCH/REPLACE blocks parsed) ===\n{raw[:6000]}\n")
+678:             except Exception: pass
+679:             print(f"       ⚠️ 0 SEARCH/REPLACE blocks parsed (format issue). Raw dumped to overnight/last_failed_raw.txt")
+680:             if attempt == 0:
+681:                 failed_attempt_1_raw = raw
+682:                 continue
+683:             return False
+684: 
+685:         # 👻 GHOST NAME GATE: Reject patches that use undefined names (saves Pytest runs)
+686:         ghost_violations = {}
+687:         for path, new_content in modified_files.items():
+688:             ghosts = _check_for_ghost_names(new_content)
+689:             if ghosts:
+690:                 ghost_violations[path.name] = ghosts
+691: 
+692:         if ghost_violations:
+693:             ghosts_str = ", ".join([f"{k}({', '.join(v)})" for k,v in ghost_violations.items()])
+694:             print(f"       👻 GHOST NAMES DETECTED: {ghosts_str}")
+695:             if attempt == 0:
+696:                 failed_attempt_1_raw = raw
+697:                 critic_constraint = f"Generated code uses undefined names ({ghosts_str}). Add the missing imports or use existing ones."
+698:                 current_temp = 0.1
+699:                 continue
+700:             return False
+701: 
+702:         # Backup & Write
+703:         backups = {}
+704:         for path, content in modified_files.items():
+705:             backups[path] = path.read_text() if path.exists() else ""
+706:             path.write_text(content)
+707: 
+708:         # Run Pytest (Sniper Scope)
+709:         tb = run_pytest(targets)
+710:         before_ids = _failed_test_ids(baseline_tb)
+711:         after_ids = _failed_test_ids(tb)
+712:         new_failures = after_ids - before_ids
+713:         if tdd_kept_path is not None:
+714:             tdd_passes = run_pytest([str(tdd_kept_path.relative_to(ROOT))]) is None
+715:             success = (len(new_failures) == 0) and tdd_passes
+716:         else:
+717:             success = (tb is None) or (after_ids < before_ids)
+718:         print(f"       📉 Delta: before={len(before_ids)} after={len(after_ids)} new_failures={len(new_failures)}")
+719:         if success:
+720:             # SUCCESS -> SHADOW CANARY
+721:             import uuid
+722:             from tools.shadow_canary import run_canary
+723:             shadow_branch = f"shadow/autofix-{uuid.uuid4().hex[:8]}"
+724:             modified_paths = [str(p) for p in modified_files.keys()]
+725:             
+726:             try:
+727:                 print(f"       🦜 Routing to Shadow Canary ({shadow_branch})...")
+728:                 subprocess.run(["git", "checkout", "master"], cwd=ROOT, capture_output=True)
+729:                 subprocess.run(["git", "checkout", "-b", shadow_branch], cwd=ROOT, check=True, capture_output=True)
+730:                 subprocess.run(["git", "add", *modified_paths], cwd=ROOT, check=True, capture_output=True)
+731:                 subprocess.run(["git", "commit", "-m", f"shadow: {file_path.name}"], cwd=ROOT, check=True, capture_output=True)
+732:                 
+733:                 if run_canary(modified_paths):
+734:                     subprocess.run(["git", "checkout", "master"], cwd=ROOT, check=True, capture_output=True)
+735:                     subprocess.run(["git", "merge", shadow_branch], cwd=ROOT, check=True, capture_output=True)
+736:                     subprocess.run(["git", "branch", "-d", shadow_branch], cwd=ROOT, check=True, capture_output=True)
+737:                     print(f"       🟢 CANARY PASSED: Merged to master")
+738:                     # STORE PROVEN FIX (Improvement #6)
+739:                     _store_proven_fix(file_path, issue, raw, forensic_context)
+740:                     _record_ledger(file_path, issue, "APPLIED", "Canary passed")
+741:                     return True
+742:                 else:
+743:                     for path, content in backups.items(): path.write_text(content)
+744:                     subprocess.run(["git", "checkout", "master"], cwd=ROOT, capture_output=True)
+745:                     subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
+746:                     print(f"       🔴 CANARY FAILED: Reverted disk and shadow branch")
+747:                     return False
+748:                     
+749:             except Exception as e:
+750:                 for path, content in backups.items(): path.write_text(content)
+
+=== FUNCTION MAP: overnight/llm_client.py ===
+51:def _estimate_params(name, model_id):
+72:def discover_free_models(api_key):
+140:def get_fallback_list(api_key):
+179:def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens=8192, temperature=0.2, allow_fallback=True):
+288:def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
+317:def discover_groq_models(api_key):
+351:def get_groq_models(api_key):
+380:def _est_tokens(text):
+384:def _groq_window(model):
+391:def _groq_headroom(model, needed):
+397:def _groq_record(model, tokens):
+401:def _groq_suggested_wait(models):
+418:def _parse_dur(s):
+432:def _groq_note_rl(model, headers):
+448:def _groq_preempted(model):
+460:def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192, temperature=0.2):
+479:    def _in_cooldown(m):
+482:    def _pace():
+575:def load_api_keys():
+599:def gemini_pre_analysis(file_path, content, api_keys):
+626:def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0.2, allow_fallback=True):
+710:def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperature=0.2):
+756:def strip_fences(text):
+766:def critique(code, task_description, api_keys):
+792:def generate_with_critique(prompt, task_description, api_keys, model_type="code", max_iterations=2, max_tokens=8192):
+818:def quick_generate(prompt, model_type="code"):
+823:def quick_critique_loop(prompt, task_description, model_type="code", max_iterations=2):
+829:def get_fallback_status():
+
+=== LLM_CLIENT: relevant lines ===
+2:Dual-Model LLM Client with DYNAMIC model discovery and fallback.
+4:Instead of hardcoding model IDs (which break when OpenRouter changes them),
+5:this queries OpenRouter's API to find currently-available free instruct models
+6:and builds the fallback list automatically.
+25:GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
+27:GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
+32:# Dynamic fallback state
+33:_fallback_list = None
+34:_current_model = None
+37:CACHE_FILE = Path("/home/swiig/Documents/soc-autopilot/overnight/model_fallback_cache.json")
+38:GROQ_CACHE_FILE = Path("/home/swiig/Documents/soc-autopilot/overnight/groq_model_cache.json")
+39:CACHE_TTL = 3600  # Refresh model list every hour
+41:# Ultimate fallback if discovery fails entirely
+43:# Groq-specific fallback if discovery fails entirely
+51:def _estimate_params(name, model_id):
+52:    """Estimate parameter count from model name for ranking."""
+53:    text = (name + " " + model_id).lower()
+72:def discover_free_models(api_key):
+73:    """Query OpenRouter for currently available free instruct models."""
+76:            "https://openrouter.ai/api/v1/models",
+83:        models = resp.json().get("data", [])
+86:        for m in models:
+96:            model_id = m.get("id", "")
+100:            # Skip very small context models (< 8K) — not useful for code review
+104:            # Determine if it's an instruct/chat model
+105:            text = (name + " " + model_id).lower()
+111:            # Skip non-instruct models (completion-only, embedding, etc.)
+115:            params = _estimate_params(name, model_id)
+118:                "id": model_id,
+127:        # Return top 8 model IDs
+130:            print(f"    🔍 Discovered {len(result)} free instruct models:")
+140:def get_fallback_list(api_key):
+141:    """Get fallback list, using cache if fresh."""
+142:    global _fallback_list, _current_model
+144:    if _fallback_list is not None:
+145:        return _fallback_list
+152:                _fallback_list = cache["models"]
+153:                _current_model = _fallback_list[0] if _fallback_list else DEFAULT_FALLBACK[0]
+154:                return _fallback_list
+159:    models = discover_free_models(api_key)
+160:    if models:
+161:        _fallback_list = models
+162:        _current_model = models[0]
+166:            "models": models,
+168:        return models
+170:    # Ultimate fallback
+171:    _fallback_list = DEFAULT_FALLBACK
+172:    _current_model = DEFAULT_FALLBACK[0]
+173:    return _fallback_list
+179:def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens=8192, temperature=0.2, allow_fallback=True):
+180:    """Call OpenRouter with dynamic model fallback on rate limits."""
+181:    global _current_model, _calls_since_primary_check
+183:    # Hard RPD limit (funded tier: 1000) — skip entirely if exhausted/locked
+184:    from overnight import openrouter_quota
+185:    if not openrouter_quota.is_available():
+186:        print(f"    🔒 OpenRouter locked/exhausted ({openrouter_quota.remaining()} left) — skipping")
+189:    # Ensure fallback list is loaded
+190:    fallback_list = get_fallback_list(api_key)
+192:    if model is None:
+193:        model = _current_model or (fallback_list[0] if fallback_list else DEFAULT_FALLBACK[0])
+195:    # Build ordered list: preferred model first, then fallbacks
+196:    if allow_fallback:
+197:        models_to_try = [model] + [m for m in fallback_list if m != model]
+199:        # STRICT MODE: only try the preferred model, no fallbacks
+200:        models_to_try = [model]
+204:    if _calls_since_primary_check >= PRIMARY_RETRY_INTERVAL and fallback_list:
+206:        primary = fallback_list[0]
+207:        if models_to_try[0] != primary:
+208:            models_to_try = [primary] + models_to_try
+211:    # Large-prompt filter: small free models truncate mid-string on big files,
+212:    # wasting quota. Route large prompts (>~25k chars ≈ >800 lines) to
+213:    # high-capacity models only.
+215:        big_models = [m for m in models_to_try
+217:        if big_models:
+218:            print(f"    📏 Large prompt ({len(prompt)} chars) → high-capacity models only")
+219:            models_to_try = big_models
+221:    for try_model in models_to_try:
+222:        # Count every attempt against the 50 RPD quota
+223:        from overnight import openrouter_quota
+224:        openrouter_quota.record_attempt()
+238:            "model": try_model,
+253:                if try_model != _current_model:
+254:                    if fallback_list and try_model == fallback_list[0]:
+255:                        print(f"    ✅ Primary recovered: {try_model}")
+257:                        print(f"    🔄 Using fallback: {try_model}")
+258:                _current_model = try_model
+262:                print(f"    ⚠️  {try_model} rate-limited. Locking OpenRouter (duration per openrouter_quota.LOCK_HOURS).")
+263:                openrouter_quota.force_lock(f"429 on {try_model}")
+264:                break  # STOP trying other OpenRouter models, quota is exhausted!
+267:                print(f"    ⚠️  {try_model} not available → next")
+271:                print(f"    ❌ {try_model} quota exhausted → next")
+275:                print(f"    ❌ {try_model} returned {resp.status_code} → next")
+279:            print(f"    ❌ {try_model} error: {e} → next")
+282:    # All OpenRouter models saturated — return empty immediately
+283:    # generate() will handle Groq fallback
+284:    print(f"    ⚠️  All OpenRouter models saturated")
+301:                print(f"    [Gemini] Rate limited. Waiting {wait}s...")
+315:# GROQ PROVIDER (fast inference, separate rate limits)
+317:def discover_groq_models(api_key):
+318:    """Query Groq API for available free models."""
+328:        models = resp.json().get("data", [])
+330:        for m in models:
+331:            model_id = m.get("id", "")
+332:            # Filter for instruct/chat models with decent context
+333:            if any(x in model_id for x in ["whisper", "embed", "tts"]):
+338:            candidates.append({"id": model_id, "context": context})
+344:            print(f"    🔍 Groq: discovered {len(result)} models")
+351:def get_groq_models(api_key):
+352:    """Get Groq model list with caching."""
+357:                return cache["models"]
+361:    models = discover_groq_models(api_key)
+362:    if models:
+364:        GROQ_CACHE_FILE.write_text(json.dumps({"timestamp": time.time(), "models": models}))
+365:        return models
+377:_groq_usage = {}  # model -> [(timestamp, tokens)]
+384:def _groq_window(model):
+386:    window = [(ts, t) for ts, t in _groq_usage.get(model, []) if now - ts < 60]
+387:    _groq_usage[model] = window
+391:def _groq_headroom(model, needed):
+392:    limit = int(GROQ_TPM.get(model, DEFAULT_GROQ_TPM) * 0.8)  # 20% safety margin
+393:    used = sum(t for _, t in _groq_window(model))
+394:    return (limit - used) >= needed
+397:def _groq_record(model, tokens):
+398:    _groq_usage.setdefault(model, []).append((time.time(), tokens))
+401:def _groq_suggested_wait(models):
+404:    for m in models:
+411:_groq_cooldown = {}
+412:_groq_429_count = {}  # model -> consecutive 429 count  # model -> timestamp until which it's rate-limited
+415:_groq_rl = {}  # model -> {"rem_req","rem_tok","req_reset","tok_reset"}
+432:def _groq_note_rl(model, headers):
+435:        e = _groq_rl.setdefault(model, {})
+436:        rr = headers.get("x-ratelimit-remaining-requests")
+437:        rt = headers.get("x-ratelimit-remaining-tokens")
+440:        sr = headers.get("x-ratelimit-reset-requests")
+441:        st = headers.get("x-ratelimit-reset-tokens")
+448:def _groq_preempted(model):
+449:    e = _groq_rl.get(model)
+460:def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192, temperature=0.2):
+461:    """Call Groq with cooldown tracking so we never waste requests probing
+462:    models that are already rate-limited."""
+467:    models = get_groq_models(api_key)
+472:    models = [m for m in models if m not in BLOCKED]
+473:    models.sort(key=lambda m: PREFERRED.index(m) if m in PREFERRED else len(PREFERRED))
+474:    if model and model in models:
+475:        models = [model] + [m for m in models if m != model]
+479:    def _in_cooldown(m):
+480:        return _groq_cooldown.get(m, 0) > time.time()
+489:    for pass_num in range(2):  # pass 1: try ready models; pass 2: after cooldown wait
+490:        for try_model in models:
+491:            if _groq_preempted(try_model):
+492:                continue  # server says remaining=0; don't probe until reset
+493:            if _in_cooldown(try_model):
+494:                continue  # don't waste a request probing a cooled-down model
+496:            # Fresh sizing per model (a 413-shrink must not leak to the next model)
+500:            if not _groq_headroom(try_model, needed):
+508:                payload = {"model": try_model, "messages": messages,
+513:                    _groq_note_rl(try_model, resp.headers)
+515:                    print(f"    ❌ Groq {try_model} error: {e} → next")
+524:                        _groq_record(try_model, tokens)
+530:                        _groq_429_count[try_model] = 0  # success resets backoff
+531:                        # Record Groq call in budget manager
+533:                            from overnight.budget_manager import APIBudgetManager
+537:                        print(f"    ✅ Groq ({try_model}) responded ({len(content)} chars)")
+546:                    # Exponential backoff when the same model keeps rejecting us
+547:                    n = _groq_429_count.get(try_model, 0) + 1
+548:                    _groq_429_count[try_model] = n
+550:                    _groq_cooldown[try_model] = time.time() + wait
+551:                    _groq_record(try_model, needed)
+552:                    print(f"    ⚠️  Groq {try_model} rate-limited (hit x{n}) → backoff {wait}s")
+564:        # Nothing succeeded this pass — wait for the earliest cooldown, then retry
+566:        active = [t for t in _groq_cooldown.values() if t > now]
+569:            print(f"    ⏳ Groq cooling down — waiting {wait}s for a model to free up")
+601:    Returns advisory notes passed to primary model as non-authoritative context.
+626:def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0.2, allow_fallback=True):
+632:        _matrix_file = Path(__file__).parent.parent / "engine" / "model_priority.json"
+634:            _priority = json.loads(_matrix_file.read_text()).get("models", [])
+635:            if isinstance(models, list):
+636:                models = sorted(models, key=lambda m: _priority.index(m) if m in _priority else 999)
+640:    """Generate content with multi-provider fallback.
+642:    Order: OpenRouter → Groq → wait & retry
+645:    if model_type == "code":
+656:    elif model_type == "docs":
+662:    # Step 1: Try OpenRouter (Nemotron + dynamic fallbacks)
+665:                              allow_fallback=allow_fallback)
+667:        generate.last_model_used = "openrouter"
+671:            model_used = getattr(generate, "last_model_used", "unknown")
+672:            record_interaction("heavy_generation", prompt, result, model_used)
+677:    # Step 2: OpenRouter saturated → try Groq immediately (only if fallback allowed)
+678:    if not allow_fallback:
+679:        print(f"    ⏳ Primary model unavailable, fallback disabled. Deferring to next cycle.")
+681:    print(f"    🔄 OpenRouter busy → trying Groq")
+685:        generate.last_model_used = "groq"
+688:    # Step 3: Groq saturated -> try Mistral
+693:        generate.last_model_used = "mistral"
+697:    print(f"    ⏳ OpenRouter, Groq, and Mistral busy. Waiting 30s...")
+703:        generate.last_model_used = "openrouter"
+727:        "model": "mistral-small-latest",
+734:        from overnight.budget_manager import APIBudgetManager
+735:        budget = APIBudgetManager()
+736:        if not budget.can_proceed("mistral"):
+737:            print("    🔒 Mistral budget exhausted")
+739:        budget.wait_if_needed("mistral", timeout=30)
+742:        budget.record_call("mistral")
+767:    """Have Gemini critique generated code."""
+792:def generate_with_critique(prompt, task_description, api_keys, model_type="code", max_iterations=2, max_tokens=8192):
+793:    """Generate with cross-model critique loop."""
+794:    current = generate(prompt, api_keys, model_type=model_type, max_tokens=max_tokens)
+809:        current = generate(fix_prompt, api_keys, model_type=model_type, max_tokens=max_tokens)
+818:def quick_generate(prompt, model_type="code"):
+820:    return generate(prompt, api_keys, model_type=model_type)
+823:def quick_critique_loop(prompt, task_description, model_type="code", max_iterations=2):
+825:    return generate_with_critique(prompt, task_description, api_keys,
+826:                                   model_type=model_type, max_iterations=max_iterations)
+829:def get_fallback_status():
+830:    """Return current fallback state for monitoring."""
+832:        "current_model": _current_model,
+833:        "fallback_list": _fallback_list or [],
+
+=== FUNCTION MAP: overnight/budget_manager.py ===
+75:class APIBudgetManager:
+78:    def __init__(self, limits: Optional[Dict] = None):
+86:    def _load_usage(self) -> Dict:
+102:    def _save_usage(self):
+113:    def _cleanup_old(self, provider: str):
+121:    def record_call(self, provider: str):
+129:    def _count_in_window(self, provider: str, window_minutes: int) -> int:
+139:    def get_usage(self, provider: str) -> Dict[str, int]:
+148:    def get_remaining(self, provider: str) -> Dict[str, int]:
+158:    def get_limits_for_model(self, model: str = None) -> Dict:
+171:    def can_proceed_model_aware(self, provider: str, model: str = None) -> bool:
+200:    def wait_if_needed_model_aware(self, provider: str, model: str = None, timeout: int = 120) -> bool:
+222:    def can_proceed(self, provider: str) -> bool:
+240:    def _seconds_until_slot(self, provider, window_seconds, max_calls):
+251:    def wait_if_needed(self, provider: str, timeout: int = 120) -> bool:
+271:    def _oldest_in_window(self, provider: str, window_minutes: int) -> Optional[datetime]:
+283:    def report(self) -> str:
+309:    def reset(self):
+318:def budget_aware(provider: str, max_wait: int = 120):
+329:    def decorator(func):
+
+=== FILE: overnight/verifier.py ===
+1: import ast, hashlib, json, os, re, subprocess, sys
+2: from pathlib import Path
+3: 
+4: PROJECT_ROOT = Path("/home/swiig/Documents/soc-autopilot")
+5: EVIDENCE_DIR   = PROJECT_ROOT / "overnight" / "evidence"
+6: EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+7: 
+8: class VerifierResult:
+9:     def __init__(self, task_id, passed, checks, evidence_hash, notes=""):
+10:         self.task_id, self.passed, self.checks = task_id, passed, checks
+11:         self.evidence_hash, self.notes = evidence_hash, notes
+12: 
+13: def verify_python_syntax(filepath):
+14:     try:
+15:         with open(filepath, 'r') as f: ast.parse(f.read())
+16:         return True, "syntax valid"
+17:     except SyntaxError as e: return False, f"syntax error: {e}"
+18:     except FileNotFoundError: return False, "file not found"
+19: 
+20: def verify_no_hallucinated_imports(filepath):
+21:     try:
+22:         with open(filepath, 'r') as f: tree = ast.parse(f.read())
+23:     except: return True, "skipped"
+24:     from pathlib import Path
+25:     p = Path(filepath)
+26:     own_pkg = ""
+27:     for parent in ("engine", "orchestrator", "memory", "tools", "tests"):
+28:         if parent in p.parts:
+29:             own_pkg = parent
+30:             break
+31:     suspicious = []
+32:     for node in ast.walk(tree):
+33:         if isinstance(node, ast.ImportFrom) and node.module:
+34:             mod = node.module
+35:             if mod.startswith(("engine.", "orchestrator.", "memory.")):
+36:                 if mod.split(".")[0] == own_pkg:
+37:                     continue
+38:                 suspicious.append(mod)
+39:     return (False, f"hallucinated imports: {suspicious}") if suspicious else (True, "clean")
+40: def verify_exit_codes(filepath):
+41:     try:
+42:         with open(filepath, 'r') as f: text = f.read()
+43:     except: return False, "file not found"
+44:     has_exit = "exit" in text.lower() or "if __name__" in text or "def main" in text
+45:     has_0 = "0" in text
+46:     has_1 = "1" in text
+47:     return (True, "exit codes present") if (has_exit and has_0 and has_1) else (False, "missing exit codes")
+48: def verify_no_secrets(content):
+49:     patterns = [(r"AKIA[0-9A-Z]{16}", "AWS key"), (r"ghp_[A-Za-z0-9]{36}", "GitHub token"), (r"-----BEGIN [A-Z ]*PRIVATE KEY-----", "Private Key")]
+50:     for pat, name in patterns:
+51:         if re.search(pat, content) and "EXAMPLE" not in content and "REDACTED" not in content:
+52:             return False, f"potential {name} found"
+53:     return True, "no secrets"
+54: 
+55: def verify_task(task, output_path):
+56:     checks, all_passed = [], True
+57:     if not os.path.isfile(output_path):
+58:         return VerifierResult(task["id"], False, [{"check":"exists","passed":False}], "0", "file missing")
+59: 
+60:     with open(output_path, 'r') as f: content = f.read()
+61: 
+62:     if output_path.endswith('.py'):
+63:         ok, msg = verify_python_syntax(output_path)
+64:         checks.append({"check":"syntax","passed":ok,"detail":msg}); all_passed = all_passed and ok
+65:         ok, msg = verify_no_hallucinated_imports(output_path)
+66:         checks.append({"check":"imports","passed":ok,"detail":msg}); all_passed = all_passed and ok
+67:         if task["type"] == "implement_tool":
+68:             ok, msg = verify_exit_codes(output_path)
+69:             checks.append({"check":"exit_codes","passed":ok,"detail":msg}); all_passed = all_passed and ok
+70: 
+71:     ok, msg = verify_no_secrets(content)
+72:     checks.append({"check":"secrets","passed":ok,"detail":msg}); all_passed = all_passed and ok
+73: 
+74:     ok = len(content.split('\n')) >= 10
+75:     checks.append({"check":"min_length","passed":ok,"detail":f"{len(content.split(chr(10)))} lines"}); all_passed = all_passed and ok
+76: 
+77:     evidence = json.dumps(checks)
+78:     h = hashlib.sha256(evidence.encode()).hexdigest()[:16]
+79:     (EVIDENCE_DIR / f"{task['id']}_{h}.json").write_text(evidence)
+80:     return VerifierResult(task["id"], all_passed, checks, h, "passed" if all_passed else "failed checks")
+
+=== FILE: overnight/openrouter_quota.py ===
+1: #!/usr/bin/env python3
+2: """
+3: OpenRouter quota tracker for the 50 RPD free-tier hard limit.
+4: 
+5: - Tracks every attempt (success AND 429 — both count against quota)
+6: - Locks OpenRouter for 24h once exhausted
+7: - Auto-resets on calendar day rollover
+8: - Persists to disk so it survives restarts
+9: """
+10: import json
+11: import os
+12: from datetime import datetime, timedelta, timezone
+13: from pathlib import Path
+14: 
+15: QUOTA_FILE = Path(__file__).resolve().parent / "openrouter_quota.json"
+16: DAILY_LIMIT = 1000  # Funded tier (was 50 for free tier)
+17: LOCK_HOURS = 1  # Funded tier: 1h lock on 429 (was 24h for free tier)
+18: 
+19: 
+20: def _load():
+21:     if QUOTA_FILE.exists():
+22:         try:
+23:             return json.loads(QUOTA_FILE.read_text())
+24:         except Exception:
+25:             pass
+26:     return {"used_today": 0, "day": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "locked_until": None}
+27: 
+28: 
+29: def _save(data):
+30:     QUOTA_FILE.parent.mkdir(parents=True, exist_ok=True)
+31:     tmp = QUOTA_FILE.parent / (QUOTA_FILE.name + ".tmp")
+32:     tmp.write_text(json.dumps(data, indent=2))
+33:     os.replace(tmp, QUOTA_FILE)  # atomic swap
+34: 
+35: 
+36: def _refresh(data):
+37:     """Reset counter on new day; clear expired lock."""
+38:     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+39:     if data.get("day") != today:
+40:         data = {"used_today": 0, "day": today, "locked_until": None}
+41:     if data.get("locked_until"):
+42:         try:
+43:             lock_dt = datetime.fromisoformat(data["locked_until"])
+44:             if lock_dt.tzinfo is None:
+45:                 lock_dt = lock_dt.replace(tzinfo=timezone.utc)  # legacy naive stamps
+46:             if lock_dt <= datetime.now(timezone.utc):
+47:                 data["locked_until"] = None
+48:         except Exception:
+49:             data["locked_until"] = None
+50:     return data
+51: 
+52: 
+53: def remaining():
+54:     return max(0, DAILY_LIMIT - _refresh(_load()).get("used_today", 0))
+55: 
+56: 
+57: def is_available():
+58:     """True if OpenRouter can be used right now."""
+59:     data = _refresh(_load())
+60:     if data.get("locked_until"):
+61:         return False
+62:     if data.get("used_today", 0) >= DAILY_LIMIT:
+63:         data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
+64:         _save(data)
+65:         return False
+66:     return True
+67: 
+68: 
+69: def record_attempt():
+70:     """Count one request (success or 429). Lock when exhausted."""
+71:     data = _refresh(_load())
+72:     data["used_today"] = data.get("used_today", 0) + 1
+73:     data["last_attempt"] = datetime.now(timezone.utc).isoformat()
+74:     if data["used_today"] >= DAILY_LIMIT and not data.get("locked_until"):
+75:         data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
+76:         print(f"    🔒 OpenRouter quota exhausted ({data['used_today']}/{DAILY_LIMIT}). Locked 24h.")
+77:     _save(data)
+78:     return data
+79: 
+80: 
+81: def status():
+82:     d = _refresh(_load())
+83:     return {
+84:         "used_today": d.get("used_today", 0),
+85:         "remaining": remaining(),
+86:         "locked_until": d.get("locked_until"),
+87:         "day": d.get("day"),
+88:     }
+89: 
+90: 
+91: def force_lock(reason="429 received"):
+92:     """Instantly lock OpenRouter for 24h (used when we hit a 429)."""
+93:     data = _refresh(_load())
+94:     data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
+95:     data["lock_reason"] = reason
+96:     # Mark as fully used so it stays locked even if time resets
+97:     data["used_today"] = DAILY_LIMIT 
+98:     _save(data)
+99:     print(f"    🔒 OpenRouter force-locked for 24h ({reason})")
+100: 
+101: 
+102: 
+103: if __name__ == "__main__":
+104:     s = status()
+105:     print(f"OpenRouter quota: {s['used_today']}/{DAILY_LIMIT} used, {s['remaining']} remaining")
+106:     print(f"Locked until: {s['locked_until'] or 'not locked'}")
+107: 
+
+=== FILE: overnight/budget_manager.py ===
+1: #!/usr/bin/env python3
+2: """
+3: API Budget Manager for soc-autopilot.
+4: 
+5: Tracks per-minute, per-hour, and per-day API usage for both providers.
+6: Enforces free-tier limits and gracefully pauses/stops when budget is low.
+7: 
+8: Usage in any automation script:
+9:     from overnight.budget_manager import APIBudgetManager
+10:     
+11:     budget = APIBudgetManager()
+12:     
+13:     if not budget.can_proceed("openrouter"):
+14:         print("Budget exhausted, stopping")
+15:         sys.exit(0)
+16:     
+17:     budget.record_call("openrouter")
+18:     # ... make the API call ...
+19: 
+20: CLI:
+21:     python3 overnight/budget_manager.py              # Show current usage
+22:     python3 overnight/budget_manager.py --reset      # Reset all counters
+23: """
+24: import json
+25: import os
+26: import time
+27: from collections import deque
+28: from datetime import datetime, timedelta
+29: from pathlib import Path
+30: from typing import Dict, Optional
+31: 
+32: ROOT = Path("/home/swiig/Documents/soc-autopilot")
+33: USAGE_FILE = ROOT / "overnight" / "api_usage.json"
+34: 
+35: # ============================================================
+36: # FREE TIER LIMITS (adjust these to match your actual limits)
+37: # ============================================================
+38: # Check your actual limits at:
+39: #   OpenRouter: https://openrouter.ai/settings/limits
+40: #   Gemini: https://ai.google.dev/gemini-api/docs/rate-limits
+41: #
+42: # Conservative defaults — adjust upward if your tier allows more.
+43: LIMITS = {
+44:     "openrouter": {
+45:         "per_minute": 20,
+46:         "per_hour": 200,
+47:         "per_day": 500,
+48:     },
+49:     "gemini": {
+50:         "per_minute": 15,
+51:         "per_hour": 300,
+52:         "per_day": 1000,
+53:     },
+54:     "groq": {
+55:         "per_minute": 30,       # RPM: 30 requests per minute (all models)
+56:         "per_hour": 1500,       # Conservative: ~25 RPM sustained
+57:         "per_day": 250,         # RPD: 250 requests per day (groq/compound)
+58:     },
+59:     "mistral": {
+60:         "per_minute": 15,
+61:         "per_hour": 300,
+62:         "per_day": 1000,
+63:     },
+64:     "groq_alt": {
+65:         "per_minute": 30,       # RPM: 30 requests per minute
+66:         "per_hour": 1500,       # Conservative
+67:         "per_day": 1000,        # RPD: 1000 requests per day (gpt-oss-*, qwen3.6)
+68:     },
+69: }
+70: 
+71: # How much buffer to leave before stopping (percentage)
+72: SAFETY_MARGIN = 0.85  # Stop at 85% of limit to avoid hitting 429
+73: 
+74: 
+75: class APIBudgetManager:
+76:     """Tracks and enforces API usage limits across providers."""
+77: 
+78:     def __init__(self, limits: Optional[Dict] = None):
+79:         self.limits = limits or LIMITS
+80:         self.usage_file = USAGE_FILE
+81:         self._usage = self._load_usage()
+82: 
+83:     # ============================================================
+84:     # PERSISTENCE
+85:     # ============================================================
+86:     def _load_usage(self) -> Dict:
+87:         """Load usage history from disk."""
+88:         if self.usage_file.exists():
+89:             try:
+90:                 data = json.loads(self.usage_file.read_text())
+91:                 # Convert lists back to deques with datetime objects
+92:                 usage = {}
+93:                 for provider, timestamps in data.items():
+94:                     usage[provider] = deque(
+95:                         datetime.fromisoformat(ts) for ts in timestamps
+96:                     )
+97:                 return usage
+98:             except (json.JSONDecodeError, ValueError):
+99:                 pass
+100:         return {provider: deque() for provider in self.limits}
+101: 
+102:     def _save_usage(self):
+103:         """Persist usage history to disk."""
+104:         self.usage_file.parent.mkdir(parents=True, exist_ok=True)
+105:         data = {}
+106:         for provider, timestamps in self._usage.items():
+107:             data[provider] = [ts.isoformat() for ts in timestamps]
+108:         self.usage_file.write_text(json.dumps(data, indent=2))
+109: 
+110:     # ============================================================
+111:     # USAGE TRACKING
+112:     # ============================================================
+113:     def _cleanup_old(self, provider: str):
+114:         """Remove timestamps older than 24 hours."""
+115:         cutoff = datetime.now() - timedelta(hours=24)
+116:         usage = self._usage.get(provider, deque())
+117:         while usage and usage[0] < cutoff:
+118:             usage.popleft()
+119:         self._usage[provider] = usage
+120: 
+121:     def record_call(self, provider: str):
+122:         """Record a single API call."""
+123:         self._cleanup_old(provider)
+124:         if provider not in self._usage:
+125:             self._usage[provider] = deque()
+126:         self._usage[provider].append(datetime.now())
+127:         self._save_usage()
+128: 
+129:     def _count_in_window(self, provider: str, window_minutes: int) -> int:
+130:         """Count calls within the last N minutes."""
+131:         self._cleanup_old(provider)
+132:         cutoff = datetime.now() - timedelta(minutes=window_minutes)
+133:         usage = self._usage.get(provider, deque())
+134:         return sum(1 for ts in usage if ts >= cutoff)
+135: 
+136:     # ============================================================
+137:     # BUDGET CHECKS
+138:     # ============================================================
+139:     def get_usage(self, provider: str) -> Dict[str, int]:
+140:         """Get current usage counts for all windows."""
+141:         self._cleanup_old(provider)
+142:         return {
+143:             "last_minute": self._count_in_window(provider, 1),
+144:             "last_hour": self._count_in_window(provider, 60),
+145:             "last_day": self._count_in_window(provider, 1440),
+146:         }
+147: 
+148:     def get_remaining(self, provider: str) -> Dict[str, int]:
+149:         """Get remaining budget for all windows."""
+150:         usage = self.get_usage(provider)
+151:         limits = self.limits.get(provider, {})
+152:         return {
+153:             "per_minute": max(0, limits.get("per_minute", 0) - usage["last_minute"]),
+154:             "per_hour": max(0, limits.get("per_hour", 0) - usage["last_hour"]),
+155:             "per_day": max(0, limits.get("per_day", 0) - usage["last_day"]),
+156:         }
+157: 
+158:     def get_limits_for_model(self, model: str = None) -> Dict:
+159:         """Get rate limits for a specific Groq model.
+160:         
+161:         groq/compound and groq/compound-mini: 250 RPD
+162:         gpt-oss-*, qwen3.6: 1000 RPD
+163:         """
+164:         if model and 'groq/compound' in model:
+165:             return self.limits.get('groq', self.limits['groq'])
+166:         elif model and ('gpt-oss' in model or 'qwen' in model):
+167:             return self.limits.get('groq_alt', self.limits['groq'])
+168:         else:
+169:             return self.limits.get('groq', self.limits['groq'])
+170:     
+171:     def can_proceed_model_aware(self, provider: str, model: str = None) -> bool:
+172:         """Check if we can proceed, taking model-specific limits into account."""
+173:         if provider != 'groq':
+174:             return self.can_proceed(provider)
+175:         
+176:         now = datetime.now()
+177:         calls = list(self._usage.get(provider, deque()))
+178:         limits = self.get_limits_for_model(model)
+179:         
+180:         # Check per-minute
+181:         minute_cutoff = now - timedelta(minutes=1)
+182:         minute_calls = [c for c in calls if c > minute_cutoff]
+183:         if len(minute_calls) >= limits['per_minute']:
+184:             return False
+185:         
+186:         # Check per-hour
+187:         hour_cutoff = now - timedelta(hours=1)
+188:         hour_calls = [c for c in calls if c > hour_cutoff]
+189:         if len(hour_calls) >= limits['per_hour']:
+190:             return False
+191:         
+192:         # Check per-day
+193:         day_cutoff = now - timedelta(hours=24)
+194:         day_calls = [c for c in calls if c > day_cutoff]
+195:         if len(day_calls) >= limits['per_day']:
+196:             return False
+197:         
+198:         return True
+199:     
+200:     def wait_if_needed_model_aware(self, provider: str, model: str = None, timeout: int = 120) -> bool:
+201:         """Model-aware precise wait for Groq; delegates for other providers."""
+202:         if provider != "groq":
+203:             return self.wait_if_needed(provider, timeout)
+204:         import time
+205:         waited = 0.0
+206:         limits = self.get_limits_for_model(model)
+207:         while waited < timeout:
+208:             if self.can_proceed_model_aware(provider, model):
+209:                 return True
+210:             if self._seconds_until_slot(provider, 86400, limits["per_day"]) > 0:
+211:                 print(f"  🔒 [groq/{model or 'any'}] daily limit reached — no more calls this window")
+212:                 return False
+213:             waits = [self._seconds_until_slot(provider, 60, limits["per_minute"]),
+214:                      self._seconds_until_slot(provider, 3600, limits["per_hour"])]
+215:             full = [w for w in waits if w > 0]
+216:             sleep_time = min(full) if full else 1.0
+217:             sleep_time = min(sleep_time, max(0.5, timeout - waited))
+218:             print(f"  ⏱️  [groq/{model or 'any'}] rate window full — sleeping {sleep_time:.1f}s")
+219:             time.sleep(sleep_time)
+220:             waited += sleep_time
+221:         return False
+222:     def can_proceed(self, provider: str) -> bool:
+223:         """Check if we can make another call without exceeding limits."""
+224:         usage = self.get_usage(provider)
+225:         limits = self.limits.get(provider, {})
+226: 
+227:         for window, key in [
+228:             ("per_minute", "last_minute"),
+229:             ("per_hour", "last_hour"),
+230:             ("per_day", "last_day"),
+231:         ]:
+232:             limit = limits.get(window, float("inf"))
+233:             current = usage[key]
+234:             threshold = int(limit * SAFETY_MARGIN)
+235:             if current >= threshold:
+236:                 return False
+237: 
+238:         return True
+239: 
+240:     def _seconds_until_slot(self, provider, window_seconds, max_calls):
+241:         """Exact seconds until a slot frees in a sliding window (0.0 if open)."""
+242:         now = datetime.now()
+243:         cutoff = now - timedelta(seconds=window_seconds)
+244:         stamps = [ts for ts in self._usage.get(provider, deque()) if ts > cutoff]
+245:         # Apply SAFETY_MARGIN to match can_proceed() threshold logic
+246:         effective_max = int(max_calls * SAFETY_MARGIN)
+247:         if len(stamps) < effective_max:
+248:             return 0.0
+249:         oldest = min(stamps)
+250:         return max(0.0, window_seconds - (now - oldest).total_seconds()) + 0.25
+251:     def wait_if_needed(self, provider: str, timeout: int = 120) -> bool:
+252:         """Sleep precisely until a rate slot opens (no 1s polling spam)."""
+253:         import time
+254:         waited = 0.0
+255:         limits = self.limits.get(provider, self.limits.get("groq"))
+256:         while waited < timeout:
+257:             if self.can_proceed(provider):
+258:                 return True
+259:             if self._seconds_until_slot(provider, 86400, limits["per_day"]) > 0:
+260:                 print(f"  🔒 [{provider}] daily limit reached — no more calls this window")
+261:                 return False
+262:             waits = [self._seconds_until_slot(provider, 60, limits["per_minute"]),
+263:                      self._seconds_until_slot(provider, 3600, limits["per_hour"])]
+264:             full = [w for w in waits if w > 0]
+265:             sleep_time = min(full) if full else 1.0
+266:             sleep_time = min(sleep_time, max(0.5, timeout - waited))
+267:             print(f"  ⏱️  [{provider}] rate window full — sleeping {sleep_time:.1f}s until a slot opens")
+268:             time.sleep(sleep_time)
+269:             waited += sleep_time
+270:         return False
+271:     def _oldest_in_window(self, provider: str, window_minutes: int) -> Optional[datetime]:
+272:         """Get the oldest timestamp in the window."""
+273:         cutoff = datetime.now() - timedelta(minutes=window_minutes)
+274:         usage = self._usage.get(provider, deque())
+275:         for ts in usage:
+276:             if ts >= cutoff:
+277:                 return ts
+278:         return None
+279: 
+280:     # ============================================================
+281:     # REPORTING
+282:     # ============================================================
+283:     def report(self) -> str:
+284:         """Generate a human-readable usage report."""
+285:         lines = ["=" * 60]
+286:         lines.append("API USAGE REPORT")
+287:         lines.append("=" * 60)
+288: 
+289:         for provider, limits in self.limits.items():
+290:             usage = self.get_usage(provider)
+291:             remaining = self.get_remaining(provider)
+292: 
+293:             lines.append(f"\n  {provider.upper()}:")
+294:             lines.append(f"    Last minute: {usage['last_minute']:3d} / {limits.get('per_minute', '?')} "
+295:                         f"(remaining: {remaining['per_minute']})")
+296:             lines.append(f"    Last hour:   {usage['last_hour']:3d} / {limits.get('per_hour', '?')} "
+297:                         f"(remaining: {remaining['per_hour']})")
+298:             lines.append(f"    Last 24h:    {usage['last_day']:3d} / {limits.get('per_day', '?')} "
+299:                         f"(remaining: {remaining['per_day']})")
+300: 
+301:             # Status indicator
+302:             can_go = self.can_proceed(provider)
+303:             status = "✅ READY" if can_go else "⚠️  PAUSED (limit approaching)"
+304:             lines.append(f"    Status:      {status}")
+305: 
+306:         lines.append("\n" + "=" * 60)
+307:         return "\n".join(lines)
+308: 
+309:     def reset(self):
+310:         """Reset all usage counters."""
+311:         self._usage = {provider: deque() for provider in self.limits}
+312:         self._save_usage()
+313: 
+314: 
+315: # ============================================================
+316: # CONVENIENCE: Decorator for budget-aware API calls
+317: # ============================================================
+318: def budget_aware(provider: str, max_wait: int = 120):
+319:     """
+320:     Decorator that enforces budget limits before calling an API function.
+321:     
+322:     Usage:
+323:         budget = APIBudgetManager()
+324:         
+325:         @budget_aware("openrouter")
+326:         def my_api_call(prompt):
+327:             ...
+328:     """
+329:     def decorator(func):
+330:         def wrapper(*args, **kwargs):
+331:             budget = APIBudgetManager()
+332:             if not budget.wait_if_needed(provider, timeout=max_wait):
+333:                 raise RuntimeError(
+334:                     f"API budget exhausted for {provider}. "
+335:                     f"Try again later or increase limits."
+336:                 )
+337:             result = func(*args, **kwargs)
+338:             budget.record_call(provider)
+339:             return result
+340:         wrapper.__name__ = func.__name__
+341:         wrapper.__doc__ = func.__doc__
+342:         return wrapper
+343:     return decorator
+344: 
+345: 
+346: # ============================================================
+347: # CLI
+348: # ============================================================
+349: if __name__ == "__main__":
+350:     import argparse
+351: 
+352:     parser = argparse.ArgumentParser(description="API Budget Manager")
+353:     parser.add_argument("--reset", action="store_true", help="Reset all usage counters")
+354:     parser.add_argument("--json", action="store_true", help="Output as JSON")
+355:     args = parser.parse_args()
+356: 
+357:     budget = APIBudgetManager()
+358: 
+359:     if args.reset:
+360:         budget.reset()
+361:         print("✅ All usage counters reset")
+362:     else:
+363:         if args.json:
+364:             usage = {
+365:                 provider: budget.get_usage(provider)
+366:                 for provider in budget.limits
+367:             }
+368:             remaining = {
+369:                 provider: budget.get_remaining(provider)
+370:                 for provider in budget.limits
+371:             }
+372:             print(json.dumps({"usage": usage, "remaining": remaining}, indent=2))
+373:         else:
+374:             print(budget.report())
+
+=== FILE: tests/pipeline/test_tdd_red_phase.py ===
+1: """
+2: Regression test for Improvement #2: TDD Red Phase Verification
+3: 
+4: BEFORE: Generated TDD tests were accepted without verifying they fail.
+5: PROBLEM: Vacuous tests (always pass) create false-positive fixes.
+6: CHANGE: Run pytest on the generated test. If it passes immediately,
+7:         reject it. Only accept tests that fail (Red phase confirmed).
+8: """
+9: import sys
+10: from pathlib import Path
+11: from unittest.mock import patch
+12: 
+13: import pytest
+14: 
+15: sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+16: 
+17: 
+18: @pytest.fixture
+19: def tdd_env(tmp_path):
+20:     (tmp_path / "overnight").mkdir()
+21:     (tmp_path / "tests").mkdir()
+22:     src = tmp_path / "dummy_module.py"
+23:     src.write_text("def dummy():\n    return 42\n")
+24:     return tmp_path, src
+25: 
+26: 
+27: def test_vacuous_tdd_test_rejected(tdd_env):
+28:     """A TDD test that passes immediately must be rejected (not red).
+29: 
+30:     Flow: baseline FAILS -> TDD generated -> red phase check PASSES -> reject test.
+31:     """
+32:     tmp_path, src = tdd_env
+33: 
+34:     issue = {"category": "correctness", "description": "dummy bug"}
+35:     fake_test = "def test_always_passes():\n    assert True\n"
+36: 
+37:     call_count = {"n": 0}
+38: 
+39:     def mock_run_pytest(targets, timeout=60):
+40:         call_count["n"] += 1
+41:         if call_count["n"] == 1:
+42:             return "AssertionError: baseline failure"  # Baseline FAILS -> proceed to TDD
+43:         return None  # Red phase check PASSES -> test is vacuous -> reject
+44: 
+45:     with patch("overnight.self_improver.ROOT", tmp_path), \
+46:          patch("overnight.self_improver._get_repo_fingerprint", return_value="unique-test-fp"), \
+47:          patch("overnight.self_improver.run_pytest", side_effect=mock_run_pytest), \
+48:          patch("overnight.self_improver.is_ast_defeated", return_value=False), \
+49:          patch("overnight.self_improver._generate_tdd_test", return_value=fake_test):
+50: 
+51:         from overnight.self_improver import apply_auto_fix
+52:         apply_auto_fix(src, issue, api_keys={})
+53: 
+54:     # The vacuous test file must have been deleted
+55:     test_file = tmp_path / "tests" / "test_tdd_auto_dummy_module.py"
+56:     assert not test_file.exists(), "Vacuous TDD test should have been rejected and deleted"
+57: 
+58: 
+59: def test_valid_tdd_test_accepted(tdd_env):
+60:     """A TDD test that fails (red phase) must be accepted as acceptance criteria.
+61: 
+62:     Flow: baseline FAILS -> TDD generated -> red phase check FAILS -> keep test.
+63:     """
+64:     tmp_path, src = tdd_env
+65: 
+66:     issue = {"category": "correctness", "description": "dummy bug"}
+67:     fake_test = "def test_should_fail():\n    assert False\n"
+68: 
+69:     call_count = {"n": 0}
+70: 
+71:     def mock_run_pytest(targets, timeout=60):
+72:         call_count["n"] += 1
+73:         if call_count["n"] == 1:
+74:             return "AssertionError: baseline failure"  # Baseline FAILS -> proceed to TDD
+75:         return "AssertionError: expected failure"  # Red phase FAILS -> test is valid -> keep
+76: 
+77:     with patch("overnight.self_improver.ROOT", tmp_path), \
+78:          patch("overnight.self_improver._get_repo_fingerprint", return_value="unique-test-fp"), \
+79:          patch("overnight.self_improver.run_pytest", side_effect=mock_run_pytest), \
+80:          patch("overnight.self_improver.is_ast_defeated", return_value=False), \
+81:          patch("overnight.self_improver._generate_tdd_test", return_value=fake_test), \
+82:          patch("overnight.self_improver.generate", return_value=None):  # Stop generation loop
+83: 
+84:         from overnight.self_improver import apply_auto_fix
+85:         apply_auto_fix(src, issue, api_keys={})
+86: 
+87:     # The valid test file must still exist (not deleted)
+88:     test_file = tmp_path / "tests" / "test_tdd_auto_dummy_module.py"
+89:     assert test_file.exists(), "Valid TDD test (red phase confirmed) should be kept"
+
+=== ENGINE: intake_eve.py first 250 lines ===
+1: import json
+2: import sqlite3
+3: import os
+4: import logging
+5: import math
+6: import hashlib
+7: from typing import Any, Dict, List, Optional, Callable, TypeVar, Generator
+8: from datetime import datetime, timezone
+9: from contextlib import contextmanager
+10: 
+11: DB_PATH = os.getenv('SOC_DB_PATH', '/var/lib/soc/triage_queue.db')
+12: LOG_PATH = os.getenv('SOC_LOG_PATH', '/var/log/soc/intake.log')
+13: 
+14: logger = logging.getLogger(__name__)
+15: 
+16: T = TypeVar('T')
+17: 
+18: ENTROPY_THRESHOLD = 4.5
+19: MIN_ENTROPY_LENGTH = 20
+20: 
+21: 
+22: def configure_logging() -> None:
+23:     """Configure file logging to LOG_PATH if not already configured.
+24: 
+25:     This function MUST be called explicitly at application startup.
+26:     It is NOT called at module import time to avoid filesystem I/O side effects
+27:     during import (violates v11.7 no module-level side effects).
+28:     """
+29:     if not logger.handlers:
+30:         log_dir = os.path.dirname(LOG_PATH)
+31:         if log_dir:
+32:             os.makedirs(log_dir, exist_ok=True)
+33:         file_handler = logging.FileHandler(LOG_PATH)
+34:         file_handler.setFormatter(logging.Formatter(
+35:             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+36:         ))
+37:         logger.addHandler(file_handler)
+38:         logger.setLevel(logging.INFO)
+39: 
+40: 
+41: @contextmanager
+42: @contextmanager
+43: def transaction(conn: sqlite3.Connection) -> Generator[sqlite3.Cursor, None, None]:
+44:     """Provide a transactional scope around a series of operations."""
+45:     cursor = conn.cursor()
+46:     try:
+47:         yield cursor
+48:         conn.commit()
+49:     except Exception:
+50:         conn.rollback()
+51:         raise
+52: 
+53: 
+54: @contextmanager
+55: def get_connection() -> Generator[sqlite3.Connection, None, None]:
+56:     """Context manager for database connections with automatic cleanup."""
+57:     if not logger.handlers:
+58:         raise RuntimeError("Logging not configured. Call configure_logging() before using database.")
+59:     conn = sqlite3.connect(DB_PATH)
+60:     conn.row_factory = sqlite3.Row
+61:     try:
+62:         yield conn
+63:     finally:
+64:         conn.close()
+65: 
+66: 
+67: def with_db(transaction: bool = False) -> Callable[[Callable[..., T]], Callable[..., T]]:
+68:     """Parameterized decorator for database operations with optional transaction handling."""
+69:     def decorator(func: Callable[..., T]) -> Callable[..., T]:
+70:         def wrapper(*args: Any, **kwargs: Any) -> T:
+71:             try:
+72:                 with get_connection() as conn:
+73:                     if transaction:
+74:                         with transaction(conn) as cursor:
+75:                             return func(cursor, *args, **kwargs)
+76:                     else:
+77:                         return func(conn, *args, **kwargs)
+78:             except Exception as e:
+79:                 logger.error(f"{func.__name__} error: {e}")
+80:                 raise RuntimeError(f"Database operation {func.__name__} failed: {e}") from e
+81:         return wrapper
+82:     return decorator
+83: 
+84: 
+85: def execute_in_transaction(func: Callable[..., T]) -> Callable[..., T]:
+86:     """Decorator that provides a connection with transaction handling."""
+87:     def wrapper(*args: Any, **kwargs: Any) -> T:
+88:         try:
+89:             with get_connection() as conn:
+90:                 with transaction(conn) as cursor:
+91:                     return func(cursor, *args, **kwargs)
+92:         except Exception as e:
+93:             logger.error(f"{func.__name__} error: {e}")
+94:             raise RuntimeError(f"Database operation {func.__name__} failed: {e}") from e
+95:     return wrapper
+96: 
+97: 
+98: def execute_with_connection(func: Callable[..., T]) -> Callable[..., T]:
+99:     """Decorator that provides a connection and handles errors."""
+100:     def wrapper(*args: Any, **kwargs: Any) -> T:
+101:         try:
+102:             with get_connection() as conn:
+103:                 return func(conn, *args, **kwargs)
+104:         except Exception as e:
+105:             logger.error(f"{func.__name__} error: {e}")
+106:             raise RuntimeError(f"Database operation {func.__name__} failed: {e}") from e
+107:     return wrapper
+108: 
+109: 
+110: def init_db() -> None:
+111:     """Initializes the SQLite database and creates the triage_queue table if it does not exist.
+112: 
+113:     Raises:
+114:         RuntimeError: If database initialization fails.
+115:     """
+116:     try:
+117:         db_dir = os.path.dirname(DB_PATH)
+118:         if db_dir:
+119:             os.makedirs(db_dir, exist_ok=True)
+120:         with get_connection() as conn:
+121:             with transaction(conn) as cursor:
+122:                 cursor.execute(
+123:                     """
+124:                     CREATE TABLE IF NOT EXISTS triage_queue (
+125:                         id INTEGER PRIMARY KEY AUTOINCREMENT,
+126:                         payload TEXT,
+127:                         severity TEXT,
+128:                         status TEXT DEFAULT 'pending',
+129:                         attempts INTEGER DEFAULT 0,
+130:                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+131:                         lease_expires_at TIMESTAMP,
+132:                         last_heartbeat_at TIMESTAMP,
+133:                         failure_reason TEXT
+134:                     )
+135:                     """
+136:                 )
+137:                 cursor.execute(
+138:                     """
+139:                     CREATE TABLE IF NOT EXISTS audit_log (
+140:                         id INTEGER PRIMARY KEY AUTOINCREMENT,
+141:                         event_id INTEGER NOT NULL,
+142:                         old_status TEXT,
+143:                         new_status TEXT NOT NULL,
+144:                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+145:                         actor TEXT
+146:                     )
+147:                     """
+148:                 )
+149:                 cursor.execute(
+150:                     "CREATE INDEX IF NOT EXISTS idx_triage_status ON triage_queue(status)"
+151:                 )
+152:                 cursor.execute(
+153:                     "CREATE INDEX IF NOT EXISTS idx_triage_lease ON triage_queue(lease_expires_at)"
+154:                 )
+155:                 cursor.execute(
+156:                     "CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_id)"
+157:                 )
+158:     except Exception as e:
+159:         logger.error(f"Database initialization error: {e}")
+160:         raise RuntimeError(f"Database initialization failed: {e}")
+161: 
+162: 
+163: def _log_audit(cursor: sqlite3.Cursor, event_id: int, old_status: Optional[str], new_status: str, actor: str = "system") -> None:
+164:     """Logs a status change to the audit_log table.
+165: 
+166:     Args:
+167:         cursor: Database cursor to use for the insert.
+168:         event_id: The ID of the event.
+169:         old_status: The previous status (None for initial creation).
+170:         new_status: The new status.
+171:         actor: The actor performing the change.
+172:     """
+173:     cursor.execute(
+174:         "INSERT INTO audit_log (event_id, old_status, new_status, actor) VALUES (?, ?, ?, ?)",
+175:         (event_id, old_status, new_status, actor),
+176:     )
+177: 
+178: 
+179: def shannon_entropy(data: str) -> float:
+180:     """Calculate Shannon entropy of a string."""
+181:     if not data:
+182:         return 0.0
+183:     entropy = 0.0
+184:     for x in range(256):
+185:         p_x = data.count(chr(x)) / len(data)
+186:         if p_x > 0:
+187:             entropy += -p_x * math.log2(p_x)
+188:     return entropy
+189: 
+190: 
+191: def is_high_entropy(value: str, threshold: float = ENTROPY_THRESHOLD, min_length: int = MIN_ENTROPY_LENGTH) -> bool:
+192:     """Check if a string has high entropy (likely encoded/encrypted)."""
+193:     if not isinstance(value, str) or len(value) < min_length:
+194:         return False
+195:     return shannon_entropy(value) > threshold
+196: 
+197: 
+198: def redact_value(value: Any) -> Any:
+199:     """Redact high-entropy values that may contain secrets."""
+200:     if isinstance(value, str) and is_high_entropy(value):
+201:         return "[REDACTED_HIGH_ENTROPY]"
+202:     return value
+203: 
+204: 
+205: def sanitize_recursive(obj: Any) -> Any:
+206:     if isinstance(obj, dict):
+207:         for k, v in obj.items():
+208:             obj[k] = sanitize_recursive(v)
+209:         return obj
+210:     elif isinstance(obj, list):
+211:         for i, v in enumerate(obj):
+212:             obj[i] = sanitize_recursive(v)
+213:         return obj
+214:     else:
+215:         return obj
+216:         return redact_value(obj)
+217: 
+218: 
+219: def sanitize_value(value: Any) -> Any:
+220:     """Sanitize a single value."""
+221:     return sanitize_recursive(value)
+222: 
+223: 
+224: def sanitize_event(event: Dict[str, Any]) -> Dict[str, Any]:
+225:     """Filters and sanitizes an event dictionary to include only allowed keys.
+226: 
+227:     Args:
+228:         event: The raw event dictionary from Suricata EVE.
+229: 
+230:     Returns:
+231:         A dictionary containing only the allowed keys with sanitized values.
+232:     """
+233:     allowed_keys = {
+234:         "timestamp",
+235:         "event_type",
+236:         "src_ip",
+237:         "dest_ip",
+238:         "src_port",
+239:         "dest_port",
+240:         "proto",
+241:         "alert",
+242:         "http",
+243:         "dns",
+244:         "tls",
+245:         "ssh",
+246:         "flow",
+247:         "payload",
+248:         "payload_printable",
+249:         "stream",
+250:         "packet",
+
+=== STATE: openrouter_quota.json ===
+{
+  "used_today": 367,
+  "day": "2026-09-06",
+  "locked_until": null,
+  "last_attempt": "2026-09-06T02:38:29.648770+00:00"
+}
+=== STATE: model_fallback_cache.json ===
+{
+  "timestamp": 1788661164.6466327,
+  "models": [
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free"
+  ]
+}
+=== STATE: groq_model_cache.json ===
+{"timestamp": 1788649289.469478, "models": ["qwen/qwen3.6-27b", "openai/gpt-oss-120b", "groq/compound-mini", "openai/gpt-oss-safeguard-20b", "openai/gpt-oss-20b", "groq/compound"]}
+=== STATE: api_usage.json first 200 lines ===
+{
+  "openrouter": [
+    "2026-09-05T03:19:53.728115",
+    "2026-09-05T03:22:59.352569",
+    "2026-09-05T03:27:19.962483",
+    "2026-09-05T03:30:49.991155",
+    "2026-09-05T03:34:39.157099",
+    "2026-09-05T03:37:02.144749",
+    "2026-09-05T03:42:04.601008",
+    "2026-09-05T03:43:37.348734",
+    "2026-09-05T03:46:26.640474",
+    "2026-09-05T03:48:13.138769",
+    "2026-09-05T05:32:50.105738",
+    "2026-09-05T05:36:04.937213",
+    "2026-09-05T05:38:05.378601",
+    "2026-09-05T05:38:51.049295",
+    "2026-09-05T05:41:13.500759",
+    "2026-09-05T05:42:50.124700",
+    "2026-09-05T05:44:34.024359",
+    "2026-09-05T05:46:24.435409",
+    "2026-09-05T05:47:56.348322",
+    "2026-09-05T05:50:08.214136",
+    "2026-09-05T06:18:08.009556",
+    "2026-09-05T06:19:40.446399",
+    "2026-09-05T06:22:53.343436",
+    "2026-09-05T06:24:53.675497",
+    "2026-09-05T06:26:55.009804",
+    "2026-09-05T06:27:41.728417",
+    "2026-09-05T06:30:03.441463",
+    "2026-09-05T06:31:44.303204",
+    "2026-09-05T06:34:57.002789",
+    "2026-09-05T06:35:42.032167",
+    "2026-09-05T06:47:26.524125",
+    "2026-09-05T06:50:41.333222",
+    "2026-09-05T06:52:42.190520",
+    "2026-09-05T06:54:42.635337",
+    "2026-09-05T06:55:27.969657",
+    "2026-09-05T06:57:26.431832",
+    "2026-09-05T06:58:57.355583",
+    "2026-09-05T07:00:29.251376",
+    "2026-09-05T07:03:22.095009",
+    "2026-09-05T07:05:22.492012",
+    "2026-09-05T07:18:44.230560",
+    "2026-09-05T07:21:58.946621",
+    "2026-09-05T07:23:59.369983",
+    "2026-09-05T07:26:00.621939",
+    "2026-09-05T07:28:02.054761",
+    "2026-09-05T07:28:49.192666",
+    "2026-09-05T07:30:46.645405",
+    "2026-09-05T07:32:40.512637",
+    "2026-09-05T07:34:11.249497",
+    "2026-09-05T07:35:42.967486",
+    "2026-09-05T07:53:52.653558",
+    "2026-09-05T07:56:46.301637",
+    "2026-09-05T07:58:47.670553",
+    "2026-09-05T08:00:48.926907",
+    "2026-09-05T08:02:50.304356",
+    "2026-09-05T08:03:37.607242",
+    "2026-09-05T08:05:58.331967",
+    "2026-09-05T08:07:39.136178",
+    "2026-09-05T08:09:37.397831",
+    "2026-09-05T08:11:59.860809",
+    "2026-09-05T08:25:56.553993",
+    "2026-09-05T08:29:11.466529",
+    "2026-09-05T08:31:11.886569",
+    "2026-09-05T08:33:13.336815",
+    "2026-09-05T08:33:57.964295",
+    "2026-09-05T08:35:56.082739",
+    "2026-09-05T08:37:27.002275",
+    "2026-09-05T08:38:58.828024",
+    "2026-09-05T08:41:51.583452",
+    "2026-09-05T08:43:52.005855",
+    "2026-09-05T08:53:18.540910",
+    "2026-09-05T08:56:33.353018",
+    "2026-09-05T08:58:33.775478",
+    "2026-09-05T09:00:35.261613",
+    "2026-09-05T09:01:20.249513",
+    "2026-09-05T09:03:19.709961",
+    "2026-09-05T09:04:50.526480",
+    "2026-09-05T09:06:22.250350",
+    "2026-09-05T09:09:15.010634",
+    "2026-09-05T09:11:15.238655",
+    "2026-09-05T09:17:08.758556",
+    "2026-09-05T09:20:02.688240",
+    "2026-09-05T09:22:03.139421",
+    "2026-09-05T09:24:03.534163",
+    "2026-09-05T09:26:04.261416",
+    "2026-09-05T09:26:49.554704",
+    "2026-09-05T09:26:55.187541",
+    "2026-09-05T09:28:18.605658",
+    "2026-09-05T09:30:19.484692",
+    "2026-09-05T09:31:50.392637",
+    "2026-09-05T09:41:38.319229",
+    "2026-09-05T09:44:32.342282",
+    "2026-09-05T09:46:32.756524",
+    "2026-09-05T09:48:34.207664",
+    "2026-09-05T09:50:34.633920",
+    "2026-09-05T09:51:20.855525",
+    "2026-09-05T09:53:43.321014",
+    "2026-09-05T09:55:17.642494",
+    "2026-09-05T09:57:05.872064",
+    "2026-09-05T09:58:54.382444",
+    "2026-09-05T10:13:15.787134",
+    "2026-09-05T10:16:30.604107",
+    "2026-09-05T10:18:31.025397",
+    "2026-09-05T10:20:32.469185",
+    "2026-09-05T10:21:15.662544",
+    "2026-09-05T10:23:13.063582",
+    "2026-09-05T10:24:44.900699",
+    "2026-09-05T10:26:15.815876",
+    "2026-09-05T10:29:08.621859",
+    "2026-09-05T10:31:10.018201",
+    "2026-09-05T10:44:26.639656",
+    "2026-09-05T10:47:41.454393",
+    "2026-09-05T10:49:41.889382",
+    "2026-09-05T10:51:42.296349",
+    "2026-09-05T10:53:43.040744",
+    "2026-09-05T10:54:31.293270",
+    "2026-09-05T10:56:28.846446",
+    "2026-09-05T10:58:22.721122",
+    "2026-09-05T10:59:53.551019",
+    "2026-09-05T11:01:25.371195",
+    "2026-09-05T11:24:47.172722",
+    "2026-09-05T11:28:01.788166",
+    "2026-09-05T11:30:02.310022",
+    "2026-09-05T11:32:02.681542",
+    "2026-09-05T11:32:48.393351",
+    "2026-09-05T11:34:44.864484",
+    "2026-09-05T11:36:16.190982",
+    "2026-09-05T11:37:48.016373",
+    "2026-09-05T11:40:40.777866",
+    "2026-09-05T11:42:42.221199",
+    "2026-09-05T12:07:37.421398",
+    "2026-09-05T12:10:52.233968",
+    "2026-09-05T12:12:52.846545",
+    "2026-09-05T12:14:53.284857",
+    "2026-09-05T12:15:34.735289",
+    "2026-09-05T12:17:33.781862",
+    "2026-09-05T12:19:04.601278",
+    "2026-09-05T12:20:36.324237",
+    "2026-09-05T12:23:29.181619",
+    "2026-09-05T12:25:29.605383",
+    "2026-09-05T12:50:03.503794",
+    "2026-09-05T12:53:18.523650",
+    "2026-09-05T12:55:19.352005",
+    "2026-09-05T12:57:19.776852",
+    "2026-09-05T12:58:06.500842",
+    "2026-09-05T13:00:27.599709",
+    "2026-09-05T13:02:08.922452",
+    "2026-09-05T13:04:06.132571",
+    "2026-09-05T13:06:28.507640",
+    "2026-09-05T13:08:09.370548",
+    "2026-09-05T13:23:04.745694",
+    "2026-09-05T13:26:19.560777",
+    "2026-09-05T13:28:19.979456",
+    "2026-09-05T13:30:21.255757",
+    "2026-09-05T13:32:22.569539",
+    "2026-09-05T13:33:10.109390",
+    "2026-09-05T13:35:08.698541",
+    "2026-09-05T13:37:01.535728",
+    "2026-09-05T13:38:32.369746",
+    "2026-09-05T13:40:04.295350",
+    "2026-09-05T13:54:41.740768",
+    "2026-09-05T13:57:56.831714",
+    "2026-09-05T13:59:58.277590",
+    "2026-09-05T14:01:58.895287",
+    "2026-09-05T14:02:46.447588",
+    "2026-09-05T14:04:43.597981",
+    "2026-09-05T14:06:37.574727",
+    "2026-09-05T14:08:08.615611",
+    "2026-09-05T14:09:40.526971",
+    "2026-09-05T14:12:42.591048",
+    "2026-09-05T14:24:47.741195",
+    "2026-09-05T14:27:41.566621",
+    "2026-09-05T14:29:42.093150",
+    "2026-09-05T14:31:42.512017",
+    "2026-09-05T14:33:42.790479",
+    "2026-09-05T14:35:44.096353",
+    "2026-09-05T14:37:45.524355",
+    "2026-09-05T14:38:31.837656",
+    "2026-09-05T14:38:38.598643",
+    "2026-09-05T14:40:02.012306",
+    "2026-09-05T14:55:39.650745",
+    "2026-09-05T14:58:56.103082",
+    "2026-09-05T15:00:55.808143",
+    "2026-09-05T15:02:56.735751",
+    "2026-09-05T15:03:40.140476",
+    "2026-09-05T15:06:02.574313",
+    "2026-09-05T15:07:43.325118",
+    "2026-09-05T15:09:36.646020",
+    "2026-09-05T15:11:57.537192",
+    "2026-09-05T15:13:38.344613",
+    "2026-09-05T15:20:43.195862",
+    "2026-09-05T15:23:36.913720",
+    "2026-09-05T15:25:38.359785",
+    "2026-09-05T15:27:38.782724",
+    "2026-09-05T15:28:22.486172",
+    "2026-09-05T15:30:44.917410",
+    "2026-09-05T15:32:25.778784",
+    "2026-09-05T15:34:18.892644",
+
+=== STATE: fix_backlog.json first 20000 chars ===
+[
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 45,
+      "line_end": 54,
+      "description": "Inefficient fuzzy matching: nested loops create strings repeatedly for difflib comparison, O(n^2) string allocations",
+      "suggestion": "Pre-compute stripped line arrays once, use SequenceMatcher on line sequences directly without joining to strings, or limit search window",
+      "impact": "medium",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 30,
+      "line_end": 30,
+      "description": "Missing return type annotation for _locate_region function",
+      "suggestion": "Add return type: -> tuple[int, int]",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 57,
+      "line_end": 57,
+      "description": "Missing return type annotation for apply_multi_file_patches function",
+      "suggestion": "Add return type: -> dict[Path, str]",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 53,
+      "line_end": 53,
+      "description": "Magic number 0.80 for fuzzy match threshold without constant or documentation",
+      "suggestion": "Define FUZZY_MATCH_THRESHOLD = 0.80 as module constant with docstring explaining rationale",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 20,
+      "line_end": 28,
+      "description": "parse_multi_file_diff lacks docstring and input validation",
+      "suggestion": "Add docstring describing expected diff format, validate non-empty search/replace, limit input size",
+      "impact": "low",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 30,
+      "line_end": 55,
+      "description": "_locate_region lacks docstring explaining algorithm, parameters, and return values",
+      "suggestion": "Add comprehensive docstring with examples of normalized vs fuzzy matching behavior",
+      "impact": "low",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 57,
+      "line_end": 84,
+      "description": "apply_multi_file_patches lacks docstring explaining behavior, exceptions, and return value",
+      "suggestion": "Add docstring describing patch application order, error conditions, and that caller must write files",
+      "impact": "low",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 63,
+      "line_end": 63,
+      "description": "File read repeated for each patch targeting same file (compounds with correctness issue #2)",
+      "suggestion": "Fix by reading once per file as part of cumulative patch fix",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  }
+]
+
+=== STATE: failed_fixes.jsonl last 3 lines truncated ===
+{"timestamp": "2026-09-05T02:31:32.535429", "category": "performance", "file": "engine/failure_autopsy.py", "advisory": "No caching of autopsy results for similar error signatures; repeated identical failures incur redundant LLM costs", "failed_diff": "<<<<<<< engine/failure_autopsy.py\n\"\"\"\nengine/failure_autopsy.py\n-------------------------\nAnalyzes a failed LLM output to generate a 2-sentence constraint for Attempt 2.\n\"\"\"\n\nAUTOPSY_PROMPT_TEMPLATE = (\n    \"You are a senior software architect performing a failure autopsy.\\n\"\n    \"An AI was asked to write a patch, but it produced invalid code.\\n\"\n    \"THE ERROR IT CAUSED:\\n{error_message}\\n\\n\"\n    \"THE BAD CODE IT WROTE:\\n{bad_code}\\n\\n\"\n    \"In exactly 2 sentences, explain the cognitive mistake the AI made.\\n\"\n    \"Focus on: Did it hallucinate API signatures? Did it ignore formatting rules? Did it break indentation?\\n\"\n    \"Output ONLY the 2 sentences. No markdown, no preamble.\"\n)\n\n\ndef _default_llm_call(prompt: str, api_key: str | None, max_tokens: int = 200, temperature: float = 0.1) -> str:\n    \"\"\"Default LLM caller that returns a generic constraint when no client is configured.\"\"\"\n    return \"Analyze your previous failure carefully and adhere strictly to the output format and exact file contents.\"\n\n\n# Allow dependency injection of the LLM client for testing and flexibility\n_llm_client = _default_llm_call\n\n\ndef perform_autopsy(bad_code: str, error_message: str, api_keys: dict[str, str]) -> str:\n    \"\"\"Analyze a failed LLM output to generate a 2-sentence constraint for retry.\n\n    Parameters\n    ----------\n    bad_code : str\n        The invalid code produced by the AI that caused the error.\n    error_message : str\n        The error message or traceback from the failed exec", "constraint": ""}
+{"timestamp": "2026-09-05T05:06:58.681572", "category": "performance", "file": "engine/multi_file_patcher.py", "advisory": "File re-read from disk for each patch instead of caching in memory, causing O(n) disk I/O for n patches", "failed_diff": "<<<<<<< engine/multi_file_patcher.py\ndef apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:\n    modified_files = {}\n    for patch in patches:\n        if not patch.file_path.exists():\n            raise ValueError(f\"File not found: {patch.file_path}\")\n        original = patch.file_path.read_text()\n        new_content = original\n\n        if patch.search in original:\n            new_co\n=======\ndef apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:\n    modified_files = {}\n    cache: dict[Path, str] = {}\n    for patch in patches:\n        if not patch.file_path.exists():\n            raise ValueError(f\"File not found: {patch.file_path}\")\n        # Load file content, using cache to avoid multiple reads\n        if patch.file_path in cache:\n            original = cache[patch.file_path]\n        else:\n            original = patch.file_path.read_text()\n            cache[patch.file_path] = original\n        new_content = original\n\n        # Fast path: exact substring match\n        if patch.search in original:\n            new_content = original.replace(patch.search, patch.replace)\n        else:\n            start, size = _locate_region(original, patch.search)\n            if start != -1:\n                lines = original.splitlines(keepends=True)\n                before = \"\".join(lines[:start])\n                after = \"\".join(lines[start + size:])\n                new_content = before + patch.replace + after\n            else:\n                raise ValueError", "constraint": "The AI failed to maintain proper indentation levels when inserting the logic for applying the patch, resulting in an IndentationError that rendered the module syntactically invalid. It neglec
+{"timestamp": "2026-09-06T00:16:58.081647", "category": "maintainability", "file": "engine/failure_autopsy.py", "advisory": "Using print for error reporting mixes standard output with logging and is not suitable for production environments.", "failed_diff": "Let me analyze the issue and the current file to understand what needs to be fixed.\n\nThe issue is: \"Using print for error reporting mixes standard output with logging and is not suitable for production environments.\"\n\nLooking at the current file `engine/failure_autopsy.py`, I can see there's a `print` statement in the `perform_autopsy` function:\n\n```python\nprint(f\"       \u26a0\ufe0f Autopsy LLM call failed: {e}\")\n```\n\nThis needs to be replaced with proper logging that doesn't use `print`. The test expects that both `stdout_capture` and `stderr_capture` are empty after calling `perform_autopsy`, which means the `print` statement must be removed or replaced with something that doesn't output to stdout/stderr.\n\nLet me look at the test more carefully:\n\n```python\ndef test_perform_autopsy_does_not_use_print_for_errors():\n    bad_code = \"print('hello')\"\n    error_message = \"SyntaxError: invalid syntax\"\n    api_keys = {\"openai\": \"test-key\"}\n\n    stdout_capture = StringIO()\n    stderr_capture = StringIO()\n\n    with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):\n        result = perform_autopsy(bad_code, error_message, api_keys)\n\n    assert stdout_capture.getvalue() == \"\"\n    assert stderr_capture.getvalue() == \"\"\n    assert isinstance(result, str)\n```\n\nThe test captures both stdout and stderr and expects them to be empty. The current code has a `print` statement that would go to stdout, which would fail this test.\n\nThe fix should:\n1. Remove the `print` statement\n2. Either ha", "constraint": "The AI failed to maintain consistent indentation levels, resulting in a syntax error that broke the Python execution flow. It also hallucinated an incorrect API s
+
+=== STATE: improvement_ledger.jsonl last 5 lines truncated ===
+{"timestamp": "2026-09-06T01:58:51.207824", "file": "engine/intake_wazuh.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T02:19:07.354595", "file": "engine/ioc_extractor.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T02:19:07.401907", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T02:19:07.435083", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T02:19:07.473007", "file": "engine/ioc_extractor.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}

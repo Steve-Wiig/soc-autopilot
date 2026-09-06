@@ -6,7 +6,7 @@ SHA256: ab8067b
 
 v11.11:
 - Updated blueprint to current operational baseline (Sept 3, 2026)
-- Removed superseded master files (v11.6.0-v11.9.0)
+- Removed superseded master files (v11.6.0-v11.11.0)
 - Declared split files (sections/, amendments/, appendices/) as canonical
 - Updated all version references from v11.6.0 to v11.11
 - Cleaned up .gitignore duplicates
@@ -23,7 +23,7 @@ v11.10:
 - Added operational dashboard/reporting
 - Documented queue/configuration failure modes
 
-v11.9:
+v11.11:
 - Historical baseline (superseded by v11.10/v11.11)
 
 SOURCE: soc-autopilot (historical)

@@ -367,3 +367,9 @@
 {"timestamp": "2026-09-05T18:35:35.046457", "file": "engine/multi_file_patcher.py", "category": "maintainability", "status": "STALE", "reason": "Death loop cooldown (ledger unreadable)"}
 {"timestamp": "2026-09-05T20:42:42.484531", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
 {"timestamp": "2026-09-05T20:42:42.512636", "file": "engine/ioc_extractor.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T06:08:01.178751", "file": "engine/consensus_gate.py", "category": "performance", "status": "REJECTED", "reason": "Failed generation/tests"}
+{"timestamp": "2026-09-06T06:12:55.493769", "file": "engine/defeat_ledger.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T06:12:56.335685", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T06:12:56.335957", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "DEFERRED", "reason": "Routed to Local SLM (Validation Phase)"}
+{"timestamp": "2026-09-06T06:12:57.150232", "file": "engine/enrichment_scheduler.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-06T06:12:59.043687", "file": "engine/enrichment_scheduler.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}

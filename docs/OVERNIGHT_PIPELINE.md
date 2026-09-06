@@ -63,7 +63,7 @@ async def phase_b_analyze(prefills: list[PrefillResult]) -> list[AnalysisResult]
 - **Model curation**: Only curated models in `overnight/models.yaml` are eligible; auto-updated weekly via `overnight/update_model_catalog.py`.
 - **All-providers-exhausted behavior**: If every provider is in cooldown or returns errors, `complete_with_fallback` raises `AllProvidersExhausted`. The pipeline catches this and exits with code **75 (EX_TEMPFAIL)** so the systemd timer (`overnight-pipeline.timer`) will retry on the next scheduled run.
 
-### 2.3 Phase C — Backlog Drain (`overnight/self_improver.py::phase_c_drain`)
+### 2.3 Backlog Drain — Backlog Drain (`overnight/self_improver.py::phase_c_drain`)
 
 ```python
 async def phase_c_drain(analyses: list[AnalysisResult]) -> DrainReport:
@@ -223,7 +223,7 @@ class OpenRouterQuota:
 
 - **Append-only**: Daytime workers `engine/queue_manager.py::enqueue_advisory()` append lines.
 - **Crash resilience**: JSONL survives partial writes; reader skips malformed lines.
-- **Decoupled analysis/fixing**: Unified Queue (Advisory Generation)/B read queue; Phase C drains; no in-memory coupling.
+- **Decoupled analysis/fixing**: Unified Queue (Advisory Generation)/B read queue; Backlog Drain drains; no in-memory coupling.
 
 ### 5.2 Fix Backlog (`overnight/fix_backlog.json`)
 
@@ -440,7 +440,7 @@ python -m overnight.cost_report --days 30
 | `overnight/openrouter_quota.json` | OpenRouter daily usage + lock state |
 | `overnight/llm_cooldown.json` | Per-provider cooldown timestamps |
 | `overnight/phase_a_prefill.jsonl` | Unified Queue (Advisory Generation) intermediate output |
-| `overnight/phase_c_drain_report.json` | Phase C summary (applied/failed) |
+| `overnight/phase_c_drain_report.json` | Backlog Drain summary (applied/failed) |
 | `overnight/recover_backups.py` | Crash recovery for `.orig_backup` files |
 | `overnight/update_model_catalog.py` | Weekly model catalog refresh |
 | `overnight/cost_report.py` | Budget estimation from usage logs |

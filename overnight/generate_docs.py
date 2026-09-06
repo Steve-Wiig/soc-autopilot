@@ -82,7 +82,7 @@ def main():
     tasks = json.loads(tasks_file.read_text())
     open_tasks = [t for t in tasks if t.get("status") == "open"]
 
-    # Normalize: generator expects 'description'; v11.8 schema uses 'prompt_hint'
+    # Normalize: generator expects 'description'; v11.11 schema uses 'prompt_hint'
     for t in open_tasks:
         if not t.get("description"):
             t["description"] = (

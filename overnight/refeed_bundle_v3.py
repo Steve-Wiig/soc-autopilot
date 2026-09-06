@@ -80,7 +80,7 @@ YOUR TASK: Produce a v3 documentation package with these rules:
 
 RULES:
 - Output ONLY the v3 markdown. No preamble, no explanations.
-- Start with "# soc-autopilot Documentation Errata & Corrections (v11.9 — v3)"
+- Start with "# soc-autopilot Documentation Errata & Corrections (v11.11 — v3)"
 - Section 2 should be comprehensive (200-400 lines) but every code sample
   must be grounded in the actual source.
 

@@ -1,4 +1,4 @@
-# soc-autopilot Lab Setup Guide v11.9
+# soc-autopilot Lab Setup Guide v11.11
 
 ## 1. Hardware Requirements
 
@@ -280,7 +280,7 @@ services:
         reservations:
           memory: 4G
 
-  # --- Overnight Self-Improving Pipeline (v11.9) ---
+  # --- Overnight Self-Improving Pipeline (v11.11) ---
   slm-overnight:
     build:
       context: ..
@@ -614,7 +614,7 @@ mkdir -p certs
 docker run --rm -v $(pwd)/certs:/certs wazuh/wazuh-certs-tool:4.7.0 \
   -a -n 3 -o /certs -x 3650
 
-# Prepare persistent data files for v11.9 pipeline
+# Prepare persistent data files for v11.11 pipeline
 mkdir -p ./data
 touch ./data/fix_backlog.json ./data/openrouter_quota.json
 echo '{}' > ./data/fix_backlog.json

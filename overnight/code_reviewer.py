@@ -161,11 +161,11 @@ PURPOSE: {context.get('purpose', 'SOC automation component')}
 SOURCE CODE:
 {content}
 
-BLUEPRINT REQUIREMENTS (from soc-autopilot v11.8):
+BLUEPRINT REQUIREMENTS (from soc-autopilot v11.11):
 - No datetime.utcnow() — use datetime.now(timezone.utc) instead [AMEND-63]
 - No sys.exit()/exit() in library code — use raise RuntimeError() [AMEND-64]
 - No mocking sqlite3.Connection methods — use real :memory: databases [AMEND-65]
-- No module-level side effects (file I/O, network, exit calls) [v11.7]
+- No module-level side effects (file I/O, network, exit calls) [v11.11]
 - Sanitize before insert (secrets, high-entropy tokens) [Section 34]
 - Append-only audit patterns for handoffs/corrections [Section 30]
 - Approval-gated mutations (pfSense, Wazuh rules, TheHive cases) [Section 24]

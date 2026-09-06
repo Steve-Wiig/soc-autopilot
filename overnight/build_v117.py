@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
 """
-Merge v11.6.0 full text with v11.7.0 additions to produce
-a complete, self-contained v11.7.0 master document.
+Merge v11.6.0 full text with v11.11.0 additions to produce
+a complete, self-contained v11.11.0 master document.
 """
 from pathlib import Path
 
 v116_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.6.0_master.txt")
-v117_delta_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.7.0_master.txt")
-output_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.7.0_master.txt")
+v117_delta_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.11.0_master.txt")
+output_path = Path("/home/swiig/Documents/soc-autopilot/LOCAL_SOC_SLM_Blueprint_v11.11.0_master.txt")
 
 content = v116_path.read_text()
 
 # 1. Update header
 content = content.replace(
     "LOCAL-SOC-SLM v11.6.0 — Master Architecture, Development Blueprint & Scripts\nOperational Readability, Knowledge Wiki, Runbook, and Hardening Edition",
-    "LOCAL-SOC-SLM v11.7.0 — Master Architecture, Development Blueprint & Scripts\nLLM-Driven Development Pipeline, Verification Infrastructure, and\nTest-to-Implementation Alignment Edition"
+    "LOCAL-SOC-SLM v11.11.0 — Master Architecture, Development Blueprint & Scripts\nLLM-Driven Development Pipeline, Verification Infrastructure, and\nTest-to-Implementation Alignment Edition"
 )
-content = content.replace("VERSION: v11.6.0-master", "VERSION: v11.7.0-master")
+content = content.replace("VERSION: v11.6.0-master", "VERSION: v11.11.0-master")
 
-# 2. Update BASELINE to include v11.7
+# 2. Update BASELINE to include v11.11
 content = content.replace(
     "and the v11.6.0 operational readability, externalized knowledge-wiki, runbook, and failure-mode layer.",
-    "the v11.6.0 operational readability, externalized knowledge-wiki, runbook, and failure-mode layer, and the v11.7.0 LLM-driven development pipeline, verification infrastructure, and test-to-implementation alignment layer into one master document."
+    "the v11.6.0 operational readability, externalized knowledge-wiki, runbook, and failure-mode layer, and the v11.11.0 LLM-driven development pipeline, verification infrastructure, and test-to-implementation alignment layer into one master document."
 )
 
 # 3. Add [IMPLEMENTED-VERIFIED] posture after [RESEARCH]
 content = content.replace(
     "[RESEARCH]\nOpen design or research question tracked in Appendix N.",
-    "[RESEARCH]\nOpen design or research question tracked in Appendix N.\n[IMPLEMENTED-VERIFIED]\nGenerated, tested, and verified during the v11.7.0 development session."
+    "[RESEARCH]\nOpen design or research question tracked in Appendix N.\n[IMPLEMENTED-VERIFIED]\nGenerated, tested, and verified during the v11.11.0 development session."
 )
 
 # 4. Add development environment baseline after PRIMARY HARDWARE BASELINE
@@ -40,16 +40,16 @@ deterministic verification gates for all generated artifacts.
 FUTURE HARDWARE PATH: [VERIFIED-INTERNAL]"""
 )
 
-# 5. Add v11.7 core principles to Executive Summary
+# 5. Add v11.11 core principles to Executive Summary
 content = content.replace(
     "- Operational documentation generation is append-only or draft-only and is\nqueued at low priority so it never displaces high-severity alert triage.\n================================================================================",
     """- Operational documentation generation is append-only or draft-only and is
 queued at low priority so it never displaces high-severity alert triage.
 - LLM-generated code must pass deterministic verification gates before
-acceptance into the codebase. [v11.7]
+acceptance into the codebase. [v11.11]
 - Generated tests must align with actual implementations, not hypothetical
-interfaces. [v11.7]
-- All engine modules must be importable without side effects. [v11.7]
+interfaces. [v11.11]
+- All engine modules must be importable without side effects. [v11.11]
 ================================================================================"""
 )
 
@@ -58,28 +58,28 @@ content = content.replace(
     "Operator/deployer:\nRead Sections 23, 28, 33, 35, 36, Appendix N, Appendix Q, release checklist.",
     """Operator/deployer:
 Read Sections 23, 28, 33, 35, 36, Appendix N, Appendix Q, release checklist.
-LLM pipeline developer: [v11.7]
+LLM pipeline developer: [v11.11]
 Read Sections 39, Appendix O (Gates 17-18), Appendix P.13-P.15, Appendix N
-(R-118 through R-120), and the v11.7.0 changelog."""
+(R-118 through R-120), and the v11.11.0 changelog."""
 )
 
-# 7. Add v11.7 glossary terms after Externalized Institutional Memory
+# 7. Add v11.11 glossary terms after Externalized Institutional Memory
 content = content.replace(
     "Externalized Institutional Memory:\nHuman-readable operational documentation generated from orchestration memory\nand governed by Section 38.",
     """Externalized Institutional Memory:
 Human-readable operational documentation generated from orchestration memory
 and governed by Section 38.
-Development Pipeline: [v11.7]
+Development Pipeline: [v11.11]
 The autonomous LLM-driven generation, verification, scoring, and iteration
 system that produces codebase artifacts from blueprint specifications.
 Governed by Section 39.
-Integration Verifier: [v11.7]
+Integration Verifier: [v11.11]
 Automated read-only sweep that validates module imports, CI tool dry-runs,
 SQL syntax, and test execution across the entire codebase in a single pass.
-Test-to-Implementation Alignment: [v11.7]
+Test-to-Implementation Alignment: [v11.11]
 The requirement that generated tests exercise the actual interfaces of the
 generated implementations, not hypothetical or assumed interfaces.
-Module-Level Side Effect: [v11.7]
+Module-Level Side Effect: [v11.11]
 Any code that executes at import time outside of function or class scope,
 including file operations, logging configuration, exit() calls, or network
 requests. Prohibited in engine modules per AMEND-56."""
@@ -90,7 +90,7 @@ content = content.replace(
     "Layer 7: Operations\nRunbooks, metrics, dashboards, Appendix Q.",
     """Layer 7: Operations
 Runbooks, metrics, dashboards, Appendix Q.
-Layer 8: Development Pipeline [v11.7]
+Layer 8: Development Pipeline [v11.11]
 LLM code generation, deterministic verification, iterative scoring,
 integration verification, test alignment."""
 )
@@ -101,25 +101,25 @@ content = content.replace(
     """38
 Operational Knowledge Generation & Externalized Memory [v11.6]
 39
-LLM-Driven Development Pipeline & Verification Infrastructure [v11.7]"""
+LLM-Driven Development Pipeline & Verification Infrastructure [v11.11]"""
 )
 
-# 10. Add v11.7 safety contract bullets
+# 10. Add v11.11 safety contract bullets
 content = content.replace(
     "- SLM Wiki generation is append-only or draft-only, sanitized before commit,\nand queued at low priority to protect operational triage VRAM.",
     """- SLM Wiki generation is append-only or draft-only, sanitized before commit,
 and queued at low priority to protect operational triage VRAM.
-- LLM-generated code must pass deterministic verification before acceptance. [v11.7]
-- Generated tests must exercise real implementations, not phantom interfaces. [v11.7]
-- Engine modules must be importable without side effects. [v11.7]
-- Backpressure thresholds use >= (inclusive), not > (exclusive). [v11.7]"""
+- LLM-generated code must pass deterministic verification before acceptance. [v11.11]
+- Generated tests must exercise real implementations, not phantom interfaces. [v11.11]
+- Engine modules must be importable without side effects. [v11.11]
+- Backpressure thresholds use >= (inclusive), not > (exclusive). [v11.11]"""
 )
 
 # 11. Add AMEND-53 through AMEND-62 after AMEND-52 block
 amend_62_end = content.find("================================================================================\nSECTION 30:")
 v117_amendments = """
 ================================================================================
-v11.7.0 AMENDMENTS TO v11.6.0 TEXT
+v11.11.0 AMENDMENTS TO v11.6.0 TEXT
 ================================================================================
 AMEND-53 — Add Section 39, LLM-Driven Development Pipeline
 ADD Section 39: LLM-Driven Development Pipeline & Verification Infrastructure.
@@ -197,7 +197,7 @@ if amend_62_end != -1:
 # 12. Add Section 39 after Section 38
 section_39_text = """
 ================================================================================
-SECTION 39: LLM-DRIVEN DEVELOPMENT PIPELINE & VERIFICATION INFRASTRUCTURE [v11.7]
+SECTION 39: LLM-DRIVEN DEVELOPMENT PIPELINE & VERIFICATION INFRASTRUCTURE [v11.11]
 ================================================================================
 39.0 Purpose
 Section 39 governs the autonomous LLM-driven development pipeline used to
@@ -261,7 +261,7 @@ No AWS access keys (AKIA...), GitHub tokens (ghp_...), private key
 headers, or other credential patterns may appear in generated code.
 Gate 5 — Minimum length:
 Generated files must be at least 10 lines.
-Gate 6 — Module-level side effect check [v11.7]:
+Gate 6 — Module-level side effect check [v11.11]:
 Generated Python modules must not execute file operations, logging
 configuration, network requests, or exit() calls at module level.
 All executable code must be inside functions, classes, or
@@ -282,7 +282,7 @@ generate_tests: 8/10
 expand_runbook: 8/10
 hallucination_audit: 8/10
 spike_plan: 8/10
-39.5 Test-to-Implementation Alignment [v11.7]
+39.5 Test-to-Implementation Alignment [v11.11]
 Generated tests must exercise the actual implementation interfaces.
 Prohibited test patterns:
 - Defining phantom classes that shadow real implementations
@@ -294,7 +294,7 @@ Required test patterns:
 - Use real instances backed by in-memory SQLite where applicable
 - Assert against actual return types and structures
 - Test real behavior, not hypothetical interfaces
-39.6 Module-Level Side Effect Prohibition [v11.7]
+39.6 Module-Level Side Effect Prohibition [v11.11]
 All Python modules in engine/, orchestrator/, memory/, and tools/ must be
 importable without side effects.
 Prohibited at module level:
@@ -311,7 +311,7 @@ Permitted at module level:
 - Module docstrings
 All demonstration or example code must be wrapped in:
 if __name__ == "__main__":
-39.7 Integration Verification [v11.7]
+39.7 Integration Verification [v11.11]
 The integration verifier performs a comprehensive read-only sweep:
 Module Import Verification:
 Attempt to import every generated Python module.
@@ -326,13 +326,13 @@ Exit 0: PASS
 Exit 1: FAIL (may be expected without live lab)
 Exit 2: CONFIG ERROR (expected without live lab)
 Exit 3: ENVIRONMENT NOT AVAILABLE (expected without GPU/services)
-39.8 Development Environment Requirements [v11.7]
+39.8 Development Environment Requirements [v11.11]
 Virtual environment mandatory (PEP 668 compliance).
 Git version control from first generation.
 Log directories must exist before first engine import.
-39.9 Backpressure Threshold Boundary [v11.7]
+39.9 Backpressure Threshold Boundary [v11.11]
 depth >= emergency_queue_depth (inclusive, not exclusive).
-39.10 Cross-Package Test Import Resolution [v11.7]
+39.10 Cross-Package Test Import Resolution [v11.11]
 tests/conftest.py must exist and add repository root to sys.path.
 39.11 Known Limitations and Expected Warnings
 dynamic_vram_budget_check.py Exit 3: No GPU on VM.
@@ -360,7 +360,7 @@ content = content.replace(
 # 13. Add R-118 through R-120 to Appendix N (after R-117)
 r118_text = """
 --------------------------------------------------------------------------------
-N.8 Development pipeline register [v11.7]
+N.8 Development pipeline register [v11.11]
 --------------------------------------------------------------------------------
 R-118 LLM generation pipeline reproducibility proof
 Status:
@@ -401,7 +401,7 @@ content = content.replace(
 # 14. Add O.17, O.18, and Gates 17-20 to Appendix O
 o17_text = """
 --------------------------------------------------------------------------------
-O.17 tools/integration_verifier.py [v11.7]
+O.17 tools/integration_verifier.py [v11.11]
 --------------------------------------------------------------------------------
 Purpose:
 Comprehensive read-only sweep validating module imports, CI tool dry-runs,
@@ -412,7 +412,7 @@ Exit behavior:
 2 = CONFIG ERROR (missing directories or venv)
 3 = ENVIRONMENT NOT AVAILABLE
 --------------------------------------------------------------------------------
-O.18 bulk_audit.py [v11.7]
+O.18 bulk_audit.py [v11.11]
 --------------------------------------------------------------------------------
 Purpose:
 File-level read-only audit covering Python syntax, import resolution,
@@ -442,7 +442,7 @@ run: python -c "import importlib; from pathlib import Path; import sys; sys.path
 # 15. Add P.13, P.14, P.15 to Appendix P (before APPENDIX Q)
 p13_text = """
 --------------------------------------------------------------------------------
-P.13 Python: Development loop architecture [v11.7]
+P.13 Python: Development loop architecture [v11.11]
 --------------------------------------------------------------------------------
 See overnight/loop_v3.py in the repository. Key constants:
 MAX_SWEEPS = 2
@@ -452,13 +452,13 @@ RATE_LIMIT_SLEEP = 7
 BACKOFF_SECONDS = 60
 TARGET_SCORES per task type as defined in Section 39.4.
 --------------------------------------------------------------------------------
-P.14 Python: Integration verifier pattern [v11.7]
+P.14 Python: Integration verifier pattern [v11.11]
 --------------------------------------------------------------------------------
 See integration_verifier.py in the repository root.
 Verifies: module imports, CI tool dry-runs, SQL syntax, pytest suite.
 Generates structured JSON report.
 --------------------------------------------------------------------------------
-P.15 Python: Cross-package test configuration [v11.7]
+P.15 Python: Cross-package test configuration [v11.11]
 --------------------------------------------------------------------------------
 # tests/conftest.py
 import sys
@@ -479,7 +479,7 @@ content = content.replace(
     "AMEND-47 through AMEND-52 must be present as v11.6.0 readability, Wiki,\nrunbook, and CI updates.",
     """AMEND-47 through AMEND-52 must be present as v11.6.0 readability, Wiki,
 runbook, and CI updates.
-AMEND-53 through AMEND-62 must be present as v11.7.0 development pipeline,
+AMEND-53 through AMEND-62 must be present as v11.11.0 development pipeline,
 verification infrastructure, and test alignment amendments."""
 )
 content = content.replace(
@@ -488,26 +488,26 @@ content = content.replace(
 )
 content = content.replace(
     "R-117",
-    "R-117\nR-118 through R-120 [v11.7]"
+    "R-117\nR-118 through R-120 [v11.11]"
 )
 content = content.replace(
     "wiki_sanitization_check.py\nAppendix O CI example:",
     """wiki_sanitization_check.py
-integration_verifier.py [v11.7]
-bulk_audit.py [v11.7]
+integration_verifier.py [v11.11]
+bulk_audit.py [v11.11]
 Appendix O CI example:"""
 )
 content = content.replace(
     "Gate 16 Wiki Sanitization Check must be present.",
     """Gate 16 Wiki Sanitization Check must be present.
-Gate 17 Integration Verifier [v11.7].
-Gate 18 Bulk Audit [v11.7].
-Gate 19 Test-to-Implementation Alignment [v11.7].
-Gate 20 Module Import Side Effect Check [v11.7]."""
+Gate 17 Integration Verifier [v11.11].
+Gate 18 Bulk Audit [v11.11].
+Gate 19 Test-to-Implementation Alignment [v11.11].
+Gate 20 Module Import Side Effect Check [v11.11]."""
 )
 
 # 17. Update changelog
-v117_changelog = """v11.7.0-master:
+v117_changelog = """v11.11.0-master:
 - Added AMEND-53 through AMEND-62.
 - Added Section 39: LLM-Driven Development Pipeline & Verification
 Infrastructure.
@@ -529,16 +529,16 @@ Infrastructure.
 """
 content = content.replace("v11.6.0-master:", v117_changelog + "v11.6.0-master:")
 
-# 18. Add v11.7 safety checklist items
+# 18. Add v11.11 safety checklist items
 content = content.replace(
     "- No Wiki page is committed without sanitization and ledger provenance.",
     """- No Wiki page is committed without sanitization and ledger provenance.
-- No LLM-generated code is accepted without passing deterministic gates. [v11.7]
-- No generated test exercises a phantom interface. [v11.7]
-- No engine module executes side effects at import time. [v11.7]"""
+- No LLM-generated code is accepted without passing deterministic gates. [v11.11]
+- No generated test exercises a phantom interface. [v11.11]
+- No engine module executes side effects at import time. [v11.11]"""
 )
 
 # Write output
 output_path.write_text(content)
-print(f"✅ v11.7.0 master written: {len(content)} bytes, {len(content.splitlines())} lines")
+print(f"✅ v11.11.0 master written: {len(content)} bytes, {len(content.splitlines())} lines")
 print(f"   Output: {output_path}")

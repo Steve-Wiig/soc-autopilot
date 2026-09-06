@@ -1,4 +1,4 @@
-# LOCAL-SOC-SLM Documentation Errata & Corrections (v11.9)
+# LOCAL-SOC-SLM Documentation Errata & Corrections (v11.11)
 
 # SECTION 1: ERRATA TABLE
 
@@ -18,7 +18,7 @@
 | docs/OPERATIONS_RUNBOOK.md (Section 1.4) | Cron schedule `0 2 * * *` hardcoded; backlog at `/data/self_improver/fix_backlog.json` | User-configured cron/systemd timer; backlog at `overnight/fix_backlog.json` |
 | docs/OPERATIONS_RUNBOOK.md (Section 7) | Pipeline uses `engine.openrouter_quota` reading from `engine.quota_ledger`; providers Ollama/vLLM/OpenRouter | Pipeline uses `overnight/openrouter_quota.py` and `overnight/llm_client.py` with OpenRouter->Groq->Gemini |
 | docs/OPERATIONS_RUNBOOK.md (Section 7.2) | Manual execution uses `--process-backlog /data/self_improver/fix_backlog.json` | Manual execution uses `overnight/fix_backlog.json` |
-| docs/DEPLOYMENT_RUNBOOK.md (Section 11) | `overnight/llm_client.py` with OpenRouter/Groq/Gemini providers but async Phase A/B/C; 50 RPD quota; hardcoded 03:00 cron | Sync functions `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; 1000 RPD funded tier; user-configured schedule |
+| docs/DEPLOYMENT_RUNBOOK.md (Section 11) | `overnight/llm_client.py` with OpenRouter/Groq/Gemini providers but async Advisory Generation/B/C; 50 RPD quota; hardcoded 03:00 cron | Sync functions `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; 1000 RPD funded tier; user-configured schedule |
 | docs/DEPLOYMENT_RUNBOOK.md (Section 11.3) | Code block cuts off at `from`; shows async provider classes with Ollama/vLLM/OpenRouter | Complete sync implementation with OpenRouter->Groq fallback, Gemini for prefill/critique |
 | docs/LAB_SETUP_GUIDE.md (Section 2.1) | `slm-overnight` service uses cron `0 3 * * *` hardcoded; `FIX_BACKLOG_PATH=/data/fix_backlog.json` | User-configured timer; `FIX_BACKLOG_PATH=overnight/fix_backlog.json` |
 | docs/LAB_SETUP_GUIDE.md (Section 4.1) | `touch ./data/fix_backlog.json` and `./data/openrouter_quota.json` | Files managed by overnight pipeline at `overnight/fix_backlog.json` and `overnight/openrouter_quota.json` |
@@ -28,7 +28,7 @@
 | docs/OPERATOR_MANUAL.md (Section 8.4) | `overnight/llm_client.py` with `MultiProviderClient` and `ProviderConfig` for vLLM/Ollama/OpenRouter | `overnight/llm_client.py` with OpenRouter->Groq fallback, Gemini for prefill+critique, token-aware pacing, cooldown tracking |
 | docs/OPERATOR_MANUAL.md (Section 8.5) | `overnight/openrouter_quota.py` with `daily_token_budget: 500000` and `openrouter_daily_usd: 10.00` soft limit | `overnight/openrouter_quota.py` with 1000 RPD funded tier, 24h lock, UTC rollover, atomic writes |
 | docs/OPERATOR_MANUAL.md (Section 8.6) | Fix backlog at `/var/lib/soc/fix_backlog.json` with training-stage error context | Fix backlog at `overnight/fix_backlog.json` with advisory analysis/validation/fix application context |
-| docs/OVERNIGHT_PIPELINE.md (Entire document) | Async Phase A/B/C with Gemini prefill, OpenRouter/Groq/Gemini fallback chain, 50 RPD quota, hardcoded 03:00 cron, advisory_queue.jsonl, phase_a_prefill.jsonl, phase_c_drain_report.json | Sync `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; advisory queue in `overnight/advisory_queue/pending/`; fixes to `overnight/fix_backlog.json`; 1000 RPD funded tier; user-configured schedule |
+| docs/OVERNIGHT_PIPELINE.md (Entire document) | Async Advisory Generation/B/C with Unified Queue pre-analysis, OpenRouter/Groq/Gemini fallback chain, 50 RPD quota, hardcoded 03:00 cron, advisory_queue.jsonl, phase_a_prefill.jsonl, phase_c_drain_report.json | Sync `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; advisory queue in `overnight/advisory_queue/pending/`; fixes to `overnight/fix_backlog.json`; 1000 RPD funded tier; user-configured schedule |
 
 # SECTION 2: Overnight Self-Improving Pipeline — CORRECTED (full rewrite)
 

@@ -1,4 +1,4 @@
-# LOCAL-SOC-SLM Documentation Errata & Corrections (v11.9 — v3)
+# LOCAL-SOC-SLM Documentation Errata & Corrections (v11.11 — v3)
 
 # SECTION 1: ERRATA TABLE
 
@@ -18,7 +18,7 @@
 | docs/OPERATIONS_RUNBOOK.md (Section 1.4) | Cron schedule `0 2 * * *` hardcoded; backlog at `/data/self_improver/fix_backlog.json` | User-configured cron/systemd timer; backlog at `overnight/fix_backlog.json` |
 | docs/OPERATIONS_RUNBOOK.md (Section 7) | Pipeline uses `engine.openrouter_quota` reading from `engine.quota_ledger`; providers Ollama/vLLM/OpenRouter | Pipeline uses `overnight/openrouter_quota.py` and `overnight/llm_client.py` with OpenRouter->Groq->Gemini |
 | docs/OPERATIONS_RUNBOOK.md (Section 7.2) | Manual execution uses `--process-backlog /data/self_improver/fix_backlog.json` | Manual execution uses `overnight/fix_backlog.json` |
-| docs/DEPLOYMENT_RUNBOOK.md (Section 11) | `overnight/llm_client.py` with OpenRouter/Groq/Gemini providers but async Phase A/B/C; 50 RPD quota; hardcoded 03:00 cron | Sync functions `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; 1000 RPD funded tier; user-configured schedule |
+| docs/DEPLOYMENT_RUNBOOK.md (Section 11) | `overnight/llm_client.py` with OpenRouter/Groq/Gemini providers but async Advisory Generation/B/C; 50 RPD quota; hardcoded 03:00 cron | Sync functions `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; 1000 RPD funded tier; user-configured schedule |
 | docs/DEPLOYMENT_RUNBOOK.md (Section 11.3) | Code block cuts off at `from`; shows async provider classes with Ollama/vLLM/OpenRouter | Complete sync implementation with OpenRouter->Groq fallback, Gemini for prefill/critique |
 | docs/LAB_SETUP_GUIDE.md (Section 2.1) | `slm-overnight` service uses cron `0 3 * * *` hardcoded; `FIX_BACKLOG_PATH=/data/fix_backlog.json` | User-configured timer; `FIX_BACKLOG_PATH=overnight/fix_backlog.json` |
 | docs/LAB_SETUP_GUIDE.md (Section 4.1) | `touch ./data/fix_backlog.json` and `./data/openrouter_quota.json` | Files managed by overnight pipeline at `overnight/fix_backlog.json` and `overnight/openrouter_quota.json` |
@@ -28,7 +28,7 @@
 | docs/OPERATOR_MANUAL.md (Section 8.4) | `overnight/llm_client.py` with `MultiProviderClient` and `ProviderConfig` for vLLM/Ollama/OpenRouter | `overnight/llm_client.py` with OpenRouter->Groq fallback, Gemini for prefill+critique, token-aware pacing, cooldown tracking |
 | docs/OPERATOR_MANUAL.md (Section 8.5) | `overnight/openrouter_quota.py` with `daily_token_budget: 500000` and `openrouter_daily_usd: 10.00` soft limit | `overnight/openrouter_quota.py` with 1000 RPD funded tier, 24h lock, UTC rollover, atomic writes |
 | docs/OPERATOR_MANUAL.md (Section 8.6) | Fix backlog at `/var/lib/soc/fix_backlog.json` with training-stage error context | Fix backlog at `overnight/fix_backlog.json` with advisory analysis/validation/fix application context |
-| docs/OVERNIGHT_PIPELINE.md (Entire document) | Async Phase A/B/C with Gemini prefill, OpenRouter/Groq/Gemini fallback chain, 50 RPD quota, hardcoded 03:00 cron, advisory_queue.jsonl, phase_a_prefill.jsonl, phase_c_drain_report.json | Sync `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; advisory queue in `overnight/advisory_queue/pending/`; fixes to `overnight/fix_backlog.json`; 1000 RPD funded tier; user-configured schedule |
+| docs/OVERNIGHT_PIPELINE.md (Entire document) | Async Advisory Generation/B/C with Unified Queue pre-analysis, OpenRouter/Groq/Gemini fallback chain, 50 RPD quota, hardcoded 03:00 cron, advisory_queue.jsonl, phase_a_prefill.jsonl, phase_c_drain_report.json | Sync `prefill_advisory_queue()`/`process_advisory_queue()`/`drain_fix_backlog()`; advisory queue in `overnight/advisory_queue/pending/`; fixes to `overnight/fix_backlog.json`; 1000 RPD funded tier; user-configured schedule |
 
 # SECTION 2: Overnight Self-Improving Pipeline — CORRECTED (full rewrite)
 
@@ -63,10 +63,10 @@ The overnight self-improving pipeline is a **synchronous, user-scheduled** proce
 Queue-based self-improver with Gemini pre-analysis pipeline.
 
 Architecture:
-  Phase A (Gemini, abundant free tier):
+  Advisory Generation (Gemini, abundant free tier):
     Pre-analyze ALL files → save advisories to disk queue
     
-  Phase B (OpenRouter, when available):
+  Shadow Canary (OpenRouter, when available):
     Drain the queue → feed advisories to primary models
     Delete advisory file on success
 
@@ -154,14 +154,14 @@ def get_pending_advisories():
 
 
 # ============================================================
-# PHASE A: GEMINI PRE-FILL (uses abundant free tier)
+# Advisory Generation: GEMINI PRE-FILL (uses abundant free tier)
 # ============================================================
 def prefill_advisory_queue(files, api_keys, budget):
     """Use Gemini to pre-analyze all files that don't have pending advisories."""
     QUEUE_DIR.mkdir(parents=True, exist_ok=True)
     
     print(f"\n{'='*70}")
-    print(f"PHASE A: GEMINI PRE-FILL ({len(files)} files)")
+    print(f"Advisory Generation: GEMINI PRE-FILL ({len(files)} files)")
     print(f"{'='*70}")
     
     filled = 0
@@ -207,7 +207,7 @@ def prefill_advisory_queue(files, api_keys, budget):
 
 
 # ============================================================
-# PHASE B: OPENROUTER PROCESSING (drains the queue)
+# Shadow Canary: OPENROUTER PROCESSING (drains the queue)
 # ============================================================
 def _normalize(x):
     if isinstance(x, dict):
@@ -229,7 +229,7 @@ def process_advisory_queue(api_keys, budget, state, max_items=50):
         return 0
     
     print(f"\n{'='*70}")
-    print(f"PHASE B: OPENROUTER PROCESSING ({len(pending)} pending advisories)")
+    print(f"Shadow Canary: OPENROUTER PROCESSING ({len(pending)} pending advisories)")
     print(f"{'='*70}")
     
     processed = 0
@@ -461,13 +461,13 @@ def main():
             print(f"ITERATION {iteration}/{a.max_iterations}")
             print(f"{'#'*70}")
             
-            # Phase A: Fill queue with Gemini pre-analyses
+            # Advisory Generation: Fill queue with Gemini pre-analyses
             prefill_advisory_queue(files, keys, budget)
             
-            # Phase B: Process queue with OpenRouter
+            # Shadow Canary: Process queue with OpenRouter
             processed = process_advisory_queue(keys, budget, state)
 
-            # Phase C: apply a few backlog fixes (budget has recovered)
+            # Backlog Drain: apply a few backlog fixes (budget has recovered)
             fixed = drain_fix_backlog(keys, max_fixes=3)
             print(f"  🔧 Backlog fixes applied this iteration: {fixed}")
             

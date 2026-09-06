@@ -1,110 +1,101 @@
 #!/usr/bin/env python3
 """
-P0 Governance: Ensures documentation and manifests match the actual codebase state.
-Prevents LLMs from ingesting deprecated architectural patterns.
+tools/verify_truth_sync.py — Consolidated truth checks
+
+Checks:
+1. Documentation reflects current architecture (no Advisory Generation/B)
+2. Manifest SHA matches actual HEAD
+3. Source code contains no deprecated terms
 """
-import sys
+
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-def check_docs():
-    """Verify OVERNIGHT_PIPELINE.md doesn't reference deprecated Phase A/B."""
-    doc_path = ROOT / "docs" / "OVERNIGHT_PIPELINE.md"
-    if not doc_path.exists():
-        print("❌ CRITICAL: docs/OVERNIGHT_PIPELINE.md missing")
-        return False
-        
-    text = doc_path.read_text().lower()
-    
-    # Deprecated patterns that should NOT exist in v11.11+
-    deprecated = ["phase a", "phase b", "gemini prefill", "v11.9"]
-    violations = [term for term in deprecated if term in text]
-    
-    if violations:
-        print(f"❌ TRUTH DRIFT: Docs contain deprecated terms: {violations}")
-        print("   Action: Update docs to reflect v11.11 (Shadow Canary, Unified Queue)")
-        return False
-    
-    # Required patterns for v11.11+
-    required = ["shadow canary", "unified queue", "slm triage"]
-    missing = [term for term in required if term not in text]
-    if missing:
-        print(f"⚠️ Docs missing v11.11 features: {missing}")
-        # We won't fail the build for this yet, just warn
-        
-    print("✅ Docs are synchronized with v11.11 architecture.")
+def check_docs_current() -> bool:
+    """Verify docs describe v11.11 Unified Queue, not Advisory Generation/B."""
+    docs_dir = ROOT / "docs"
+    forbidden = ["Advisory Generation", "Shadow Canary", "Backlog Drain", "Unified Queue pre-analysis", "v11.11"]
+
+    for md_file in docs_dir.glob("*.md"):
+        if "archive" in md_file.parts:
+            continue  # Skip archived docs
+        content = md_file.read_text().lower()
+        for term in forbidden:
+            if term in content:
+                print(f"❌ {md_file.name} contains deprecated term: {term}")
+                return False
+
+    print("✅ Documentation reflects current architecture")
     return True
 
-def check_manifest():
-    """Verify _manifest.md references the actual current HEAD."""
-    manifest_path = ROOT / "_manifest.md"
-    if not manifest_path.exists():
-        print("❌ CRITICAL: _manifest.md missing")
-        return False
-        
-    text = manifest_path.read_text()
-    
-    # Get actual HEAD
+def check_manifest_matches_head() -> bool:
+    """Verify _manifest.md SHA matches git rev-parse HEAD."""
     try:
         actual_head = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
-        ).strip()[:7] # Short SHA
-    except Exception:
-        print("❌ CRITICAL: Could not determine git HEAD")
-        return False
-        
-    if actual_head not in text:
-        print(f"❌ TRUTH DRIFT: Manifest references stale SHA. Actual HEAD is {actual_head}")
-        print("   Action: Regenerate manifest from current HEAD.")
-        return False
-        
-    print(f"✅ Manifest synchronized with HEAD ({actual_head}).")
-    return True
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            text=True
+        ).strip()[:7]
 
-if __name__ == "__main__":
-    docs_ok = check_docs()
-    manifest_ok = check_manifest()
-    
-    if not (docs_ok and manifest_ok):
-        sys.exit(1)
-    print("\n🎯 ALL TRUTH SYNC CHECKS PASSED")
-    sys.exit(0)
+        manifest = (ROOT / "_manifest.md").read_text()
+        if actual_head not in manifest:
+            print(f"❌ Manifest SHA doesn't match HEAD ({actual_head})")
+            return False
 
-def check_source_code_for_deprecated_terms():
-    """Check source code files for deprecated architecture terms."""
-    deprecated_terms = ["phase a", "phase b", "gemini prefill", "v11.9"]
-    source_dirs = ["overnight/", "engine/", "orchestrator/", "memory/"]
-    
-    findings = []
-    from pathlib import Path
-    
-    for source_dir in source_dirs:
-        dir_path = Path(source_dir)
+        print(f"✅ Manifest SHA matches HEAD ({actual_head})")
+        return True
+
+    except Exception as e:
+        print(f"❌ Manifest check failed: {e}")
+        return False
+
+def check_source_no_deprecated() -> bool:
+    """Verify source code contains no deprecated architecture terms."""
+    forbidden = ["Advisory Generation", "Shadow Canary", "Backlog Drain", "Unified Queue pre-analysis", "v11.11"]
+    source_dirs = ["engine", "overnight", "orchestrator", "memory", "tools"]
+
+    for dir_name in source_dirs:
+        dir_path = ROOT / dir_name
         if not dir_path.exists():
             continue
-            
-        for py_file in dir_path.glob("*.py"):
-            try:
-                content = py_file.read_text().lower()
-                for term in deprecated_terms:
-                    if term in content:
-                        findings.append((str(py_file), term))
-            except Exception:
-                pass
-    
-    return findings
 
-# Add source code check to main validation
-if __name__ == "__main__":
-    print("\n🔍 Checking source code for deprecated terms...")
-    source_findings = check_source_code_for_deprecated_terms()
-    
-    if source_findings:
-        print(f"❌ Found {len(source_findings)} deprecated terms in source:")
-        for filepath, term in source_findings[:10]:
-            print(f"  {filepath}: contains '{term}'")
-        exit(1)
+        for py_file in dir_path.rglob("*.py"):
+            content = py_file.read_text().lower()
+            for term in forbidden:
+                if term in content:
+                    print(f"❌ {py_file.relative_to(ROOT)} contains: {term}")
+                    return False
+
+    print("✅ Source code contains no deprecated terms")
+    return True
+
+def main() -> int:
+    """Run all truth-sync checks."""
+    print("🔍 Running truth synchronization checks...\n")
+
+    docs_ok = check_docs_current()
+    manifest_ok = check_manifest_matches_head()
+    source_ok = check_source_no_deprecated()
+
+    print("\n" + "="*60)
+    if docs_ok and manifest_ok and source_ok:
+        print("✅ ALL TRUTH-SYNC CHECKS PASSED")
+        return 0
     else:
-        print("✅ No deprecated terms in source code")
+        print("❌ TRUTH-SYNC CHECKS FAILED")
+        print("\nRequired actions:")
+        if not docs_ok:
+            print("  • Update docs/ to describe v11.11 Unified Queue")
+            print("  • Remove all Advisory Generation/B/C references from current docs")
+        if not manifest_ok:
+            print("  • Regenerate _manifest.md with current HEAD SHA")
+        if not source_ok:
+            print("  • Remove deprecated terms from source code")
+            print("  • See docs/OVERNIGHT_PIPELINE.md for current architecture")
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,7 +1,7 @@
 # LOCAL-SOC-SLM Master Documentation Bundle (TEST COPY)
 
 **Generated:** 2026-08-23 22:08:46  
-**Source:** v11.9.0 Blueprint  
+**Source:** v11.11.0 Blueprint  
 **Status:** REVIEW COPY — not yet promoted to final  
 **Total Documents:** 6/6  
 **Combined Line Count:** 4084 lines
@@ -17,7 +17,7 @@ This document combines all operational documentation for the LOCAL-SOC-SLM platf
 
 *Source: `docs/ARCHITECTURE.md` (741 lines)*
 
-# LOCAL-SOC-SLM Architecture Document (v11.9)
+# LOCAL-SOC-SLM Architecture Document (v11.11)
 
 ## Overview
 
@@ -399,7 +399,7 @@ class QueueManager:
 ```mermaid
 flowchart LR
     subgraph SEALER["HashChainSealer (engine/hash_chain_sealer.py)"]
-        INIT["initialize_chain()\nGenesis: SHA256('LOCAL-SOC-SLM-v11.9')"]
+        INIT["initialize_chain()\nGenesis: SHA256('LOCAL-SOC-SLM-v11.11')"]
         SEAL["seal_event(event)\nHMAC-SHA256(prev_hash || '|' || canonical_json)"]
         VERIFY["verify_chain(start, end)\nRecompute & compare"]
         ROTATE["rotate_key()\nHMAC-SHA256 with rotated key"]
@@ -691,7 +691,7 @@ class RAGRetriever:
 
 ---
 
-## 6. Overnight Self-Improving Pipeline (v11.9)
+## 6. Overnight Self-Improving Pipeline (v11.11)
 
 ```mermaid
 flowchart TD
@@ -853,7 +853,7 @@ python -m engine.slm_triage_worker --workers 8 --model-config config/models.yaml
 python -m engine.queue_manager --status
 ```
 
-### 1.4 Start Overnight Self-Improving Pipeline (v11.9)
+### 1.4 Start Overnight Self-Improving Pipeline (v11.11)
 
 ```bash
 # Schedule via cron (runs 02:00 daily)
@@ -1180,7 +1180,7 @@ python -m engine.slm_triage_worker --workers 8 --model-config config/models.yaml
 
 ## 6. Rotating API Keys
 
-### 6.1 Rotate OpenRouter API Key (v11.9)
+### 6.1 Rotate OpenRouter API Key (v11.11)
 
 ```bash
 # 1. Generate new key at https://openrouter.ai/keys
@@ -1245,7 +1245,7 @@ python -m memory.embeddings --rotate-key --provider openai --new-key "sk-NEW_KEY
 python -m memory.embeddings --test-connection
 ```
 
-### 6.4 Update OpenRouter Quota Tracking (v11.9)
+### 6.4 Update OpenRouter Quota Tracking (v11.11)
 
 ```bash
 # Check current quota status (openrouter_quota is a helper under engine/ that reads from quota_ledger)
@@ -1308,7 +1308,7 @@ print('Fallback:', 'OK' if r2 else 'FAIL')
 
 ---
 
-## 7. Overnight Self-Improving Pipeline Operations (v11.9)
+## 7. Overnight Self-Improving Pipeline Operations (v11.11)
 
 ### 7.1 Pipeline Overview
 
@@ -1485,7 +1485,7 @@ pgrep -af "python -m engine\.|python -m orchestrator\.|python -m memory\." | wc 
 
 *Source: `docs/deployment_runbook.md` (713 lines)*
 
-# LOCAL-SOC-SLM Deployment Runbook v11.9
+# LOCAL-SOC-SLM Deployment Runbook v11.11
 
 ## 1. Prerequisites
 
@@ -1734,7 +1734,7 @@ engine:
     pii_patterns_file: "config/pii_patterns.yaml"
     max_event_size_mb: 10
   slm_triage_worker:
-    model: "local-slm-v11.9"
+    model: "local-slm-v11.11"
     batch_size: 32
     timeout_seconds: 30
   quota_ledger:
@@ -1774,7 +1774,7 @@ orchestrator:
         fallback_order: 2
       - name: "vllm"
         base_url: "http://localhost:8000"
-        models: ["local-slm-v11.9"]
+        models: ["local-slm-v11.11"]
         fallback_order: 3
 
 memory:
@@ -2013,7 +2013,7 @@ sudo systemctl enable --now soc-slm-orchestrator@model_registry
 sudo systemctl enable --now soc-slm-memory@embeddings
 sudo systemctl enable --now soc-slm-memory@retention
 
-# Phase 5: Overnight Pipeline (v11.9)
+# Phase 5: Overnight Pipeline (v11.11)
 sudo systemctl enable --now soc-slm-overnight.timer
 
 # Verify all active
@@ -2039,7 +2039,7 @@ python tools/redis_check.py --host localhost --port 6379
 python tools/engine_check.py --module intake_wazuh --port 5140
 python tools/engine_check.py --module intake_eve --port 5141
 python tools/engine_check.py --module sanitization_pipeline --test-pii
-python tools/engine_check.py --module slm_triage_worker --model local-slm-v11.9
+python tools/engine_check.py --module slm_triage_worker --model local-slm-v11.11
 python tools/engine_check.py --module quota_ledger --provider openrouter
 python tools/engine_check.py --module queue_manager --depth-check
 python tools/engine_check.py --module enrichment_scheduler --test-ioc
@@ -2054,7 +2054,7 @@ python tools/orchestrator_check.py --module model_registry --test-fallback
 python tools/memory_check.py --module embeddings --model BAAI/bge-large-en-v1.5 --dim 1024
 python tools/memory_check.py --module retention --test-policy
 
-# Overnight pipeline (v11.9)
+# Overnight pipeline (v11.11)
 python tools/overnight_check.py --module self_improver --dry-run
 python tools/overnight_check.py --module llm_client --test-fallback --test-rate-limit
 python tools/overnight_check.py --module openrouter_quota --check-daily
@@ -2092,7 +2092,7 @@ python tools/overnight_check.py --module fix_backlog --validate-json
 ### 10.1 Validation Script
 ```bash
 cd /opt/soc-slm
-python tools/spike_validator.py --requirements docs/requirements_spike_v11.9.yaml --output spike_report.json
+python tools/spike_validator.py --requirements docs/requirements_spike_v11.11.yaml --output spike_report.json
 ```
 
 ### 10.2 Key Spike Requirements (Subset)
@@ -2128,7 +2128,7 @@ python tools/spike_validator.py --requirements docs/requirements_spike_v11.9.yam
 ```bash
 # Run all 117 spike validations (takes ~45 minutes)
 python tools/spike_validator.py \
-  --requirements docs/requirements_spike_v11.9.yaml \
+  --requirements docs/requirements_spike_v11.11.yaml \
   --parallel 4 \
   --timeout 3600 \
   --output /opt/soc-slm/logs/spike_validation_$(date +%Y%m%d_%H%M%S).json \
@@ -2142,7 +2142,7 @@ python tools/spike_validator.py \
 
 ---
 
-## 11. v11.9 Overnight Self-Improving Pipeline
+## 11. v11.11 Overnight Self-Improving Pipeline
 
 ### 11.1 Pipeline Components
 ```
@@ -2206,7 +2206,7 @@ from
 
 *Source: `docs/LAB_SETUP_GUIDE.md` (837 lines)*
 
-# LOCAL-SOC-SLM Lab Setup Guide v11.9
+# LOCAL-SOC-SLM Lab Setup Guide v11.11
 
 ## 1. Hardware Requirements
 
@@ -2488,7 +2488,7 @@ services:
         reservations:
           memory: 4G
 
-  # --- Overnight Self-Improving Pipeline (v11.9) ---
+  # --- Overnight Self-Improving Pipeline (v11.11) ---
   slm-overnight:
     build:
       context: ..
@@ -2822,7 +2822,7 @@ mkdir -p certs
 docker run --rm -v $(pwd)/certs:/certs wazuh/wazuh-certs-tool:4.7.0 \
   -a -n 3 -o /certs -x 3650
 
-# Prepare persistent data files for v11.9 pipeline
+# Prepare persistent data files for v11.11 pipeline
 mkdir -p ./data
 touch ./data/fix_backlog.json ./data/openrouter_quota.json
 echo '{}' > ./data/fix_backlog.json
@@ -3051,9 +3051,9 @@ lua:
 
 *Source: `docs/operator_manual.md` (589 lines)*
 
-# LOCAL-SOC-SLM Operator Manual v11.9
+# LOCAL-SOC-SLM Operator Manual v11.11
 
-## ⚠️ Breaking Changes (v11.9)
+## ⚠️ Breaking Changes (v11.11)
 
 - **Removed**: `engine/intake_syslog.py` — Migrate to `intake_wazuh.py` or `intake_eve.py` immediately.
 - **Schema Change**: `sanitization_pipeline.py` now requires `config/sanitization_rules.yaml` v2 schema (adds `pii_entity_types` field).
@@ -3310,7 +3310,7 @@ sqlite3 /var/lib/soc/hash_chain.db "SELECT seal_id, timestamp, event_count, root
 
 ---
 
-## 8. Overnight Self-Improving Pipeline (v11.9)
+## 8. Overnight Self-Improving Pipeline (v11.11)
 
 ### 8.1 Pipeline Overview
 
@@ -3594,7 +3594,7 @@ python -m engine.queue_manager drain --timeout 300
 python -m orchestrator.model_registry list --status promoted
 
 # Rollback to previous
-python -m orchestrator.model_registry promote --adapter-id mistral-7b-lora-v11.8 --force
+python -m orchestrator.model_registry promote --adapter-id mistral-7b-lora-v11.11 --force
 ```
 
 ### 11.3 Data Recovery
@@ -3626,7 +3626,7 @@ python -m engine.hash_chain_sealer verify --full
 
 ---
 
-## 13. Version-Specific Notes (v11.9)
+## 13. Version-Specific Notes (v11.11)
 
 - **Breaking**: `sanitization_pipeline.py` now requires `config/sanitization_rules.yaml` v2 schema (adds `pii_entity_types` field)
 - **New**: `quota_ledger.py` tracks per-model token usage; integrate with billing via `quota_ledger.export_billing()`
@@ -3644,11 +3644,11 @@ python -m engine.hash_chain_sealer verify --full
 
 ---
 
-# Overnight Pipeline (v11.9)
+# Overnight Pipeline (v11.11)
 
 *Source: `docs/OVERNIGHT_PIPELINE.md` (493 lines)*
 
-# OVERNIGHT PIPELINE — Architecture & Operations Guide (v11.9)
+# OVERNIGHT PIPELINE — Architecture & Operations Guide (v11.11)
 
 ## 1. Overview
 
@@ -3660,9 +3660,9 @@ The overnight self-improving pipeline runs as a standalone cron job (`0 3 * * *`
 
 ---
 
-## 2. Phase Architecture
+## 2. Advisory Generationrchitecture
 
-### 2.1 Phase A — Gemini Pre-fill (`overnight/self_improver.py::phase_a_prefill`)
+### 2.1 Advisory Generation — Gemini Pre-fill (`overnight/self_improver.py::phase_a_prefill`)
 
 ```python
 async def phase_a_prefill(advisories: list[Advisory]) -> list[PrefillResult]:
@@ -3678,9 +3678,9 @@ async def phase_a_prefill(advisories: list[Advisory]) -> list[PrefillResult]:
 - **Purpose**: Generate initial fix drafts for all advisories in a single cheap pass.
 - **Model**: `gemini-1.5-flash` (1M token context, $0.075/1M input).
 - **Output**: `PrefillResult` objects serialized to `overnight/phase_a_prefill.jsonl`.
-- **Failure mode**: If Gemini quota exhausted, skip Phase A and proceed to Phase B with empty drafts.
+- **Failure mode**: If Gemini quota exhausted, skip Advisory Generation and proceed to Shadow Canary with empty drafts.
 
-### 2.2 Phase B — Analysis with Fallback Chain (`overnight/self_improver.py::phase_b_analyze`)
+### 2.2 Shadow Canary — Analysis with Fallback Chain (`overnight/self_improver.py::phase_b_analyze`)
 
 ```python
 async def phase_b_analyze(prefills: list[PrefillResult]) -> list[AnalysisResult]:
@@ -3713,7 +3713,7 @@ async def phase_b_analyze(prefills: list[PrefillResult]) -> list[AnalysisResult]
 - **Model curation**: Only curated models in `overnight/models.yaml` are eligible; auto-updated weekly via `overnight/update_model_catalog.py`.
 - **All-providers-exhausted behavior**: If every provider is in cooldown or returns errors, `complete_with_fallback` raises `AllProvidersExhausted`. The pipeline catches this and exits with code **75 (EX_TEMPFAIL)** so the systemd timer (`overnight-pipeline.timer`) will retry on the next scheduled run.
 
-### 2.3 Phase C — Backlog Drain (`overnight/self_improver.py::phase_c_drain`)
+### 2.3 Backlog Drain — Backlog Drain (`overnight/self_improver.py::phase_c_drain`)
 
 ```python
 async def phase_c_drain(analyses: list[AnalysisResult]) -> DrainReport:
@@ -3873,7 +3873,7 @@ class OpenRouterQuota:
 
 - **Append-only**: Daytime workers `engine/queue_manager.py::enqueue_advisory()` append lines.
 - **Crash resilience**: JSONL survives partial writes; reader skips malformed lines.
-- **Decoupled analysis/fixing**: Phase A/B read queue; Phase C drains; no in-memory coupling.
+- **Decoupled analysis/fixing**: Advisory Generation/B read queue; Backlog Drain drains; no in-memory coupling.
 
 ### 5.2 Fix Backlog (`overnight/fix_backlog.json`)
 
@@ -4064,11 +4064,11 @@ python -m overnight.cost_report --days 30
 
 | Symptom | Diagnosis | Resolution |
 |---------|-----------|------------|
-| Pipeline stuck at Phase B | All providers in cooldown | `cat overnight/llm_cooldown.json`; wait or manually clear |
+| Pipeline stuck at Shadow Canary | All providers in cooldown | `cat overnight/llm_cooldown.json`; wait or manually clear |
 | OpenRouter 429 despite quota | Header pre-emption missed | Check `x-ratelimit-reset` in logs; increase buffer |
 | `apply_auto_fix` timeout | Test suite hangs | Add `--timeout=60` to pytest; investigate flaky test; ensure `--testmon` is used |
 | Fix rejected: `pytest_failed` | Fix breaks existing tests | Review `fix_backlog.json` rejected entry; adjust fix plan |
-| Advisory re-queued repeatedly | Confidence < 0.85 or critique veto | Inspect Phase B analysis + critique; may need manual triage |
+| Advisory re-queued repeatedly | Confidence < 0.85 or critique veto | Inspect Shadow Canary analysis + critique; may need manual triage |
 | Pipeline exits with code 75 | All LLM providers exhausted (cooldown/error) | Systemd timer will retry automatically; check `llm_cooldown.json` |
 | `git commit` fails with "author identity unknown" | Git user not configured for pipeline user | Set `git config user.email/name` in systemd unit or `/etc/gitconfig` |
 
@@ -4089,8 +4089,8 @@ python -m overnight.cost_report --days 30
 | `overnight/fix_backlog.json` | Applied/pending/rejected fix history |
 | `overnight/openrouter_quota.json` | OpenRouter daily usage + lock state |
 | `overnight/llm_cooldown.json` | Per-provider cooldown timestamps |
-| `overnight/phase_a_prefill.jsonl` | Phase A intermediate output |
-| `overnight/phase_c_drain_report.json` | Phase C summary (applied/failed) |
+| `overnight/phase_a_prefill.jsonl` | Advisory Generation intermediate output |
+| `overnight/phase_c_drain_report.json` | Backlog Drain summary (applied/failed) |
 | `overnight/recover_backups.py` | Crash recovery for `.orig_backup` files |
 | `overnight/update_model_catalog.py` | Weekly model catalog refresh |
 | `overnight/cost_report.py` | Budget estimation from usage logs |
@@ -4115,7 +4115,7 @@ Install via: `pip install -r overnight/requirements.txt`
 ## 12. Integration Points
 
 - **Daytime intake**: `engine/queue_manager.py::enqueue_advisory()` → `overnight/advisory_queue.jsonl`
-- **Enrichment context**: `orchestrator/context_stitcher.py::build_context(advisory)` used in Phase A/B prompts
+- **Enrichment context**: `orchestrator/context_stitcher.py::build_context(advisory)` used in Advisory Generation/B prompts
 - **Model registry**: `orchestrator/model_registry.py` provides model metadata for curation
 - **Memory/RAG**: `memory/embeddings.py::search_similar(advisory.text, k=5)` injects historical fixes into prompts
 - **Retention**: `memory/retention.py` purges `fix_backlog.json` entries older than 90 days
@@ -4140,5 +4140,5 @@ Used by: `openrouter_quota.py`, `llm_client.py` (cooldown), `fix_backlog.json` m
 
 ---
 
-*Document version: v11.9 — Generated for LOCAL-SOC-SLM overnight pipeline operators*
+*Document version: v11.11 — Generated for LOCAL-SOC-SLM overnight pipeline operators*
 

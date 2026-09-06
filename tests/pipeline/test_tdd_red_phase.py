@@ -4,7 +4,7 @@ Regression test for Improvement #2: TDD Red Phase Verification
 BEFORE: Generated TDD tests were accepted without verifying they fail.
 PROBLEM: Vacuous tests (always pass) create false-positive fixes.
 CHANGE: Run pytest on the generated test. If it passes immediately,
-        reject it. Only accept tests that fail (Red phase confirmed).
+        reject it. Only accept tests that fail (Red Backlog Drainonfirmed).
 """
 import sys
 from pathlib import Path
@@ -27,7 +27,7 @@ def tdd_env(tmp_path):
 def test_vacuous_tdd_test_rejected(tdd_env):
     """A TDD test that passes immediately must be rejected (not red).
 
-    Flow: baseline FAILS -> TDD generated -> red phase check PASSES -> reject test.
+    Flow: baseline FAILS -> TDD generated -> red Backlog Drainheck PASSES -> reject test.
     """
     tmp_path, src = tdd_env
 
@@ -40,7 +40,7 @@ def test_vacuous_tdd_test_rejected(tdd_env):
         call_count["n"] += 1
         if call_count["n"] == 1:
             return "AssertionError: baseline failure"  # Baseline FAILS -> proceed to TDD
-        return None  # Red phase check PASSES -> test is vacuous -> reject
+        return None  # Red Backlog Drainheck PASSES -> test is vacuous -> reject
 
     with patch("overnight.self_improver.ROOT", tmp_path), \
          patch("overnight.self_improver._get_repo_fingerprint", return_value="unique-test-fp"), \
@@ -59,7 +59,7 @@ def test_vacuous_tdd_test_rejected(tdd_env):
 def test_valid_tdd_test_accepted(tdd_env):
     """A TDD test that fails (red phase) must be accepted as acceptance criteria.
 
-    Flow: baseline FAILS -> TDD generated -> red phase check FAILS -> keep test.
+    Flow: baseline FAILS -> TDD generated -> red Backlog Drainheck FAILS -> keep test.
     """
     tmp_path, src = tdd_env
 
@@ -86,4 +86,4 @@ def test_valid_tdd_test_accepted(tdd_env):
 
     # The valid test file must still exist (not deleted)
     test_file = tmp_path / "tests" / "test_tdd_auto_dummy_module.py"
-    assert test_file.exists(), "Valid TDD test (red phase confirmed) should be kept"
+    assert test_file.exists(), "Valid TDD test (red Backlog Drainonfirmed) should be kept"

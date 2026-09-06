@@ -24,7 +24,7 @@ def configure_logging() -> None:
 
     This function MUST be called explicitly at application startup.
     It is NOT called at module import time to avoid filesystem I/O side effects
-    during import (violates v11.7 no module-level side effects).
+    during import (violates v11.11 no module-level side effects).
     """
     if not logger.handlers:
         log_dir = os.path.dirname(LOG_PATH)

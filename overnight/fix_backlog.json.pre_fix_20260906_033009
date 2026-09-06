@@ -1,0 +1,106 @@
+[
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 45,
+      "line_end": 54,
+      "description": "Inefficient fuzzy matching: nested loops create strings repeatedly for difflib comparison, O(n^2) string allocations",
+      "suggestion": "Pre-compute stripped line arrays once, use SequenceMatcher on line sequences directly without joining to strings, or limit search window",
+      "impact": "medium",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 30,
+      "line_end": 30,
+      "description": "Missing return type annotation for _locate_region function",
+      "suggestion": "Add return type: -> tuple[int, int]",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 57,
+      "line_end": 57,
+      "description": "Missing return type annotation for apply_multi_file_patches function",
+      "suggestion": "Add return type: -> dict[Path, str]",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 53,
+      "line_end": 53,
+      "description": "Magic number 0.80 for fuzzy match threshold without constant or documentation",
+      "suggestion": "Define FUZZY_MATCH_THRESHOLD = 0.80 as module constant with docstring explaining rationale",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 20,
+      "line_end": 28,
+      "description": "parse_multi_file_diff lacks docstring and input validation",
+      "suggestion": "Add docstring describing expected diff format, validate non-empty search/replace, limit input size",
+      "impact": "low",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 30,
+      "line_end": 55,
+      "description": "_locate_region lacks docstring explaining algorithm, parameters, and return values",
+      "suggestion": "Add comprehensive docstring with examples of normalized vs fuzzy matching behavior",
+      "impact": "low",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 57,
+      "line_end": 84,
+      "description": "apply_multi_file_patches lacks docstring explaining behavior, exceptions, and return value",
+      "suggestion": "Add docstring describing patch application order, error conditions, and that caller must write files",
+      "impact": "low",
+      "effort": "small"
+    }
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 63,
+      "line_end": 63,
+      "description": "File read repeated for each patch targeting same file (compounds with correctness issue #2)",
+      "suggestion": "Fix by reading once per file as part of cumulative patch fix",
+      "impact": "low",
+      "effort": "trivial"
+    }
+  }
+]
