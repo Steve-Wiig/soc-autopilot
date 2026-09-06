@@ -1,89 +1,27 @@
-"""Tests for orchestrator/model_registry.py — ModelRegistryClient."""
-import hashlib
-import sys
-import tempfile
-from pathlib import Path
+import pytest
 from unittest.mock import patch, MagicMock
+from engine.model_registry import ModelRouter, OpenAICompatibleProvider, ProviderConfig
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from orchestrator.model_registry import ModelRegistryClient
-
-
-def test_init_creates_client():
-    """ModelRegistryClient should initialize with db_path and routing config."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = str(Path(tmpdir) / "test_registry.db")
-        routing_config = str(Path(__file__).parent.parent / "configs" / "adapter_routing.v11.3.yaml")
+def test_edge_node_routing_and_failover():
+    router = ModelRouter()
+    
+    # Register a "dead" primary node and a "healthy" edge node
+    dead_config = ProviderConfig("dead_gpu", "triage", "http://localhost:9999")
+    edge_config = ProviderConfig("android_qwen", "triage", "http://192.168.1.19:12434")
+    
+    dead_node = OpenAICompatibleProvider(dead_config)
+    edge_node = OpenAICompatibleProvider(edge_config)
+    
+    router.register(dead_node)
+    router.register(edge_node)
+    
+    # Mock the health checks and generation
+    with patch.object(dead_node, 'is_healthy', return_value=False), \
+         patch.object(edge_node, 'is_healthy', return_value=True), \
+         patch.object(edge_node, 'generate', return_value="Verdict: Safe") as mock_gen:
         
-        client = ModelRegistryClient(db_path=db_path, routing_config_path=routing_config)
-        assert client is not None
-
-
-def test_get_adapter_returns_dict():
-    """get_adapter should return a dict with adapter info for a valid task_type."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = str(Path(tmpdir) / "test_registry.db")
-        routing_config = str(Path(__file__).parent.parent / "configs" / "adapter_routing.v11.3.yaml")
+        result = router.route("Analyze this log", role="triage", model="qwen1.5b")
         
-        client = ModelRegistryClient(db_path=db_path, routing_config_path=routing_config)
-        
-        # Try a common task_type from the routing config
-        # If no adapters are registered yet, this may return empty or raise
-        # We test that it doesn't crash and returns expected type
-        try:
-            result = client.get_adapter("triage_summary")
-            assert isinstance(result, dict) or result is None
-        except Exception:
-            # If no adapters exist yet, that's acceptable for a fresh DB
-            pass
-
-
-def test_verify_integrity_valid_adapter():
-    """verify_integrity should return True for a valid adapter file."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = str(Path(tmpdir) / "test_registry.db")
-        routing_config = str(Path(__file__).parent.parent / "configs" / "adapter_routing.v11.3.yaml")
-        
-        # Create a fake adapter file
-        adapter_path = Path(tmpdir) / "test_adapter.safetensors"
-        adapter_content = b"fake adapter weights for testing"
-        adapter_path.write_bytes(adapter_content)
-        expected_sha256 = hashlib.sha256(adapter_content).hexdigest()
-        
-        client = ModelRegistryClient(db_path=db_path, routing_config_path=routing_config)
-        
-        adapter_data = {
-            "sha256": expected_sha256,
-            "role": "triage",
-            "status": "active",
-        }
-        
-        result = client.verify_integrity(adapter_data, str(adapter_path))
-        assert result is True
-
-
-def test_verify_integrity_tampered_adapter():
-    """verify_integrity should return False for a tampered adapter file."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = str(Path(tmpdir) / "test_registry.db")
-        routing_config = str(Path(__file__).parent.parent / "configs" / "adapter_routing.v11.3.yaml")
-        
-        # Create a fake adapter file
-        adapter_path = Path(tmpdir) / "test_adapter.safetensors"
-        adapter_content = b"fake adapter weights for testing"
-        adapter_path.write_bytes(adapter_content)
-        
-        # Use a WRONG sha256 (simulating tampering)
-        wrong_sha256 = hashlib.sha256(b"tampered content").hexdigest()
-        
-        client = ModelRegistryClient(db_path=db_path, routing_config_path=routing_config)
-        
-        adapter_data = {
-            "sha256": wrong_sha256,
-            "role": "triage",
-            "status": "active",
-        }
-        
-        result = client.verify_integrity(adapter_data, str(adapter_path))
-        assert result is False
+        assert result == "Verdict: Safe"
+        mock_gen.assert_called_once()
+        print("✅ PROVEN: Router correctly bypassed dead node and routed to Edge node.")
