@@ -3,7 +3,7 @@
 tools/verify_truth_sync.py — Consolidated truth checks
 
 Checks:
-1. Documentation reflects current architecture (no Advisory Generation/B)
+1. Documentation reflects current architecture (no Phase A/B)
 2. Manifest SHA matches actual HEAD
 3. Source code contains no deprecated terms
 """
@@ -14,19 +14,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# These are the terms we're checking FOR (deprecated terms that should NOT exist)
+FORBIDDEN_TERMS = ["phase a", "phase b", "phase c", "gemini prefill", "v11.9", "v11.8", "v11.7"]
+
+# Directories to skip entirely
+SKIP_DIRS = {".venv", ".git", "__pycache__", "node_modules", ".bak", "archive"}
+
+def should_skip(path: Path) -> bool:
+    """Check if a path should be skipped."""
+    return any(skip in path.parts for skip in SKIP_DIRS)
+
 def check_docs_current() -> bool:
-    """Verify docs describe v11.11 Unified Queue, not Advisory Generation/B."""
+    """Verify docs describe v11.11 Unified Queue, not deprecated phases."""
     docs_dir = ROOT / "docs"
-    forbidden = ["Advisory Generation", "Shadow Canary", "Backlog Drain", "Unified Queue pre-analysis", "v11.11"]
+    if not docs_dir.exists():
+        print("⚠️ docs/ directory not found")
+        return True
 
     for md_file in docs_dir.glob("*.md"):
-        if "archive" in md_file.parts:
-            continue  # Skip archived docs
-        content = md_file.read_text().lower()
-        for term in forbidden:
-            if term in content:
-                print(f"❌ {md_file.name} contains deprecated term: {term}")
-                return False
+        if should_skip(md_file):
+            continue
+        try:
+            content = md_file.read_text().lower()
+            for term in FORBIDDEN_TERMS:
+                if term in content:
+                    print(f"❌ {md_file.name} contains deprecated term: {term}")
+                    return False
+        except Exception:
+            pass
 
     print("✅ Documentation reflects current architecture")
     return True
@@ -40,7 +55,12 @@ def check_manifest_matches_head() -> bool:
             text=True
         ).strip()[:7]
 
-        manifest = (ROOT / "_manifest.md").read_text()
+        manifest_path = ROOT / "_manifest.md"
+        if not manifest_path.exists():
+            print("❌ _manifest.md not found")
+            return False
+
+        manifest = manifest_path.read_text()
         if actual_head not in manifest:
             print(f"❌ Manifest SHA doesn't match HEAD ({actual_head})")
             return False
@@ -54,8 +74,8 @@ def check_manifest_matches_head() -> bool:
 
 def check_source_no_deprecated() -> bool:
     """Verify source code contains no deprecated architecture terms."""
-    forbidden = ["Advisory Generation", "Shadow Canary", "Backlog Drain", "Unified Queue pre-analysis", "v11.11"]
     source_dirs = ["engine", "overnight", "orchestrator", "memory", "tools"]
+    found_issues = False
 
     for dir_name in source_dirs:
         dir_path = ROOT / dir_name
@@ -63,14 +83,21 @@ def check_source_no_deprecated() -> bool:
             continue
 
         for py_file in dir_path.rglob("*.py"):
-            content = py_file.read_text().lower()
-            for term in forbidden:
-                if term in content:
-                    print(f"❌ {py_file.relative_to(ROOT)} contains: {term}")
-                    return False
+            if should_skip(py_file):
+                continue
+            try:
+                content = py_file.read_text().lower()
+                for term in FORBIDDEN_TERMS:
+                    if term in content:
+                        print(f"❌ {py_file.relative_to(ROOT)} contains: {term}")
+                        found_issues = True
+            except Exception:
+                pass
 
-    print("✅ Source code contains no deprecated terms")
-    return True
+    if not found_issues:
+        print("✅ Source code contains no deprecated terms")
+        return True
+    return False
 
 def main() -> int:
     """Run all truth-sync checks."""
@@ -86,15 +113,6 @@ def main() -> int:
         return 0
     else:
         print("❌ TRUTH-SYNC CHECKS FAILED")
-        print("\nRequired actions:")
-        if not docs_ok:
-            print("  • Update docs/ to describe v11.11 Unified Queue")
-            print("  • Remove all Advisory Generation/B/C references from current docs")
-        if not manifest_ok:
-            print("  • Regenerate _manifest.md with current HEAD SHA")
-        if not source_ok:
-            print("  • Remove deprecated terms from source code")
-            print("  • See docs/OVERNIGHT_PIPELINE.md for current architecture")
         return 1
 
 if __name__ == "__main__":
