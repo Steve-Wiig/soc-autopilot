@@ -6,12 +6,16 @@ URL normalization, and authentication header support.
 import os
 import time
 import json
+
+from engine.telemetry import log_attempt
 import requests
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Compatibility constant retained for older callers/tests.
+# Direct ledger writes are disabled; telemetry is authoritative.
 LEDGER_PATH = Path(__file__).parent / "inference_ledger.jsonl"
 
 class InferenceTelemetry:
@@ -28,9 +32,17 @@ class InferenceTelemetry:
             "attempt": attempt
         }
         try:
-            LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with open(LEDGER_PATH, "a") as f:
-                f.write(json.dumps(record) + "\n")
+            log_attempt(
+                {
+                    "event_type": "inference_attempt",
+                    "provider": record.get("provider"),
+                    "role": record.get("role"),
+                    "latency_ms": record.get("latency_ms"),
+                    "success": record.get("success"),
+                    "failure_class": record.get("failure_class"),
+                    "attempt_num": record.get("attempt", 1),
+                }
+            )
         except Exception as e:
             print(f"⚠️ Telemetry write failed: {e}")
 

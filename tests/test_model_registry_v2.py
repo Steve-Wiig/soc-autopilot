@@ -2,12 +2,13 @@ import pytest
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from engine.model_registry import get_default_router, OpenAICompatibleProvider, ProviderConfig, LEDGER_PATH
+from engine.model_registry import get_default_router, OpenAICompatibleProvider, ProviderConfig
+from engine.telemetry import writer
 
 def test_cascading_failover_and_telemetry():
-    # Clear ledger
-    if LEDGER_PATH.exists():
-        LEDGER_PATH.unlink()
+    # Clear telemetry buffer
+    if writer.current_file.exists():
+        writer.current_file.unlink()
         
     router = get_default_router()
     
@@ -26,9 +27,9 @@ def test_cascading_failover_and_telemetry():
         assert result == "Verdict: Safe"
         mock_local.assert_called_once()
         
-        # Verify Telemetry Ledger
-        assert LEDGER_PATH.exists()
-        logs = [json.loads(line) for line in LEDGER_PATH.read_text().splitlines()]
+        # Verify authoritative telemetry buffer
+        assert writer.current_file.exists()
+        logs = [json.loads(line) for line in writer.current_file.read_text().splitlines()]
         
         assert len(logs) == 2
         assert logs[0]["provider"] == "android_qwen"
@@ -38,7 +39,7 @@ def test_cascading_failover_and_telemetry():
         assert logs[1]["provider"] == "local_ollama"
         assert logs[1]["success"] is True
         
-        print("✅ PROVEN: True cascading failover works. Malformed Android response skipped, routed to Local, and logged to telemetry ledger.")
+        print("✅ PROVEN: True cascading failover works. Malformed Android response skipped, routed to Local, and logged to telemetry buffer.")
 
 if __name__ == "__main__":
     test_cascading_failover_and_telemetry()

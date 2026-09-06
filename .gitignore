@@ -38,3 +38,4 @@ integration_*
 overnight/*.txt
 overnight/*.jsonl
 tests/test_tdd_auto_*.py
+engine/inference_ledger.jsonl
