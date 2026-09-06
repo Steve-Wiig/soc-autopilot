@@ -1,7 +1,9 @@
 import os, json, time, uuid, sys, threading
 from pathlib import Path
 from datetime import datetime, timezone
+from engine.path_utils import get_repo_root
 
+ROOT = get_repo_root()
 DEFAULT_BUFFER_ROOT = ROOT / "overnight/.telemetry_buffer"
 DEFAULT_ROTATE_BYTES = 1 * 1024 * 1024
 DEFAULT_MAX_BUFFER_BYTES = 50 * 1024 * 1024
@@ -80,9 +82,10 @@ class TelemetryWriter:
         except OSError as e:
             self._warn("rotation", f"Failed to rotate current.jsonl: {e}")
 
-    def log_attempt(self, event):
+    def log_attempt(self, event, **extra):
         try:
             safe_event = dict(event)
+            safe_event.update(extra)
             for bad_key in ['api_keys', 'prompt', 'generated_code', 'raw_response', 'env_vars']:
                 safe_event.pop(bad_key, None)
             self._enforce_cap(safe_event)
@@ -105,4 +108,5 @@ class TelemetryWriter:
             self._warn("unexpected", f"Unexpected telemetry failure: {e}")
 
 writer = TelemetryWriter()
-def log_attempt(event): writer.log_attempt(event)
+def log_attempt(event, **extra):
+    writer.log_attempt(event, **extra)

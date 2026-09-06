@@ -146,6 +146,54 @@ def _escalate_to_manual(file_path, issue, reason):
         _save_json(manual_path, manual_queue)
 
 # ============================================================
+# ADVISORY ROUTING POLICY
+# ============================================================
+_HIGH_RISK_ROUTING_TERMS = (
+    "security",
+    "sql injection",
+    "authentication",
+    "authorization",
+    "credential",
+    "secret",
+    "race condition",
+    "concurrency",
+    "data loss",
+    "audit",
+    "sanitization",
+    "external llm",
+    "database migration",
+    "schema",
+)
+
+def _has_high_risk_routing_signal(issue):
+    """Return True when the advisory contains an explicit high-risk signal."""
+    description = str(issue.get("description", "")).strip().lower()
+    return any(term in description for term in _HIGH_RISK_ROUTING_TERMS)
+
+
+def _classify_issue_for_routing(issue):
+    """Classify an advisory before selecting its validation path."""
+    category = str(issue.get("category", "")).strip().lower()
+    severity = str(issue.get("severity", "")).strip().lower()
+    effort = str(issue.get("effort", "")).strip().lower()
+    impact = str(issue.get("impact", "")).strip().lower()
+    description = str(issue.get("description", "")).strip().lower()
+
+    if _has_high_risk_routing_signal(issue):
+        return "REVIEW"
+
+    if (
+        category in {"maintainability", "performance"}
+        and severity in {"low", "informational"}
+        and effort in {"trivial", "small"}
+        and impact in {"low", "medium"}
+    ):
+        return "LOCAL_TDD"
+
+    return "REVIEW"
+
+
+# ============================================================
 # HELPER ENGINES (Sniper, Pruner, Triage, TDD)
 # ============================================================
 def _get_test_targets(file_path):
@@ -582,20 +630,65 @@ def apply_auto_fix(file_path, issue, api_keys):
     # 1. RED-GREEN BASELINE
     baseline_tb = run_pytest_cached(targets)
     if baseline_tb is None:
-        category = issue.get('category', '').lower()
-        # Functional bugs with passing tests are truly stale (already fixed)
-        if category in ['bug', 'correctness', 'style', 'documentation', '']:
-            print(f"       ✅ Baseline tests passed. Stale advisory.")
+        category = issue.get("category", "").lower()
+        route = _classify_issue_for_routing(issue)
+        high_risk_signal = _has_high_risk_routing_signal(issue)
+
+        # Explicit high-risk language ALWAYS overrides the functional stale
+        # shortcut. A passing baseline does not make security-sensitive advice
+        # safe to discard.
+        if high_risk_signal:
+            print(
+                f"       ⚠️ Baseline passed; high-risk signal overrides stale "
+                f"classification for '{category}' advisory."
+            )
+            _escalate_to_manual(
+                file_path,
+                issue,
+                f"High-risk {category} advisory requires manual/Oracle review.",
+            )
+            _record_ledger(
+                file_path,
+                issue,
+                "ESCALATED",
+                f"High-risk {category} advisory requires manual/Oracle review.",
+            )
+            return True
+
+        # Ordinary functional findings with a passing baseline are stale.
+        if category in ["bug", "correctness", "style", "documentation", ""]:
+            print("       ✅ Baseline tests passed. Stale advisory.")
             _record_ledger(file_path, issue, "STALE", "Baseline passed")
             return True
-        else:
-            # Security/Performance/Reliability flaws don't always have failing tests.
-            # Do not drop them. Escalate to manual review.
-            print(f"       ⚠️ Baseline passed, but category is '{category}'. Escalating (lacks regression test).")
-            _escalate_to_manual(file_path, issue, f"Passed baseline but lacks regression test for {category} defect.")
-            _record_ledger(file_path, issue, "ESCALATED", "Lacks regression test")
+
+        # High-risk / ambiguous non-functional findings remain gated for review.
+        if route == "REVIEW":
+            print(
+                f"       ⚠️ Baseline passed; routing '{category}' advisory "
+                "to manual/Oracle review."
+            )
+            _escalate_to_manual(
+                file_path,
+                issue,
+                f"Baseline passed; routing policy requires review for {category} advisory.",
+            )
+            _record_ledger(
+                file_path,
+                issue,
+                "ESCALATED",
+                "Routing policy requires review",
+            )
             return True
-    print(f"       🔴 Baseline failure captured ({len(baseline_tb)} chars)")
+
+        # LOW-RISK LOCAL_TDD findings continue through the existing
+        # red-phase / patch / canary safety pipeline below.
+        print(
+            f"       🧪 Baseline passed; low-risk '{category}' advisory "
+            "eligible for Local TDD validation."
+        )
+
+    if baseline_tb is not None:
+        print(f"       🔴 Baseline failure captured ({len(baseline_tb)} chars)")
 
     # 2. TDD SUB-AGENT
     print(f"       🧪 Spawning TDD Sub-Agent...")

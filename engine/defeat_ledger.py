@@ -14,7 +14,7 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parent.parent
 
 
-LEDGER_PATH = ROOT/overnight/defeat_ledger.jsonl
+LEDGER_PATH = ROOT / "overnight" / "defeat_ledger.jsonl"
 DEFEAT_THRESHOLD = 3  # 3 strikes and you're out
 
 def _strip_docstrings_and_comments(node: ast.AST):

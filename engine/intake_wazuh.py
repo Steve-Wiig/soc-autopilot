@@ -6,6 +6,8 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
+from engine.queue_priority import severity_to_priority
+
 try:
     from platformdirs import user_data_dir, user_log_dir
     HAS_PLATFORMDIRS = True
@@ -184,7 +186,47 @@ def parse_and_validate(raw_payload: str) -> dict[str, Any]:
     
     return sanitized
 def persist_alert(conn: sqlite3.Connection, alert_record: dict[str, Any]) -> None:
+    payload_json = json.dumps(alert_record['payload'])
+    columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(triage_queue)")
+    }
+
+    has_priority = "priority" in columns
+    has_payload_ref = "payload_ref" in columns
+
+    if has_priority != has_payload_ref:
+        raise RuntimeError(
+            "Unsupported partial triage_queue migration: "
+            "priority and payload_ref must be added together"
+        )
+
     cursor = conn.cursor()
+
+    if has_priority and has_payload_ref:
+        cursor.execute("""
+            INSERT INTO triage_queue (
+                id,
+                severity,
+                payload,
+                status,
+                created_at,
+                attempts,
+                priority,
+                payload_ref
+            ) VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+        """, (
+            alert_record['id'],
+            alert_record['severity'],
+            payload_json,
+            STATUS_PENDING,
+            alert_record['timestamp'],
+            severity_to_priority(alert_record['severity']),
+            payload_json,
+        ))
+        return
+
+    # Preserve the current six-column producer contract before migration.
     cursor.execute("""
         INSERT INTO triage_queue (
             id, severity, payload, status, created_at, attempts
@@ -192,7 +234,7 @@ def persist_alert(conn: sqlite3.Connection, alert_record: dict[str, Any]) -> Non
     """, (
         alert_record['id'],
         alert_record['severity'],
-        json.dumps(alert_record['payload']),
+        payload_json,
         STATUS_PENDING,
         alert_record['timestamp']
     ))

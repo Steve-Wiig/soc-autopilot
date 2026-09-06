@@ -177,6 +177,9 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         generate.last_model_used = provider
         try:
             from engine.reasoning_ledger import record_interaction
+
+ROOT = Path(__file__).resolve().parent.parent
+
             record_interaction("heavy_generation", prompt, result, provider)
         except Exception:
             pass
@@ -306,7 +309,7 @@ def load_api_keys():
     env_path = Path(__file__).resolve().parent.parent / ".env"
 
     if not env_path.exists():
-        env_path = Path("/home/swiig/Documents/soc-autopilot/.env")
+        env_path = ROOT/.env
 
     if env_path.exists():
         for line in env_path.read_text().splitlines():
