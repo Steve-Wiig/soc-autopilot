@@ -263,6 +263,9 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     if not api_key:
         return ""
 
+    if not api_key:
+        return ""
+
     # Hard RPD limit (funded tier: 1000) — skip entirely if exhausted/locked
     from overnight import openrouter_quota
     if not openrouter_quota.is_available():
