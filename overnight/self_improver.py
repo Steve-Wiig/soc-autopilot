@@ -237,6 +237,17 @@ def _prune_ast_context(source: str, issue_desc: str, max_chars: int = 20000) -> 
     return source[:max_chars]
 
 
+
+def _extract_top_level_context(file_content: str) -> str:
+    """Extracts imports and global variables to prevent LLM hallucinations."""
+    lines = file_content.split('\n')
+    context_lines = []
+    for line in lines[:100]: # Check top 100 lines to be safe
+        if line.strip().startswith(('def ', 'async def ', 'class ')):
+            break
+        context_lines.append(line)
+    return '\n'.join(context_lines)
+
 def _choose_context(original, issue_desc, raw_cap=24000):
     """IMPROVEMENT #11: send the raw file verbatim when it's small enough.
     Pruning drops comments/blank lines and breaks verbatim SEARCH matching."""
@@ -751,7 +762,8 @@ def apply_auto_fix(file_path, issue, api_keys):
             "1. Copy EXACT existing code from the file into SEARCH block (preserve whitespace).\n"
             "2. Write corrected code in REPLACE block.\n"
             "3. NEVER output placeholder text like '[exact search text]' or '[replace text]'.\n"
-            "4. Use REAL code from the file, not template examples.\n\n"
+            "4. Use REAL code from the file, not template examples.\n"
+            "5. ONLY use variables, constants, and imports explicitly defined in the TOP-LEVEL CONTEXT below. Do not hallucinate undefined globals.\n\n"
             "EXAMPLE of valid response:\n"
             "<<<<<<< engine/example.py\n"
             "    temperature = 0.1\n"
@@ -761,6 +773,7 @@ def apply_auto_fix(file_path, issue, api_keys):
             "    max_tokens = kwargs.get('max_tokens', 200)\n"
             ">>>>>>> REPLACE\n\n"
             f"ISSUE: {issue.get('description', '')}\n\n"
+            f"TOP-LEVEL CONTEXT (Imports & Globals):\n{_extract_top_level_context(original)}\n\n"
             f"FILE CONTENT:\n{original[:6000]}\n\n"
             "Now generate the actual SEARCH/REPLACE blocks for this fix:\n"
         )
