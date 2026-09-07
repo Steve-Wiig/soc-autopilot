@@ -105,3 +105,32 @@ if __name__ == "__main__":
     print(f"OpenRouter quota: {s['used_today']}/{DAILY_LIMIT} used, {s['remaining']} remaining")
     print(f"Locked until: {s['locked_until'] or 'not locked'}")
 
+
+
+def check_quota_or_raise():
+    """Raises RuntimeError if quota is exceeded, preventing API drain."""
+    import json
+    from pathlib import Path
+    from datetime import datetime, timezone, timedelta
+    
+    quota_file = Path(__file__).parent / "openrouter_quota.json"
+    if not quota_file.exists(): return
+    
+    try:
+        data = json.loads(quota_file.read_text())
+        used = data.get("used_today", 0)
+        locked_until = data.get("locked_until")
+        
+        if locked_until:
+            lock_time = datetime.fromisoformat(locked_until.replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) < lock_time:
+                raise RuntimeError(f"OpenRouter quota locked until {locked_until}. Used: {used}/50")
+        
+        if used >= 50:
+            lock_until = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            data["locked_until"] = lock_until
+            quota_file.write_text(json.dumps(data, indent=2))
+            raise RuntimeError(f"OpenRouter quota exceeded ({used}/50). Locked until {lock_until}")
+    except Exception as e:
+        if "quota" in str(e).lower(): raise
+        print(f"Warning: Could not check quota: {e}")

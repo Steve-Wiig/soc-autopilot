@@ -548,3 +548,21 @@ Result: zero corrupted files across 90+ auto-fix commits.
 The pipeline now records empirical efficacy data (first-pass success, repair-salvage rate, pytest failures) to `/mnt/backup-nas/soc-slm-telemetry/`. 
 - **Fail-Open:** Telemetry failures never block remediation.
 - **Root Disk Protection:** Local buffer is hard-capped at 50MB. Oldest data is dropped if NAS is unavailable for extended periods.
+
+## Pi Bandit Autonomous Bridge & Free-Tier Enforcement (v11.9.1)
+
+### Pi Edge Telemetry Bridge
+The Raspberry Pi now acts as an autonomous scout, running Bandit/Pylint every 6 hours. 
+To feed these findings into the overnight self-improver without I/O spikes:
+1. **Ingestor Optimization**: `analysis/pi_ingestor.py` now writes validated Pi events to `runtime/analysis/pi_findings_pending.jsonl`.
+2. **Bridge Timer**: `tools/pi_findings_to_backlog.py` runs hourly via systemd, atomically renaming the pending file, parsing the Bandit/Pylint JSON, and injecting actionable issues into `overnight/fix_backlog.json`.
+3. **Race Condition Prevention**: Both the bridge and `overnight/pi_generator.py` use `fcntl.flock` when reading/writing the backlog to prevent corruption.
+
+### Strict Free-Tier LLM Enforcement
+To guarantee $0.00 accidental spend on OpenRouter:
+1. **Quota Guard**: `overnight/openrouter_quota.py` now includes `check_quota_or_raise()`, which physically halts execution if the 50 RPD soft limit is exceeded.
+2. **Model Guard**: `overnight/llm_client.py` includes `_enforce_free_tier()`, which raises a `RuntimeError` if any non-`:free` model is requested.
+3. **Nemotron Routing**: `engine/cer_critic.py` now defaults to `OPENROUTER_FREE_MODEL` (Nvidia Nemotron) from `.env`.
+
+### Infinite Loop Prevention
+`overnight/pi_generator.py` tracks failed attempts in `pi_attempted.json`. If a specific file/issue fails 3 times, it is permanently skipped, preventing the worker from burning CPU in an infinite retry loop on impossible fixes.

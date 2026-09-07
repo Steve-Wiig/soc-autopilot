@@ -6,6 +6,15 @@ this queries OpenRouter's API to find currently-available free instruct models
 and builds the fallback list automatically.
 """
 import os
+
+def _enforce_free_tier(model: str) -> None:
+    """Hard guard: Physically prevents any paid model from being called."""
+    if not str(model).strip().endswith(":free"):
+        raise RuntimeError(
+            f"SECURITY VIOLATION: Attempted to call paid model '{model}'. "
+            "Only ':free' models are permitted to prevent API drain."
+        )
+
 import re
 import json
 import time
@@ -15,6 +24,8 @@ try:
     import requests
 except ImportError:
     raise ImportError("requests library required: pip install requests")
+
+from overnight.openrouter_quota import check_quota_or_raise
 
 # ============================================================
 # CONFIGURATION
@@ -339,6 +350,8 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
         }
 
         try:
+            check_quota_or_raise()
+            _enforce_free_tier(try_model)
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
@@ -861,6 +874,8 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
 def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperature=0.2):
     """Call Mistral API directly (OpenAI-compatible)."""
     import requests
+    from overnight.openrouter_quota import check_quota_or_raise
+    
     if not api_key:
         return ""
     
@@ -890,6 +905,8 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
         if not budget.wait_if_needed("mistral", timeout=30):
             print("    🔒 Mistral budget wait timeout")
             return ""
+        
+        _enforce_free_tier(try_model)
         
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         budget.record_call("mistral")

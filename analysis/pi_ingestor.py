@@ -43,6 +43,13 @@ def process_file(filepath: Path):
                     if "event_type" not in raw: raise ValueError("Missing event_type")
                     canonical = normalize_pi_event(raw)
                     writer.log_attempt(canonical)
+
+                    # ALSO write to pending findings file for the bridge timer
+                    pending_file = ROOT / "runtime" / "analysis" / "pi_findings_pending.jsonl"
+                    pending_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(pending_file, 'a') as pf:
+                        pf.write(json.dumps(canonical) + "\n")
+
                     accepted += 1
                 except Exception as e:
                     print(f"Quarantine bad line: {e}")
