@@ -739,6 +739,9 @@ def apply_auto_fix(file_path, issue, api_keys):
         print(f"       🔬 Forensic analysis unavailable (falling back to direct generation)")
 
     for attempt in range(2):
+        if attempt == 0:
+            pre_flight_rejection_msg = ""
+
         pruned = _choose_context(original, issue.get('description', ''))
         
         prompt = (
@@ -763,7 +766,18 @@ def apply_auto_fix(file_path, issue, api_keys):
         )
         if attempt == 1 and failed_attempt_1_raw:
             prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
+        if attempt == 1 and pre_flight_rejection_msg:
+            prompt += f"\n\n🛑 CRITICAL CORRECTION FROM PRE-FLIGHT GATE: Your previous attempt was rejected because: {pre_flight_rejection_msg}. DO NOT repeat this mistake.\n"
         raw = generate(prompt, api_keys, temperature=current_temp, max_tokens=current_max, model_type="patch")
+        # PRE-FLIGHT SAFETY GATE: Catch regressions before patch application
+        clean_code = strip_fences(raw)
+        from overnight.safety_gates import pre_flight_safety_check
+        is_safe, safety_msg = pre_flight_safety_check(clean_code, str(file_path))
+        if not is_safe:
+            print(f"       🛑 PRE-FLIGHT REJECTED: {safety_msg}")
+            pre_flight_rejection_msg = safety_msg
+            continue
+
         if not raw: return False
         
         # NEW: Strip LLM prose, extract ONLY the Aider diff blocks

@@ -12,7 +12,6 @@
 ### 🏗️ High-Level Architecture
 
 ```mermaid
-```mermaid
 graph TD
     A[Wazuh / pfSense] -->|Telemetry| B(Engine: Ingestion & Sanitization)
     B --> C{Orchestrator & Queue}
@@ -24,7 +23,6 @@ graph TD
     C -->|Safety Gates| H[Pytest 274+ Suite]
     H -->|Pass| I[Shadow Branch Commit]
     I -->|Human Approval| J[Master Merge]
-```
 ```
 
 ---
@@ -61,23 +59,23 @@ This is not an "autonomous AI" that acts without oversight. It is a **bounded de
 
 ### 📊 Current Status & Evidence
 
-| Component                                  | Status          | Notes                                                         |
-| ------------------------------------------ | --------------- | ------------------------------------------------------------- |
-| Telemetry Sanitization & Queue Governance  | ✅ Implemented   | Two-pass regex + entropy sanitization; backpressure handling. |
+| Component | Status | Notes |
+|---|---|---|
+| Telemetry Sanitization & Queue Governance | ✅ Implemented | Two-pass regex + entropy; backpressure handling. |
+| Self-Improvement Pipeline (10 Safety Gates) | ✅ Implemented | TDD Red Phase, Forensic Analysis, Pre-flight checks. |
+| Negative/Proven Memory Stores | ✅ Implemented | System actively stores and references fix patterns. |
+| Hybrid Edge/Cloud Compute | ✅ Implemented | Async Pi worker (Qwen 3B) decoupled via queue. |
 | Hash-Chain Audit Ledger | △ Prototype | Concurrency tool exists; production ledger planned. |
-| Self-Improvement Pipeline (10 Safety Gates) | ✅ Implemented   | TDD Red Phase, Forensic Analysis, Ghost Detection, Shadow Canary, Proven Memory, etc.          |
-| Negative/Proven Memory Stores              | ✅ Implemented   | System stores proven and failed fix patterns to inform future generation.               |
-| Hybrid Edge/Cloud Compute                  | ✅ Implemented   | Async Pi worker (Qwen 3B) decoupled via Redis.                |
-| Live Wazuh Integration              | △ Lab-Validated | Tested in local Dockerized lab environment.                   |
-| Longitudinal Learning Metrics              | △ Prototype     | Tracking fix acceptance rates; immutable eval corpus planned. |
+| Live Wazuh Integration | △ Lab-Validated | Tested in local Dockerized lab; production hardening pending. |
+| Longitudinal Learning Metrics | △ Prototype | Tracking fix acceptance rates; immutable eval corpus planned. |
+| PostgreSQL + pgvector | ❌ Not Implemented | Currently using SQLite. Architecture supports upgrade. |
+| Suricata Integration | ❌ Not Implemented | Architecture supports it, but no logic exists yet. |
 
 ---
 
 ### 🚀 Quick Start
 
 #### Prerequisites
-- Suricata integration (planned - architecture supports it)
-
 * Python 3.10+
 * API keys for LLM providers (OpenRouter, Groq, Mistral)
 * Optional: Raspberry Pi 4B+ (8GB) for edge critique worker
