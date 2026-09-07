@@ -674,9 +674,11 @@ def apply_auto_fix(file_path, issue, api_keys):
 
         # High-risk / ambiguous non-functional findings remain gated for review.
         if route == "REVIEW":
-            print(
-                f"       🟡 Baseline passed; routing '{category}' advisory to TDD validation."
-            )
+            reason = f"Routing policy requires review for {category} advisory."
+            print(f"       ⚠️ {reason}")
+            _escalate_to_manual(file_path, issue, reason)
+            _record_ledger(file_path, issue, "ESCALATED", reason)
+            return True
 
         # LOW-RISK LOCAL_TDD findings continue through the existing
         # red-phase / patch / canary safety pipeline below.
