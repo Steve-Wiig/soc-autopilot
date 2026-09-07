@@ -7,7 +7,7 @@ A Staff-Level, Self-Healing, Test-Driven, Causal-Triage Autonomous Engineering S
 """
 import sys, json, subprocess, time, argparse, ast, re, os, hashlib, uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import Counter
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -939,7 +939,7 @@ def apply_auto_fix(file_path, issue, api_keys):
 # Analyzes the improvement ledger to measure whether the system
 # is actually getting better over time.
 # ============================================================
-def compute_scorecard():
+def compute_scorecard(days=None):
     """Compute self-improvement metrics from the improvement ledger.
     
     Returns a dict with:
@@ -963,7 +963,8 @@ def compute_scorecard():
         "category_breakdown": {},
         "proven_fix_count": 0,
         "failed_pattern_count": 0,
-        "trend": "insufficient_data"
+        "trend": "insufficient_data",
+        "malformed_timestamps": 0
     }
     
     # Count proven fixes
@@ -1000,6 +1001,57 @@ def compute_scorecard():
     if not entries:
         return scorecard
     
+    if days is not None:
+        if not isinstance(days, (int, float)) or isinstance(days, bool):
+            raise ValueError(
+                "days must be a non-negative number"
+            )
+        if days < 0:
+            raise ValueError("days must be >= 0")
+
+        cutoff = datetime.now() - timedelta(days=days)
+        filtered_entries = []
+
+        for entry in entries:
+            timestamp_text = entry.get("timestamp")
+
+            if not timestamp_text:
+                scorecard["malformed_timestamps"] += 1
+                continue
+
+            try:
+                normalized_timestamp = str(
+                    timestamp_text
+                ).strip()
+
+                if normalized_timestamp.endswith("Z"):
+                    normalized_timestamp = (
+                        normalized_timestamp[:-1]
+                        + "+00:00"
+                    )
+
+                timestamp = datetime.fromisoformat(
+                    normalized_timestamp
+                )
+
+                if timestamp.tzinfo is not None:
+                    timestamp = (
+                        timestamp.astimezone()
+                        .replace(tzinfo=None)
+                    )
+
+                if timestamp >= cutoff:
+                    filtered_entries.append(entry)
+
+            except (
+                TypeError,
+                ValueError,
+                OverflowError,
+            ):
+                scorecard["malformed_timestamps"] += 1
+
+        entries = filtered_entries
+
     scorecard["total_decisions"] = len(entries)
     
     # Count statuses and build category breakdown

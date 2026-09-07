@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import argparse
 import subprocess, json, sys, os
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
 NAS_BASE = Path("/mnt/backup-nas/soc-slm-telemetry/oracle_queue")
 
 def h1(text): print(f"\n=== {text} ===")
@@ -11,7 +13,54 @@ def run(cmd): return subprocess.run(cmd, shell=True, capture_output=True, text=T
 def count_dir(path): return len(list(path.glob("*.json"))) if path.exists() else 0
 def get_size_mb(path): return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) // (1024*1024) if path.exists() else 0
 
+def _print_scorecard(label, scorecard, category=False):
+    print(f"   [{label}]")
+    for key, icon in (
+        ("applied", "🟢"),
+        ("stale", "⚪"),
+        ("escalated", "🟡"),
+        ("rejected", "🔴"),
+    ):
+        print(f"   {icon} {key.upper():10s}: {scorecard[key]}")
+    print(f"   Total decisions: {scorecard['total_decisions']}")
+    print(f"   Success rate:    {scorecard['success_rate']}%")
+    print(f"   Proven patterns: {scorecard['proven_fix_count']} stored")
+    print(f"   Trend:           {scorecard['trend']}")
+
+    malformed = scorecard.get("malformed_timestamps", 0)
+    if malformed:
+        print(f"   ⚠️ Malformed timestamps skipped: {malformed}")
+
+    if category:
+        print("   By category:")
+        for cat, stats in sorted(scorecard["category_breakdown"].items()):
+            total = sum(stats.get(k, 0) for k in (
+                "applied", "rejected", "escalated", "stale"
+            ))
+            print(
+                f"     {cat:20s}: "
+                f"{stats.get('applied', 0)}✅ "
+                f"{stats.get('rejected', 0)}❌ "
+                f"{stats.get('escalated', 0)}🟡 "
+                f"({total} total)"
+            )
+
+
 def main():
+    parser = argparse.ArgumentParser(
+        description="soc-autopilot unified system dashboard"
+    )
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=7,
+        help="Recent scorecard window in days (default: 7)",
+    )
+    args = parser.parse_args()
+
+    if args.days < 0:
+        parser.error("--days must be >= 0")
+
     print("=== 📊 UNIFIED SYSTEM DASHBOARD ===")
     
     # 1. ORACLE SWARM
@@ -55,54 +104,22 @@ def main():
 
     # 1c. SELF-IMPROVEMENT SCORECARD
     h1("📈 SELF-IMPROVEMENT SCORECARD")
-    if ledger_path.exists():
-        import json
-        from collections import Counter, defaultdict
-        entries = []
-        for line in ledger_path.read_text().strip().split("\n"):
-            if line.strip():
-                try:
-                    entries.append(json.loads(line))
-                except Exception:
-                    pass
-        total = len(entries)
-        applied = sum(1 for e in entries if e.get("status") == "APPLIED")
-        rejected = sum(1 for e in entries if e.get("status") == "REJECTED")
-        rate = (applied / total) if total else 0.0
-        print(f"   Total decisions: {total}")
-        print(f"   Success rate:    {rate*100:.1f}% ({applied} applied / {total} actionable)")
-        proven_path = ROOT / "overnight" / "proven_fixes.jsonl"
-        proven_count = 0
-        if proven_path.exists():
-            proven_count = sum(1 for l in proven_path.read_text().strip().split("\n") if l.strip())
-        print(f"   Proven patterns: {proven_count} stored")
-        trend = "⏳ insufficient data"
-        if total >= 10:
-            half = total // 2
-            def _succ(es):
-                ap = sum(1 for e in es if e.get("status") == "APPLIED")
-                return (ap / len(es)) if es else 0.0
-            r_old = _succ(entries[:half])
-            r_new = _succ(entries[half:])
-            if r_new > r_old + 0.02:
-                trend = "📈 improving"
-            elif r_new < r_old - 0.02:
-                trend = "📉 degrading"
-            else:
-                trend = "➡️ stable"
-        print(f"   Trend:           {trend}")
-        cat_stats = defaultdict(Counter)
-        for e in entries:
-            cat_stats[e.get("category", "unknown")][e.get("status", "?")] += 1
-        print("   By category:")
-        for cat in sorted(cat_stats):
-            sc = cat_stats[cat]
-            ap = sc.get("APPLIED", 0); rj = sc.get("REJECTED", 0)
-            esc = sc.get("ESCALATED", 0)
-            tot = ap + rj + esc + sc.get("STALE", 0)
-            print(f"     {cat:20s}: {ap}✅ {rj}❌ {esc}🟡 ({tot} total)")
-    else:
-        print("   No scorecard data yet.")
+
+    from overnight.self_improver import compute_scorecard
+
+    lifetime = compute_scorecard()
+    recent = compute_scorecard(days=args.days)
+
+    _print_scorecard(
+        "LIFETIME",
+        lifetime,
+        category=True,
+    )
+    print("")
+    _print_scorecard(
+        f"LAST {args.days} DAYS",
+        recent,
+    )
 
     # 2. DRAIN PROCESS
     h1("🔄 DRAIN PROCESS")
