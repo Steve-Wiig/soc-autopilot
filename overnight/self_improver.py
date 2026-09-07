@@ -675,21 +675,8 @@ def apply_auto_fix(file_path, issue, api_keys):
         # High-risk / ambiguous non-functional findings remain gated for review.
         if route == "REVIEW":
             print(
-                f"       ⚠️ Baseline passed; routing '{category}' advisory "
-                "to manual/Oracle review."
+                f"       🟡 Baseline passed; routing '{category}' advisory to TDD validation."
             )
-            _escalate_to_manual(
-                file_path,
-                issue,
-                f"Baseline passed; routing policy requires review for {category} advisory.",
-            )
-            _record_ledger(
-                file_path,
-                issue,
-                "ESCALATED",
-                "Routing policy requires review",
-            )
-            return True
 
         # LOW-RISK LOCAL_TDD findings continue through the existing
         # red-phase / patch / canary safety pipeline below.
@@ -721,6 +708,13 @@ def apply_auto_fix(file_path, issue, api_keys):
                 tdd_block = f"ACCEPTANCE CRITERIA (Make this test pass):\n```python\n{tdd_test_code}\n```\n\n"
                 tdd_kept_path = test_path
         except Exception: pass
+
+    # NEW SAFETY GATE: If baseline passed, and we failed to generate/validate a TDD test, drop it.
+    if baseline_tb is None and not tdd_kept_path:
+        category = issue.get("category", "").lower()
+        print(f"       ⚠️ Baseline passed for '{category}', but unable to generate regression test. Dropping.")
+        _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
+        return False
 
     # 3. GENERATION LOOP
     critic_constraint = ""
