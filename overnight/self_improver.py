@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 import hashlib
 import string
-#!/usr/bin/env python3
 """
 soc-autopilot: Autonomous Engineering System
 A Staff-Level, Self-Healing, Test-Driven, Causal-Triage Autonomous Engineering System.
@@ -58,7 +58,7 @@ _baseline_cache = {"fingerprint": None, "result": None, "targets": None}
 
 def _get_repo_fingerprint():
     """Hash relevant repo files (tracked + untracked) to detect state changes.
-    
+
     Includes full file content (not truncated) and untracked files to prevent
     false cache hits when test/engine code changes beyond the 4KB mark or
     when new untracked test files are added.
@@ -80,7 +80,7 @@ def _get_repo_fingerprint():
 
         # Only hash relevant code directories to avoid invalidating cache on docs/README changes
         relevant_prefixes = ("tests/", "engine/", "overnight/", "memory/", "orchestrator/", "tools/")
-        
+
         h = hashlib.sha256()
         for f in sorted(tracked | untracked):
             if not any(f.startswith(p) for p in relevant_prefixes):
@@ -101,17 +101,17 @@ def run_pytest_cached(targets, timeout=60):
     """Cached pytest for baseline checks. Sniper Scope must use uncached run_pytest."""
     fp = _get_repo_fingerprint()
     targets_key = tuple(sorted(targets))
-    
+
     if (fp is not None and
-        _baseline_cache["fingerprint"] == fp and 
+        _baseline_cache["fingerprint"] == fp and
         _baseline_cache["targets"] == targets_key):
         print(f"       ♻️  pytest cache hit (fingerprint: {fp[:8] if fp else 'none'}...)")
         return _baseline_cache["result"]
-    
+
     result = run_pytest(targets, timeout=timeout)
     _baseline_cache.update({
-        "fingerprint": fp, 
-        "result": result, 
+        "fingerprint": fp,
+        "result": result,
         "targets": targets_key
     })
     return result
@@ -270,20 +270,20 @@ def _resolve_contained_repository_path(file_path):
 _BUILTINS = set(dir(_builtins)) | {'__name__', '__file__', '__doc__', 'self', 'cls', 'None', 'True', 'False'}
 
 def _check_for_ghost_names(source_code: str):
-    """Check for hallucinated imports. Disabled aggressive local-var checking 
+    """Check for hallucinated imports. Disabled aggressive local-var checking
     to prevent false positives on loop variables (i, e, row, etc.)."""
     try:
         tree = ast.parse(source_code)
     except SyntaxError:
         return []
 
-    # Only check for hallucinated external imports. 
+    # Only check for hallucinated external imports.
     # Checking ast.Name nodes for local variables causes too many false positives.
     hallucinated = []
-    known_stdlib = {'os', 'sys', 'json', 're', 'math', 'time', 'datetime', 'logging', 
-                    'sqlite3', 'hashlib', 'uuid', 'pathlib', 'typing', 'collections', 
+    known_stdlib = {'os', 'sys', 'json', 're', 'math', 'time', 'datetime', 'logging',
+                    'sqlite3', 'hashlib', 'uuid', 'pathlib', 'typing', 'collections',
                     'contextlib', 'subprocess', 'argparse', 'tempfile', 'io'}
-    
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -295,7 +295,7 @@ def _check_for_ghost_names(source_code: str):
                 root_mod = node.module.split('.')[0]
                 if root_mod not in known_stdlib and not root_mod.startswith(('engine', 'overnight', 'tools', 'orchestrator', 'memory')):
                     hallucinated.append(node.module)
-                    
+
     return list(set(hallucinated))
 
 def _get_imported_signatures(file_path, max_sigs=8):
@@ -399,7 +399,7 @@ def _failed_test_ids(tb):
 def run_pytest(targets, timeout=60):
     """Returns None if tests pass, or the traceback string if they fail."""
     try:
-        res = subprocess.run([sys.executable, "-m", "pytest", *targets, "-q", "--tb=short", "-x"], 
+        res = subprocess.run([sys.executable, "-m", "pytest", *targets, "-q", "--tb=short", "-x"],
                              cwd=ROOT, capture_output=True, timeout=timeout)
         if res.returncode == 0: return None
         return (res.stderr.decode(errors='replace') + res.stdout.decode(errors='replace'))[:2000]
@@ -411,13 +411,13 @@ def run_pytest(targets, timeout=60):
 # ============================================================
 def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
     """Phase 1: Structured root cause extraction before fix generation.
-    
+
     Returns a formatted context string to inject into the fix prompt.
     Falls back to empty string on any failure (non-blocking).
     """
     issue_desc = issue.get("description", "Unknown issue")
     category = issue.get("category", "unknown")
-    
+
     prompt = (
         "You are a senior code forensic analyst. Analyze this defect.\n"
         "Do NOT propose a fix. Only identify the root cause.\n\n"
@@ -433,17 +433,17 @@ def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
         '  "risk": "one sentence describing what could break"\n'
         '}\n'
     )
-    
+
     try:
         raw = generate(prompt, api_keys, temperature=0.1, max_tokens=1024, model_type="json")
         if not raw:
             return ""
-        
+
         raw = raw.strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0]
-        
+
         # Try to parse as JSON
         import json as _json
         try:
@@ -456,7 +456,7 @@ def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
                 analysis = _json.loads(raw[start:end])
             else:
                 return ""
-        
+
         # Build structured context string
         context_parts = [
             "FORENSIC ANALYSIS (generated before fix):",
@@ -470,9 +470,9 @@ def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
         risk = analysis.get("risk", "")
         if risk:
             context_parts.append(f"  Risk: {risk}")
-        
+
         return "\n".join(context_parts) + "\n\n"
-        
+
     except Exception:
         return ""  # Non-blocking: fall back to direct generation
 
@@ -509,14 +509,14 @@ def _store_proven_fix(file_path, issue, diff_text, forensic_context):
 
 def _retrieve_similar_fixes(issue, max_examples=2):
     """Retrieve proven fixes similar to the current advisory.
-    
+
     Matching: exact category + keyword overlap in description.
     Returns formatted string for prompt injection, or empty string.
     """
     try:
         if not PROVEN_FIXES_PATH.exists():
             return ""
-        
+
         entries = []
         for line in PROVEN_FIXES_PATH.read_text().strip().split("\n"):
             if line.strip():
@@ -524,14 +524,14 @@ def _retrieve_similar_fixes(issue, max_examples=2):
                     entries.append(json.loads(line))
                 except Exception:
                     pass
-        
+
         if not entries:
             return ""
-        
+
         # Score by category match + keyword overlap
         target_category = issue.get("category", "").lower()
         target_words = set(issue.get("description", "").lower().split())
-        
+
         scored = []
         for entry in entries:
             score = 0
@@ -542,13 +542,13 @@ def _retrieve_similar_fixes(issue, max_examples=2):
             score += min(overlap, 5)
             if score > 0:
                 scored.append((score, entry))
-        
+
         scored.sort(key=lambda x: x[0], reverse=True)
         top_matches = [e for _, e in scored[:max_examples]]
-        
+
         if not top_matches:
             return ""
-        
+
         # Format as few-shot examples
         parts = ["PROVEN FIX EXAMPLES (from past successful fixes in this codebase):"]
         for i, match in enumerate(top_matches, 1):
@@ -557,10 +557,10 @@ def _retrieve_similar_fixes(issue, max_examples=2):
             if match.get("forensic_summary"):
                 parts.append(f"Analysis: {match['forensic_summary'][:150]}")
             parts.append(f"Fix applied:\n{match.get('fix_diff', '')[:800]}")
-        
+
         parts.append("\nApply a similar pattern to the current advisory.\n\n")
         return "\n".join(parts)
-        
+
     except Exception:
         return ""  # Non-blocking
 
@@ -630,6 +630,18 @@ def _retrieve_failed_patterns(issue, max_examples=2):
 # ============================================================
 # CORE FIX ENGINE
 # ============================================================
+
+def _cleanup_tdd_artifact(tdd_path):
+    """Remove ephemeral autonomous TDD artifact safely."""
+    if tdd_path is None:
+        return
+    try:
+        if tdd_path.exists():
+            tdd_path.unlink()
+    except Exception as exc:
+        print(f"       ⚠️ TDD artifact cleanup failed: {exc}")
+
+
 def apply_auto_fix(file_path, issue, api_keys):
     try: original = file_path.read_text()
     except Exception: return False
@@ -647,7 +659,7 @@ def apply_auto_fix(file_path, issue, api_keys):
     if issue.get('category', '').lower() in ['style', 'documentation']: return False
 
     targets = _get_test_targets(file_path)
-    
+
     # 1. RED-GREEN BASELINE
     baseline_tb = run_pytest_cached(targets)
     if baseline_tb is None:
@@ -708,18 +720,20 @@ def apply_auto_fix(file_path, issue, api_keys):
     if tdd_test_code:
         test_path = ROOT / "tests" / f"test_tdd_auto_{file_path.stem}.py"
         try:
+            tdd_kept_path = test_path
             test_path.write_text(tdd_test_code)
             # RED PHASE VERIFICATION: The test MUST fail before we apply the fix.
             # If it passes immediately, the test is vacuous and cannot validate the fix.
             red_check = run_pytest([str(test_path.relative_to(ROOT))])
             if red_check is None:
                 print(f"       ⚠️ TDD Red Phase FAILED: Test passes immediately. Rejecting vacuous test.")
-                test_path.unlink()
+                # Ephemeral TDD artifact cleanup is centralized in finally.
             else:
                 print(f"       🔴 TDD Red Backlog DrainONFIRMED: Test fails as expected.")
                 tdd_block = f"ACCEPTANCE CRITERIA (Make this test pass):\n```python\n{tdd_test_code}\n```\n\n"
-                tdd_kept_path = test_path
-        except Exception: pass
+        except Exception as e:
+            _cleanup_tdd_artifact(tdd_kept_path)
+            tdd_kept_path = None
 
     # NEW SAFETY GATE: If baseline passed, and we failed to generate/validate a TDD test, drop it.
     if baseline_tb is None and not tdd_kept_path:
@@ -728,221 +742,224 @@ def apply_auto_fix(file_path, issue, api_keys):
         _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
         return False
 
-    # 3. GENERATION LOOP
-    critic_constraint = ""
-    failed_attempt_1_raw = ""
-    current_temp = 0.2
-    current_max = 4096
-    
-    # FORENSIC ANALYSIS PHASE (Improvement #5)
-    print(f"       🔬 Running forensic analysis...")
-    forensic_context = _forensic_analysis(issue, original, baseline_tb, api_keys)
-    api_sigs = _get_imported_signatures(file_path)
-    
-    # PROVEN FIX RETRIEVAL (Improvement #6)
-    proven_examples = _retrieve_similar_fixes(issue)
-    if proven_examples:
-        forensic_context += proven_examples
-        print(f"       📚 Retrieved {proven_examples.count('Example')} proven fix example(s)")
+    try:
+        # 3. GENERATION LOOP
+        critic_constraint = ""
+        failed_attempt_1_raw = ""
+        current_temp = 0.2
+        current_max = 4096
 
-    # NEGATIVE MEMORY RETRIEVAL (Improvement #14)
-    failed_patterns = _retrieve_failed_patterns(issue)
-    if failed_patterns:
-        forensic_context += failed_patterns
-        print(f"       🚫 Retrieved {failed_patterns.count('Failed attempt')} failed pattern(s) to avoid")
-    if forensic_context:
-        print(f"       🔬 Forensic context: {forensic_context.split(chr(10))[1][:60]}...")
-    else:
-        print(f"       🔬 Forensic analysis unavailable (falling back to direct generation)")
+        # FORENSIC ANALYSIS PHASE (Improvement #5)
+        print(f"       🔬 Running forensic analysis...")
+        forensic_context = _forensic_analysis(issue, original, baseline_tb, api_keys)
+        api_sigs = _get_imported_signatures(file_path)
 
-    for attempt in range(2):
-        if attempt == 0:
-            pre_flight_rejection_msg = ""
+        # PROVEN FIX RETRIEVAL (Improvement #6)
+        proven_examples = _retrieve_similar_fixes(issue)
+        if proven_examples:
+            forensic_context += proven_examples
+            print(f"       📚 Retrieved {proven_examples.count('Example')} proven fix example(s)")
 
-        pruned = _choose_context(original, issue.get('description', ''))
-        
-        prompt = (
-            "You are a senior Python engineer. Fix the issue below.\n"
-            "Output ONLY Aider-style SEARCH/REPLACE blocks.\n\n"
-            "CRITICAL RULES:\n"
-            "1. Copy EXACT existing code from the file into SEARCH block (preserve whitespace).\n"
-            "2. Write corrected code in REPLACE block.\n"
-            "3. NEVER output placeholder text like '[exact search text]' or '[replace text]'.\n"
-            "4. Use REAL code from the file, not template examples.\n"
-            "5. ONLY use variables, constants, and imports explicitly defined in the TOP-LEVEL CONTEXT below. Do not hallucinate undefined globals.\n\n"
-            "EXAMPLE of valid response:\n"
-            "<<<<<<< engine/example.py\n"
-            "    temperature = 0.1\n"
-            "    max_tokens = 200\n"
-            "=======\n"
-            "    temperature = kwargs.get('temperature', 0.1)\n"
-            "    max_tokens = kwargs.get('max_tokens', 200)\n"
-            ">>>>>>> REPLACE\n\n"
-            f"ISSUE: {issue.get('description', '')}\n\n"
-            f"TOP-LEVEL CONTEXT (Imports & Globals):\n{_extract_top_level_context(original)}\n\n"
-            f"FILE CONTENT:\n{original[:6000]}\n\n"
-            "Now generate the actual SEARCH/REPLACE blocks for this fix:\n"
-        )
-        if attempt == 1 and failed_attempt_1_raw:
-            prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
-        if attempt == 1 and pre_flight_rejection_msg:
-            prompt += f"\n\n🛑 CRITICAL CORRECTION FROM PRE-FLIGHT GATE: Your previous attempt was rejected because: {pre_flight_rejection_msg}. DO NOT repeat this mistake.\n"
-        raw = generate(prompt, api_keys, temperature=current_temp, max_tokens=current_max, model_type="patch")
-        # PRE-FLIGHT SAFETY GATE: Catch regressions before patch application
-        clean_code = strip_fences(raw)
-        from overnight.safety_gates import pre_flight_safety_check
-        is_safe, safety_msg = pre_flight_safety_check(clean_code, str(file_path))
-        if not is_safe:
-            print(f"       🛑 PRE-FLIGHT REJECTED: {safety_msg}")
-            pre_flight_rejection_msg = safety_msg
-            continue
+        # NEGATIVE MEMORY RETRIEVAL (Improvement #14)
+        failed_patterns = _retrieve_failed_patterns(issue)
+        if failed_patterns:
+            forensic_context += failed_patterns
+            print(f"       🚫 Retrieved {failed_patterns.count('Failed attempt')} failed pattern(s) to avoid")
+        if forensic_context:
+            print(f"       🔬 Forensic context: {forensic_context.split(chr(10))[1][:60]}...")
+        else:
+            print(f"       🔬 Forensic analysis unavailable (falling back to direct generation)")
 
-        if not raw: return False
-        
-        # NEW: Strip LLM prose, extract ONLY the Aider diff blocks
-        import re
-        diff_blocks = re.findall(r'(<<<<<<<.*?>>>>>>> REPLACE)', raw, re.DOTALL)
-        if diff_blocks:
-            raw = "\n".join(diff_blocks)
-            
-        raw = strip_fences(raw)
+        for attempt in range(2):
+            if attempt == 0:
+                pre_flight_rejection_msg = ""
 
-        # Parse & Apply Patches
-        modified_files = {}
-        try:
-            if parse_multi_file_diff:
-                patches = parse_multi_file_diff(raw, ROOT)
-                modified_files = apply_multi_file_patches(patches)
-            else:
-                # Fallback to simple single-file replace if engine missing
-                # PATCH_ENGINE_UNAVAILABLE - no-op fallback is a governance bug
-                print('       ❌ PATCH_ENGINE_UNAVAILABLE: Cannot generate valid patch')
-                _record_ledger(file_path, issue, 'FAILED', 'Patch engine unavailable')
+            pruned = _choose_context(original, issue.get('description', ''))
+
+            prompt = (
+                "You are a senior Python engineer. Fix the issue below.\n"
+                "Output ONLY Aider-style SEARCH/REPLACE blocks.\n\n"
+                "CRITICAL RULES:\n"
+                "1. Copy EXACT existing code from the file into SEARCH block (preserve whitespace).\n"
+                "2. Write corrected code in REPLACE block.\n"
+                "3. NEVER output placeholder text like '[exact search text]' or '[replace text]'.\n"
+                "4. Use REAL code from the file, not template examples.\n"
+                "5. ONLY use variables, constants, and imports explicitly defined in the TOP-LEVEL CONTEXT below. Do not hallucinate undefined globals.\n\n"
+                "EXAMPLE of valid response:\n"
+                "<<<<<<< engine/example.py\n"
+                "    temperature = 0.1\n"
+                "    max_tokens = 200\n"
+                "=======\n"
+                "    temperature = kwargs.get('temperature', 0.1)\n"
+                "    max_tokens = kwargs.get('max_tokens', 200)\n"
+                ">>>>>>> REPLACE\n\n"
+                f"ISSUE: {issue.get('description', '')}\n\n"
+                f"TOP-LEVEL CONTEXT (Imports & Globals):\n{_extract_top_level_context(original)}\n\n"
+                f"FILE CONTENT:\n{original[:6000]}\n\n"
+                "Now generate the actual SEARCH/REPLACE blocks for this fix:\n"
+            )
+            if attempt == 1 and failed_attempt_1_raw:
+                prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
+            if attempt == 1 and pre_flight_rejection_msg:
+                prompt += f"\n\n🛑 CRITICAL CORRECTION FROM PRE-FLIGHT GATE: Your previous attempt was rejected because: {pre_flight_rejection_msg}. DO NOT repeat this mistake.\n"
+            raw = generate(prompt, api_keys, temperature=current_temp, max_tokens=current_max, model_type="patch")
+            # PRE-FLIGHT SAFETY GATE: Catch regressions before patch application
+            clean_code = strip_fences(raw)
+            from overnight.safety_gates import pre_flight_safety_check
+            is_safe, safety_msg = pre_flight_safety_check(clean_code, str(file_path))
+            if not is_safe:
+                print(f"       🛑 PRE-FLIGHT REJECTED: {safety_msg}")
+                pre_flight_rejection_msg = safety_msg
+                continue
+
+            if not raw: return False
+
+            # NEW: Strip LLM prose, extract ONLY the Aider diff blocks
+            import re
+            diff_blocks = re.findall(r'(<<<<<<<.*?>>>>>>> REPLACE)', raw, re.DOTALL)
+            if diff_blocks:
+                raw = "\n".join(diff_blocks)
+
+            raw = strip_fences(raw)
+
+            # Parse & Apply Patches
+            modified_files = {}
+            try:
+                if parse_multi_file_diff:
+                    patches = parse_multi_file_diff(raw, ROOT)
+                    modified_files = apply_multi_file_patches(patches)
+                else:
+                    # Fallback to simple single-file replace if engine missing
+                    # PATCH_ENGINE_UNAVAILABLE - no-op fallback is a governance bug
+                    print('       ❌ PATCH_ENGINE_UNAVAILABLE: Cannot generate valid patch')
+                    _record_ledger(file_path, issue, 'FAILED', 'Patch engine unavailable')
+                    return False
+            except Exception as e:
+                if attempt == 0:
+                    failed_attempt_1_raw = raw
+                    print(f"       🩸 AUTOPSY: Analyzing patch failure...")
+                    critic_constraint = perform_autopsy(raw, str(e), api_keys)
+                    print(f"       🧠 Constraint: {critic_constraint[:80]}...")
+                    # DYNAMIC TUNING
+                    if "truncat" in critic_constraint.lower(): current_max = 8192; current_temp = 0.1
+                    elif "algorithm" in critic_constraint.lower() or "logic" in critic_constraint.lower(): current_temp = 0.6
+                    else: current_temp = 0.1
+                    continue
                 return False
-        except Exception as e:
+
+            # GUARD: If patch produced no changes, skip pytest and retry
+            if not modified_files:
+                try:
+                    (ROOT / "overnight" / "last_failed_raw.txt").write_text(
+                        f"=== ADVISORY ===\n{issue.get('description','')}\n\n"
+                        f"=== RAW MODEL OUTPUT (0 SEARCH/REPLACE blocks parsed) ===\n{raw[:6000]}\n")
+                except Exception: pass
+                print(f"       ⚠️ 0 SEARCH/REPLACE blocks parsed (format issue). Raw dumped to overnight/last_failed_raw.txt")
+                if attempt == 0:
+                    failed_attempt_1_raw = raw
+                    continue
+                return False
+
+            # 👻 GHOST NAME GATE: Reject patches that use undefined names (saves Pytest runs)
+            ghost_violations = {}
+            for path, new_content in modified_files.items():
+                ghosts = _check_for_ghost_names(new_content)
+                if ghosts:
+                    ghost_violations[path.name] = ghosts
+
+            if ghost_violations:
+                ghosts_str = ", ".join([f"{k}({', '.join(v)})" for k,v in ghost_violations.items()])
+                print(f"       👻 GHOST NAMES DETECTED: {ghosts_str}")
+                if attempt == 0:
+                    failed_attempt_1_raw = raw
+                    critic_constraint = f"Generated code uses undefined names ({ghosts_str}). Add the missing imports or use existing ones."
+                    current_temp = 0.1
+                    continue
+                return False
+
+            # Backup & Write
+            backups = {}
+            for path, content in modified_files.items():
+                backups[path] = path.read_text() if path.exists() else ""
+                path.write_text(content)
+
+            # Run Pytest (Sniper Scope)
+            tb = run_pytest(targets)
+            before_ids = _failed_test_ids(baseline_tb)
+            after_ids = _failed_test_ids(tb)
+            new_failures = after_ids - before_ids
+            if tdd_kept_path is not None:
+                tdd_passes = run_pytest([str(tdd_kept_path.relative_to(ROOT))]) is None
+                success = (len(new_failures) == 0) and tdd_passes
+            else:
+                success = (tb is None) or (after_ids < before_ids)
+            print(f"       📉 Delta: before={len(before_ids)} after={len(after_ids)} new_failures={len(new_failures)}")
+            if success:
+                # SUCCESS -> SHADOW CANARY
+                import uuid
+                from tools.shadow_canary import run_canary
+                shadow_branch = f"shadow/autofix-{uuid.uuid4().hex[:8]}"
+                modified_paths = [str(p) for p in modified_files.keys()]
+
+                try:
+                    print(f"       🦜 Routing to Shadow Canary ({shadow_branch})...")
+                    # Capture actual working branch
+                    BASE_BRANCH = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+                    if not BASE_BRANCH:
+                        print("❌ ERROR: Detached HEAD state. Aborting.")
+                        return False
+                    print(f"🔒 Shadow Canary base: {BASE_BRANCH}")
+
+                    subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
+                    subprocess.run(["git", "checkout", "-b", shadow_branch], cwd=ROOT, check=True, capture_output=True)
+                    subprocess.run(["git", "add", *modified_paths], cwd=ROOT, check=True, capture_output=True)
+                    subprocess.run(["git", "commit", "-m", f"shadow: {file_path.name}"], cwd=ROOT, check=True, capture_output=True)
+
+                    if run_canary(modified_paths):
+                        subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, check=True, capture_output=True)
+                        subprocess.run(["git", "merge", shadow_branch], cwd=ROOT, check=True, capture_output=True)
+                        subprocess.run(["git", "branch", "-d", shadow_branch], cwd=ROOT, check=True, capture_output=True)
+                        print(f"       🟢 CANARY PASSED: Merged to master")
+                        # STORE PROVEN FIX (Improvement #6)
+                        _store_proven_fix(file_path, issue, raw, forensic_context)
+                        _record_ledger(file_path, issue, "APPLIED", "Canary passed")
+                        return True
+                    else:
+                        for path, content in backups.items(): path.write_text(content)
+                        subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
+                        subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
+                        print(f"       🔴 CANARY FAILED: Reverted disk and shadow branch")
+                        return False
+
+                except Exception as e:
+                    for path, content in backups.items(): path.write_text(content)
+                    subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
+                    subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
+                    print(f"       ⚠️ Shadow Git Error: {e}")
+                    return False
+
+            # FAILURE: Revert
+            for path, content in backups.items():
+                path.write_text(content)
+
             if attempt == 0:
                 failed_attempt_1_raw = raw
-                print(f"       🩸 AUTOPSY: Analyzing patch failure...")
-                critic_constraint = perform_autopsy(raw, str(e), api_keys)
+                print(f"       🩸 AUTOPSY: Analyzing test failure...")
+                critic_constraint = perform_autopsy(list(modified_files.values())[0] if modified_files else original, tb, api_keys)
                 print(f"       🧠 Constraint: {critic_constraint[:80]}...")
                 # DYNAMIC TUNING
                 if "truncat" in critic_constraint.lower(): current_max = 8192; current_temp = 0.1
                 elif "algorithm" in critic_constraint.lower() or "logic" in critic_constraint.lower(): current_temp = 0.6
                 else: current_temp = 0.1
                 continue
-            return False
-
-        # GUARD: If patch produced no changes, skip pytest and retry
-        if not modified_files:
-            try:
-                (ROOT / "overnight" / "last_failed_raw.txt").write_text(
-                    f"=== ADVISORY ===\n{issue.get('description','')}\n\n"
-                    f"=== RAW MODEL OUTPUT (0 SEARCH/REPLACE blocks parsed) ===\n{raw[:6000]}\n")
-            except Exception: pass
-            print(f"       ⚠️ 0 SEARCH/REPLACE blocks parsed (format issue). Raw dumped to overnight/last_failed_raw.txt")
-            if attempt == 0:
-                failed_attempt_1_raw = raw
-                continue
-            return False
-
-        # 👻 GHOST NAME GATE: Reject patches that use undefined names (saves Pytest runs)
-        ghost_violations = {}
-        for path, new_content in modified_files.items():
-            ghosts = _check_for_ghost_names(new_content)
-            if ghosts:
-                ghost_violations[path.name] = ghosts
-
-        if ghost_violations:
-            ghosts_str = ", ".join([f"{k}({', '.join(v)})" for k,v in ghost_violations.items()])
-            print(f"       👻 GHOST NAMES DETECTED: {ghosts_str}")
-            if attempt == 0:
-                failed_attempt_1_raw = raw
-                critic_constraint = f"Generated code uses undefined names ({ghosts_str}). Add the missing imports or use existing ones."
-                current_temp = 0.1
-                continue
-            return False
-
-        # Backup & Write
-        backups = {}
-        for path, content in modified_files.items():
-            backups[path] = path.read_text() if path.exists() else ""
-            path.write_text(content)
-
-        # Run Pytest (Sniper Scope)
-        tb = run_pytest(targets)
-        before_ids = _failed_test_ids(baseline_tb)
-        after_ids = _failed_test_ids(tb)
-        new_failures = after_ids - before_ids
-        if tdd_kept_path is not None:
-            tdd_passes = run_pytest([str(tdd_kept_path.relative_to(ROOT))]) is None
-            success = (len(new_failures) == 0) and tdd_passes
-        else:
-            success = (tb is None) or (after_ids < before_ids)
-        print(f"       📉 Delta: before={len(before_ids)} after={len(after_ids)} new_failures={len(new_failures)}")
-        if success:
-            # SUCCESS -> SHADOW CANARY
-            import uuid
-            from tools.shadow_canary import run_canary
-            shadow_branch = f"shadow/autofix-{uuid.uuid4().hex[:8]}"
-            modified_paths = [str(p) for p in modified_files.keys()]
-            
-            try:
-                print(f"       🦜 Routing to Shadow Canary ({shadow_branch})...")
-                # Capture actual working branch
-                BASE_BRANCH = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
-                if not BASE_BRANCH:
-                    print("❌ ERROR: Detached HEAD state. Aborting.")
-                    return False
-                print(f"🔒 Shadow Canary base: {BASE_BRANCH}")
-                
-                subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
-                subprocess.run(["git", "checkout", "-b", shadow_branch], cwd=ROOT, check=True, capture_output=True)
-                subprocess.run(["git", "add", *modified_paths], cwd=ROOT, check=True, capture_output=True)
-                subprocess.run(["git", "commit", "-m", f"shadow: {file_path.name}"], cwd=ROOT, check=True, capture_output=True)
-                
-                if run_canary(modified_paths):
-                    subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, check=True, capture_output=True)
-                    subprocess.run(["git", "merge", shadow_branch], cwd=ROOT, check=True, capture_output=True)
-                    subprocess.run(["git", "branch", "-d", shadow_branch], cwd=ROOT, check=True, capture_output=True)
-                    print(f"       🟢 CANARY PASSED: Merged to master")
-                    # STORE PROVEN FIX (Improvement #6)
-                    _store_proven_fix(file_path, issue, raw, forensic_context)
-                    _record_ledger(file_path, issue, "APPLIED", "Canary passed")
-                    return True
-                else:
-                    for path, content in backups.items(): path.write_text(content)
-                    subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
-                    subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
-                    print(f"       🔴 CANARY FAILED: Reverted disk and shadow branch")
-                    return False
-                    
-            except Exception as e:
-                for path, content in backups.items(): path.write_text(content)
-                subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
-                subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
-                print(f"       ⚠️ Shadow Git Error: {e}")
+            else:
+                _record_ledger(file_path, issue, "REJECTED", "Failed generation/tests")
+                _store_failed_fix(file_path, issue, raw, critic_constraint)
+                check_and_record_defeat(str(file_path), original, tb)
                 return False
-
-        # FAILURE: Revert
-        for path, content in backups.items():
-            path.write_text(content)
-        
-        if attempt == 0:
-            failed_attempt_1_raw = raw
-            print(f"       🩸 AUTOPSY: Analyzing test failure...")
-            critic_constraint = perform_autopsy(list(modified_files.values())[0] if modified_files else original, tb, api_keys)
-            print(f"       🧠 Constraint: {critic_constraint[:80]}...")
-            # DYNAMIC TUNING
-            if "truncat" in critic_constraint.lower(): current_max = 8192; current_temp = 0.1
-            elif "algorithm" in critic_constraint.lower() or "logic" in critic_constraint.lower(): current_temp = 0.6
-            else: current_temp = 0.1
-            continue
-        else:
-            _record_ledger(file_path, issue, "REJECTED", "Failed generation/tests")
-            _store_failed_fix(file_path, issue, raw, critic_constraint)
-            check_and_record_defeat(str(file_path), original, tb)
-            return False
-    return False
+        return False
+    finally:
+        _cleanup_tdd_artifact(tdd_kept_path)
 
 # ============================================================
 # SELF-IMPROVEMENT SCORECARD (Improvement #7)
@@ -951,7 +968,7 @@ def apply_auto_fix(file_path, issue, api_keys):
 # ============================================================
 def compute_scorecard(days=None):
     """Compute self-improvement metrics from the improvement ledger.
-    
+
     Returns a dict with:
     - total_decisions, applied, stale, escalated, rejected
     - success_rate (applied / non-stale decisions)
@@ -962,7 +979,7 @@ def compute_scorecard(days=None):
     ledger_path = ROOT / "overnight" / "improvement_ledger.jsonl"
     proven_path = ROOT / "overnight" / "proven_fixes.jsonl"
     failed_path = ROOT / "overnight" / "failed_fixes.jsonl"
-    
+
     scorecard = {
         "total_decisions": 0,
         "applied": 0,
@@ -976,7 +993,7 @@ def compute_scorecard(days=None):
         "trend": "insufficient_data",
         "malformed_timestamps": 0
     }
-    
+
     # Count proven fixes
     try:
         if proven_path.exists():
@@ -994,7 +1011,7 @@ def compute_scorecard(days=None):
             ])
     except Exception:
         pass
-    
+
     # Parse ledger
     entries = []
     try:
@@ -1007,10 +1024,10 @@ def compute_scorecard(days=None):
                         pass
     except Exception:
         return scorecard
-    
+
     if not entries:
         return scorecard
-    
+
     if days is not None:
         if not isinstance(days, (int, float)) or isinstance(days, bool):
             raise ValueError(
@@ -1063,12 +1080,12 @@ def compute_scorecard(days=None):
         entries = filtered_entries
 
     scorecard["total_decisions"] = len(entries)
-    
+
     # Count statuses and build category breakdown
     for entry in entries:
         status = entry.get("status", "UNKNOWN")
         category = entry.get("category", "unknown")
-        
+
         if status == "APPLIED":
             scorecard["applied"] += 1
         elif status == "STALE":
@@ -1077,36 +1094,36 @@ def compute_scorecard(days=None):
             scorecard["escalated"] += 1
         elif status == "REJECTED":
             scorecard["rejected"] += 1
-        
+
         if category not in scorecard["category_breakdown"]:
             scorecard["category_breakdown"][category] = {"applied": 0, "rejected": 0, "escalated": 0}
         if status in ("APPLIED", "REJECTED", "ESCALATED"):
             key = status.lower()
             if key in scorecard["category_breakdown"][category]:
                 scorecard["category_breakdown"][category][key] += 1
-    
+
     # Success rate: applied / (applied + rejected + escalated)
     actionable = scorecard["applied"] + scorecard["rejected"] + scorecard["escalated"]
     if actionable > 0:
         scorecard["success_rate"] = round(scorecard["applied"] / actionable * 100, 1)
-    
+
     # Trend: compare first half vs second half success rates
     actionable_entries = [e for e in entries if e.get("status") in ("APPLIED", "REJECTED", "ESCALATED")]
     if len(actionable_entries) >= 6:
         mid = len(actionable_entries) // 2
         first_half = actionable_entries[:mid]
         second_half = actionable_entries[mid:]
-        
+
         first_success = sum(1 for e in first_half if e["status"] == "APPLIED") / len(first_half)
         second_success = sum(1 for e in second_half if e["status"] == "APPLIED") / len(second_half)
-        
+
         if second_success > first_success + 0.1:
             scorecard["trend"] = "improving"
         elif second_success < first_success - 0.1:
             scorecard["trend"] = "degrading"
         else:
             scorecard["trend"] = "stable"
-    
+
     return scorecard
 
 
@@ -1126,7 +1143,7 @@ def drain_fix_backlog(api_keys, max_fixes=3):
             issue_desc = item.get('issue', {}).get('description', '')
         except AttributeError:
             issue_desc = ''
-        
+
         if _classify_and_route_local(issue_desc):
             print(f"       🔀 Intercepted stylistic fix. Routing to Local SLM (Port 11435). Bypassing cloud budget.")
             _record_ledger(fpath, item.get('issue', {}), "DEFERRED", "Routed to Local SLM (Validation Phase)")
@@ -1214,13 +1231,13 @@ def _classify_and_route_local(advisory_notes: str) -> bool:
     """Deterministic keyword classifier. Returns True if should route to Local SLM."""
     if not advisory_notes: return False
     notes_lower = advisory_notes.lower()
-    
+
     # High-confidence local routing keywords (style/doc/maintainability)
     local_keywords = [
-        'docstring', 'typo', 'comment', 'formatting', 'pep8', 'whitespace', 
+        'docstring', 'typo', 'comment', 'formatting', 'pep8', 'whitespace',
         'unused import', 'black', 'flake8', 'mypy', 'type hint', 'variable name'
     ]
-    
+
     if any(kw in notes_lower for kw in local_keywords):
         return True
     return False
@@ -1263,13 +1280,13 @@ def process_advisory_queue(api_keys, budget, state):
                 continue
             # --------------------------------------
 
-            
+
             primary_response = generate(build_review_prompt(source_file, source_file.read_text(), get_file_context(source_file), advisory_notes=data["advisory_notes"]), api_keys, max_tokens=8192)
             if not primary_response: print("       ⚠️ Primary analysis failed"); continue
-            
+
             improvements = extract_json_from_response(primary_response)
             if not improvements: print("       ⚠️ Parse failed"); qpath.unlink(); continue
-            
+
             auto_fixable = [imp for imp in improvements if isinstance(imp, dict) and imp.get("category") in SAFE_CATEGORIES]
             print(f"       📥 {len(auto_fixable)} fixable issues queued to backlog")
             if auto_fixable:
@@ -1291,7 +1308,7 @@ def discover_files():
 def main():
     for bak in sorted(ROOT.rglob("*.orig_backup")):
         bak.with_suffix("").write_text(bak.read_text()); bak.unlink()
-        
+
     p = argparse.ArgumentParser()
     p.add_argument("--drain-backlog", action="store_true")
     p.add_argument("--process-only", action="store_true")
@@ -1310,7 +1327,7 @@ def main():
             print(f"\n{'='*60}")
             print(f"🔄 CONTINUOUS MODE - Cycle {cycle} - {datetime.now().isoformat()}")
             print(f"{'='*60}\n")
-            
+
             try:
                 if a.drain_backlog:
                     drain_backlog_loop(keys, budget, None, fixes_per_pass=a.fixes_per_pass)
@@ -1322,9 +1339,9 @@ def main():
                     drain_backlog_loop(keys, budget, None, fixes_per_pass=a.fixes_per_pass)
             except Exception as e:
                 print(f"⚠️ Cycle {cycle} error: {e}")
-            
+
             print(budget.report())
-            
+
             print(f"\n💤 Sleeping {a.loop_interval}s before next cycle...")
             time.sleep(a.loop_interval)
             cycle += 1
