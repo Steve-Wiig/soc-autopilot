@@ -212,8 +212,9 @@ def sanitize_recursive(obj: Any) -> Any:
             obj[i] = sanitize_recursive(v)
         return obj
     else:
+        if isinstance(obj, str):
+            return redact_value(obj)
         return obj
-        return redact_value(obj)
 
 
 def sanitize_value(value: Any) -> Any:

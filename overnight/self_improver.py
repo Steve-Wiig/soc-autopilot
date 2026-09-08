@@ -257,6 +257,16 @@ def _choose_context(original, issue_desc, raw_cap=24000):
 
 
 import builtins as _builtins
+
+def _resolve_contained_repository_path(file_path):
+    root = ROOT.resolve()
+    source_file = (ROOT / file_path).resolve()
+
+    if not source_file.is_relative_to(root):
+        raise ValueError("file_path escapes repository root")
+
+    return source_file
+
 _BUILTINS = set(dir(_builtins)) | {'__name__', '__file__', '__doc__', 'self', 'cls', 'None', 'True', 'False'}
 
 def _check_for_ghost_names(source_code: str):
@@ -1236,7 +1246,7 @@ def process_advisory_queue(api_keys, budget, state):
         budget.record_call("openrouter")
         try:
             data = json.loads(qpath.read_text())
-            source_file = ROOT / data["file_path"]
+            source_file = _resolve_contained_repository_path(data["file_path"])
             print(f"  [{i}/{len(pending)}] 🔍 {data['file_path']}")
             if not source_file.exists(): qpath.unlink(); continue
 
