@@ -39,3 +39,9 @@ overnight/*.txt
 overnight/*.jsonl
 tests/test_tdd_auto_*.py
 engine/inference_ledger.jsonl
+
+# Local documentation rebuild backups
+/docs/archive/
+/runtime/
+/docs/archive/
+/.env
