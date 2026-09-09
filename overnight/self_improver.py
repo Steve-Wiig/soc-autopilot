@@ -716,27 +716,32 @@ def apply_auto_fix(file_path, issue, api_keys):
     print(f"       🧪 Spawning TDD Sub-Agent...")
     tdd_test_code = _generate_tdd_test(issue.get('description', ''), str(file_path.relative_to(ROOT)), api_keys)
     tdd_kept_path = None
+    tdd_write_path = None
     tdd_block = ""
     if tdd_test_code:
         test_path = ROOT / "tests" / f"test_tdd_auto_{file_path.stem}.py"
         try:
-            tdd_kept_path = test_path
             test_path.write_text(tdd_test_code)
+            tdd_write_path = test_path
             # RED PHASE VERIFICATION: The test MUST fail before we apply the fix.
             # If it passes immediately, the test is vacuous and cannot validate the fix.
             red_check = run_pytest([str(test_path.relative_to(ROOT))])
             if red_check is None:
                 print(f"       ⚠️ TDD Red Phase FAILED: Test passes immediately. Rejecting vacuous test.")
-                # Ephemeral TDD artifact cleanup is centralized in finally.
+                # tdd_kept_path remains None: vacuous tests never satisfy acceptance.
             else:
-                print(f"       🔴 TDD Red Backlog DrainONFIRMED: Test fails as expected.")
+                print(f"       🔴 TDD Red Phase CONFIRMED: Test fails as expected.")
                 tdd_block = f"ACCEPTANCE CRITERIA (Make this test pass):\n```python\n{tdd_test_code}\n```\n\n"
+                tdd_kept_path = test_path
         except Exception as e:
-            _cleanup_tdd_artifact(tdd_kept_path)
-            tdd_kept_path = None
+            _cleanup_tdd_artifact(tdd_write_path)
+            tdd_write_path = None
+            print(f"       ⚠️ TDD artifact write/red-check failed: {e}")
 
     # NEW SAFETY GATE: If baseline passed, and we failed to generate/validate a TDD test, drop it.
     if baseline_tb is None and not tdd_kept_path:
+        _cleanup_tdd_artifact(tdd_write_path)
+        tdd_write_path = None
         category = issue.get("category", "").lower()
         print(f"       ⚠️ Baseline passed for '{category}', but unable to generate regression test. Dropping.")
         _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
@@ -959,7 +964,7 @@ def apply_auto_fix(file_path, issue, api_keys):
                 return False
         return False
     finally:
-        _cleanup_tdd_artifact(tdd_kept_path)
+        _cleanup_tdd_artifact(tdd_write_path)
 
 # ============================================================
 # SELF-IMPROVEMENT SCORECARD (Improvement #7)
