@@ -462,18 +462,35 @@ class TriageQueueManager:
             logger.info("Reaped stale jobs: reset=%d, failed=%d", reset_count, failed_count)
 
 
-    def _enforce_approval(self, job_id: str, job_record: dict) -> None:
-        """Structural approval gate. CRITICAL jobs CANNOT transition without explicit approval."""
-        priority = job_record.get("priority", "normal").lower()
-        approved = job_record.get("approval", {}).get("approved", False)
+    def _enforce_approval(self, job_id: int) -> None:
+        """Structural approval gate. Queries DB directly to enforce CRITICAL job approvals."""
+        self.cursor.execute("SELECT priority, approval FROM triage_queue WHERE id = ?", (job_id,))
+        row = self.cursor.fetchone()
+        if not row:
+            return  # Job not found, let the UPDATE handle it
+            
+        priority = str(row[0] or "normal").lower()
+        
+        # Handle approval column (might be JSON string or dict)
+        approval_data = row[1]
+        if isinstance(approval_data, str):
+            try:
+                import json
+                approval_data = json.loads(approval_data)
+            except Exception:
+                approval_data = {}
+        elif approval_data is None:
+            approval_data = {}
+            
+        approved = approval_data.get("approved", False) if isinstance(approval_data, dict) else False
+        
         if priority == "critical" and not approved:
             raise PermissionError(
-                f"CRITICAL job {job_id} cannot be completed without explicit approval. "
-                f"Current approval state: {job_record.get('approval')}"
+                f"CRITICAL job {job_id} cannot be completed without explicit approval."
             )
 
     def complete_job(self, job_id: int, success: bool = True, reason: Optional[str] = None, changed_by: Optional[str] = None) -> None:
-        self._enforce_approval(job_id, job_record)
+        self._enforce_approval(job_id)
         """
         Mark a job as completed or failed.
 
