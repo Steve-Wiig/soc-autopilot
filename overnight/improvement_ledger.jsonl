@@ -391,3 +391,6 @@
 {"timestamp": "2026-09-06T10:58:36.566601", "file": "engine/cer_critic.py", "job_id": "b2efeb28beda79eb", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
 {"timestamp": "2026-09-06T11:28:02.799230", "file": "engine/consensus_gate.py", "job_id": "25731113febe36b5", "status": "APPLIED", "reason": "No reason provided", "source": "pi_critic"}
 {"timestamp": "2026-09-06T12:27:30.099915", "file": "engine/failure_autopsy.py", "job_id": "b53ed1f71cc809b9", "status": "APPLIED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-10T15:39:25.619466", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "ESCALATED", "reason": "Routing policy requires review for maintainability advisory."}
+{"timestamp": "2026-09-10T15:45:06.470101", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "ESCALATED", "reason": "High-risk maintainability advisory requires manual/Oracle review."}
+{"timestamp": "2026-09-10T15:51:30.656295", "file": "engine/failure_autopsy.py", "category": "maintainability", "status": "DEFERRED", "reason": "Routed to Local SLM (Validation Phase)"}
