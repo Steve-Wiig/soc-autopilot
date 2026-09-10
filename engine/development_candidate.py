@@ -6,7 +6,7 @@ A diff modified after review invalidates all approvals.
 import hashlib
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 @dataclass
 class DevelopmentCandidate:
@@ -14,7 +14,7 @@ class DevelopmentCandidate:
     base_commit: str
     diff_sha256: str
     changed_files: List[str]
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     
     # Pipeline results
     worker_result: Optional[str] = None
