@@ -28,7 +28,7 @@ def check_complexity(file_path: str, max_complexity: int = 15) -> bool:
                 return False
     return True
 
-def check_runtime_safety(file_path: str) -> bool:
+def check_static_and_import_safety(file_path: str) -> bool:
     """Ensures the file doesn't crash the interpreter on import."""
     try:
         res = subprocess.run(
@@ -46,7 +46,7 @@ def run_canary(modified_files: list) -> bool:
             
     print("       🦜 CANARY: Checking runtime safety...")
     for f in modified_files:
-        if not check_runtime_safety(f):
+        if not check_static_and_import_safety(f):
             print(f"       🛑 CANARY FAIL (Runtime): {f}")
             return False
             
