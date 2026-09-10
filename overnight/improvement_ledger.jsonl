@@ -394,3 +394,16 @@
 {"timestamp": "2026-09-10T15:39:25.619466", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "ESCALATED", "reason": "Routing policy requires review for maintainability advisory."}
 {"timestamp": "2026-09-10T15:45:06.470101", "file": "engine/enrichment_scheduler.py", "category": "maintainability", "status": "ESCALATED", "reason": "High-risk maintainability advisory requires manual/Oracle review."}
 {"timestamp": "2026-09-10T15:51:30.656295", "file": "engine/failure_autopsy.py", "category": "maintainability", "status": "DEFERRED", "reason": "Routed to Local SLM (Validation Phase)"}
+{"timestamp": "2026-09-10T20:14:16.539334", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "DEFERRED", "reason": "Routed to Local SLM (Validation Phase)"}
+{"timestamp": "2026-09-10T20:17:53.352040", "file": "engine/defeat_ledger.py", "category": "performance", "status": "STALE", "reason": "Baseline passed, no regression test generated"}
+{"timestamp": "2026-09-10T20:17:58.529944", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "STALE", "reason": "Baseline passed, no regression test generated"}
+{"timestamp": "2026-09-10T20:22:47.758986", "file": "engine/failure_autopsy.py", "category": "maintainability", "status": "DEFERRED", "reason": "Routed to Local SLM (Validation Phase)"}
+{"timestamp": "2026-09-10T20:26:36.688839", "file": "engine/ioc_extractor.py", "category": "performance", "status": "ESCALATED", "reason": "Routing policy requires review for performance advisory."}
+{"timestamp": "2026-09-10T20:29:48.766939", "file": "engine/writeback/so_cases.py", "category": "maintainability", "status": "ESCALATED", "reason": "Routing policy requires review for maintainability advisory."}
+{"timestamp": "2026-09-10T20:29:49.498560", "file": "engine/writeback/so_cases.py", "category": "maintainability", "status": "ESCALATED", "reason": "Routing policy requires review for maintainability advisory."}
+{"timestamp": "2026-09-10T20:29:50.267967", "file": "engine/writeback/so_cases.py", "category": "maintainability", "status": "ESCALATED", "reason": "Routing policy requires review for maintainability advisory."}
+{"timestamp": "2026-09-10T20:33:40.128085", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "STALE", "reason": "Baseline passed, no regression test generated"}
+{"timestamp": "2026-09-10T20:35:44.774235", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "STALE", "reason": "Baseline passed, no regression test generated"}
+{"timestamp": "2026-09-10T20:44:51.404873", "file": "engine/defeat_ledger.py", "job_id": "08ddb50fe32b4b1c", "status": "APPLIED", "reason": "No reason", "source": "pi_critic"}
+{"timestamp": "2026-09-10T20:49:57.402008", "file": "engine/defeat_ledger.py", "job_id": "c1a56115c40de970", "status": "REJECTED", "reason": "Inference Error: HTTPConnectionPool(host='localhost', port=11434): Read timed out. (read timeout=180)", "source": "pi_critic"}
+{"timestamp": "2026-09-10T21:06:32.955899", "file": "engine/defeat_ledger.py", "category": "performance", "status": "STALE", "reason": "Baseline passed, no regression test generated"}
