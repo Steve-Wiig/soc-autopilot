@@ -22,11 +22,31 @@ def parse_multi_file_diff(raw_diff: str, root_dir: Path) -> list[FilePatch]:
         r'<<<<<<<\s+(.*?)\s*\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE',
         re.DOTALL
     )
+
+    root = Path(root_dir).resolve()
+
     for match in pattern.finditer(raw_diff):
         rel_path = match.group(1).strip()
+        candidate = Path(rel_path)
+
+        if candidate.is_absolute():
+            raise ValueError(
+                f"Patch path must be repository-relative: {rel_path!r}"
+            )
+
+        resolved = (root / candidate).resolve(strict=False)
+
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            raise ValueError(
+                f"Patch path escapes repository root: {rel_path!r}"
+            ) from None
+
         search = match.group(2)
         replace = match.group(3)
-        patches.append(FilePatch(root_dir / rel_path, search, replace))
+        patches.append(FilePatch(resolved, search, replace))
+
     return patches
 
 def _locate_region(original: str, search: str):
@@ -60,10 +80,16 @@ def _locate_region(original: str, search: str):
 
 def apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:
     modified_files = {}
+    working_contents = {}
+
     for patch in patches:
         if not patch.file_path.exists():
             raise ValueError(f"File not found: {patch.file_path}")
-        original = patch.file_path.read_text()
+
+        if patch.file_path not in working_contents:
+            working_contents[patch.file_path] = patch.file_path.read_text()
+
+        original = working_contents[patch.file_path]
         new_content = original
 
         if patch.search in original:
@@ -75,10 +101,18 @@ def apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:
                 replace_text = patch.replace
                 if not replace_text.endswith("\n"):
                     replace_text += "\n"
-                new_lines = orig_lines[:start] + [replace_text] + orig_lines[start+size:]
+                new_lines = (
+                    orig_lines[:start]
+                    + [replace_text]
+                    + orig_lines[start + size:]
+                )
                 new_content = "".join(new_lines)
             else:
-                raise ValueError(f"Search block not found (exact & fuzzy) in {patch.file_path}")
+                raise ValueError(
+                    f"Search block not found (exact & fuzzy) in {patch.file_path}"
+                )
 
+        working_contents[patch.file_path] = new_content
         modified_files[patch.file_path] = new_content
+
     return modified_files
