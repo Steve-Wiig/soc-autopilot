@@ -1,0 +1,42 @@
+
+# 2026-09-09 11:43:53.496669
++Make ONE small safety improvement in overnight/self_improver.py only.
++
++Add a helper named _has_sufficient_disk_space() using shutil.disk_usage(ROOT) or the existing repository root path.
++
++The helper must:
++- return True when at least 2 GiB of free space is available;
++- return False when less than 2 GiB is available;
++- fail closed if disk_usage raises an exception;
++- have a small clear docstring.
++
++Then make apply_auto_fix() call this helper near the beginning, before expensive generation or mutation work. If insufficient space, return False without modifying repository files.
++
++Do not change any other behavior.
++Do not change the existing safety gates.
++Do not change canary behavior.
++Do not change Git behavior.
++Do not modify any other source file.
++Do not create tests; the test file is already supplied.
++Do not commit anything.
+
+# 2026-09-09 11:43:53.496866
++Make ONE small safety improvement in overnight/self_improver.py only.
++
++Add a helper named _has_sufficient_disk_space() using shutil.disk_usage(ROOT) or the existing repository root path.
++
++The helper must:
++- return True when at least 2 GiB of free space is available;
++- return False when less than 2 GiB is available;
++- fail closed if disk_usage raises an exception;
++- have a small clear docstring.
++
++Then make apply_auto_fix() call this helper near the beginning, before expensive generation or mutation work. If insufficient space, return False without modifying repository files.
++
++Do not change any other behavior.
++Do not change the existing safety gates.
++Do not change canary behavior.
++Do not change Git behavior.
++Do not modify any other source file.
++Do not create tests; the test file is already supplied.
++Do not commit anything.

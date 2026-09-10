@@ -922,8 +922,10 @@ def apply_auto_fix(file_path, issue, api_keys):
 
                     if run_canary(modified_paths):
                         subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, check=True, capture_output=True)
-                        subprocess.run(["git", "merge", shadow_branch], cwd=ROOT, check=True, capture_output=True)
-                        subprocess.run(["git", "branch", "-d", shadow_branch], cwd=ROOT, check=True, capture_output=True)
+                        # 🛑 HUMAN AIRGAP: Auto-merge disabled for safety.
+                        subprocess.run(["git", "push", "-u", "origin", shadow_branch], cwd=ROOT, capture_output=True)
+                        print(f"       🟢 CANARY PASSED: Branch {shadow_branch} pushed to GitHub.")
+                        print(f"       🛑 HUMAN GATE: Please review the PR and merge manually.")
                         print(f"       🟢 CANARY PASSED: Merged to master")
                         # STORE PROVEN FIX (Improvement #6)
                         _store_proven_fix(file_path, issue, raw, forensic_context)

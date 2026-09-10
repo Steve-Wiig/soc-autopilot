@@ -461,7 +461,19 @@ class TriageQueueManager:
         if reset_count or failed_count:
             logger.info("Reaped stale jobs: reset=%d, failed=%d", reset_count, failed_count)
 
+
+    def _enforce_approval(self, job_id: str, job_record: dict) -> None:
+        """Structural approval gate. CRITICAL jobs CANNOT transition without explicit approval."""
+        priority = job_record.get("priority", "normal").lower()
+        approved = job_record.get("approval", {}).get("approved", False)
+        if priority == "critical" and not approved:
+            raise PermissionError(
+                f"CRITICAL job {job_id} cannot be completed without explicit approval. "
+                f"Current approval state: {job_record.get('approval')}"
+            )
+
     def complete_job(self, job_id: int, success: bool = True, reason: Optional[str] = None, changed_by: Optional[str] = None) -> None:
+        self._enforce_approval(job_id, job_record)
         """
         Mark a job as completed or failed.
 
