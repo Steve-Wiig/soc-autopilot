@@ -50,4 +50,14 @@ def run_canary(modified_files: list) -> bool:
             print(f"       🛑 CANARY FAIL (Runtime): {f}")
             return False
             
+    # REAL import/compile validation (P0-5 upgrade)
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_canary_check", str(file_path))
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+    except Exception as e:
+        return False, f"Import validation failed: {e}"
+
     return True
