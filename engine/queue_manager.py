@@ -123,6 +123,8 @@ class TriageQueueManager:
             target_status TEXT NOT NULL CHECK (target_status IN ('completed', 'failed')),
             approved_by TEXT NOT NULL,
             approved_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            reason TEXT,
+            judge_metadata TEXT,
             PRIMARY KEY (job_id, target_status),
             FOREIGN KEY (job_id) REFERENCES triage_queue (id) ON DELETE CASCADE
         );
@@ -139,10 +141,10 @@ class TriageQueueManager:
 
     def _get_job_severity(self, job_id: int) -> Optional[str]:
         """Fetch the severity of a job by ID.
-        
+
         Args:
             job_id: The job ID to look up.
-            
+
         Returns:
             The severity string, or None if not found.
         """
@@ -186,7 +188,8 @@ class TriageQueueManager:
                     f"Critical job {job_id} requires approval to transition to {target_status}"
                 )
 
-    def approve_job(self, job_id: int, target_status: str, approver: str) -> None:
+    def approve_job(self, job_id: int, target_status: str, approver: str,
+                    reason: Optional[str] = None, judge_metadata: Optional[str] = None) -> None:
         """
         Record an approval for a critical job to transition to target_status.
 
@@ -203,10 +206,11 @@ class TriageQueueManager:
             raise ValueError("target_status must be 'completed' or 'failed'")
         self.cursor.execute(
             """
-            INSERT OR REPLACE INTO triage_queue_approvals (job_id, target_status, approved_by)
-            VALUES (?, ?, ?)
+            INSERT OR REPLACE INTO triage_queue_approvals
+            (job_id, target_status, approved_by, reason, judge_metadata)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (job_id, target_status, approver),
+            (job_id, target_status, approver, reason, judge_metadata),
         )
         self.conn.commit()
         logger.info("Approval recorded for job %d to %s by %s", job_id, target_status, approver)
@@ -462,40 +466,19 @@ class TriageQueueManager:
             logger.info("Reaped stale jobs: reset=%d, failed=%d", reset_count, failed_count)
 
 
-    def _enforce_approval(self, job_id: int) -> None:
-        """Structural approval gate. Queries DB directly to enforce CRITICAL job approvals."""
-        try:
-            self.cursor.execute("SELECT priority, approval FROM triage_queue WHERE id = ?", (job_id,))
-        except Exception as e:
-            if "no such column" in str(e).lower():
-                return  # Schema doesn't support priority/approval yet (backward compat)
-            raise
-        row = self.cursor.fetchone()
-        if not row:
-            return  # Job not found, let the UPDATE handle it
-            
-        priority = str(row[0] or "normal").lower()
-        
-        # Handle approval column (might be JSON string or dict)
-        approval_data = row[1]
-        if isinstance(approval_data, str):
-            try:
-                import json
-                approval_data = json.loads(approval_data)
-            except Exception:
-                approval_data = {}
-        elif approval_data is None:
-            approval_data = {}
-            
-        approved = approval_data.get("approved", False) if isinstance(approval_data, dict) else False
-        
-        if priority == "critical" and not approved:
-            raise PermissionError(
-                f"CRITICAL job {job_id} cannot be completed without explicit approval."
-            )
+    def _enforce_approval(
+        self,
+        job_id: int,
+        target_status: str = "completed",
+    ) -> None:
+        """Compatibility wrapper around the DB-backed approval gate.
+
+        The authoritative approval state lives in triage_queue_approvals.
+        New code should prefer require_approval(job_id, target_status).
+        """
+        self.require_approval(job_id, target_status)
 
     def complete_job(self, job_id: int, success: bool = True, reason: Optional[str] = None, changed_by: Optional[str] = None) -> None:
-        self._enforce_approval(job_id)
         """
         Mark a job as completed or failed.
 
@@ -511,6 +494,7 @@ class TriageQueueManager:
             Identifier of the user or system that changed the job status.
         """
         status = STATUS_COMPLETED if success else STATUS_FAILED
+        self.require_approval(job_id, status)
         now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
         self.cursor.execute(
             """

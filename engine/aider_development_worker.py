@@ -47,6 +47,9 @@ class AiderWorkerResult:
     returncode: int
     reason: str
 
+    model_name: str = ""
+    prompt_hash: str = ""
+
 
 def _repo_root() -> Path:
     result = subprocess.run(
