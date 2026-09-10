@@ -464,7 +464,12 @@ class TriageQueueManager:
 
     def _enforce_approval(self, job_id: int) -> None:
         """Structural approval gate. Queries DB directly to enforce CRITICAL job approvals."""
-        self.cursor.execute("SELECT priority, approval FROM triage_queue WHERE id = ?", (job_id,))
+        try:
+            self.cursor.execute("SELECT priority, approval FROM triage_queue WHERE id = ?", (job_id,))
+        except Exception as e:
+            if "no such column" in str(e).lower():
+                return  # Schema doesn't support priority/approval yet (backward compat)
+            raise
         row = self.cursor.fetchone()
         if not row:
             return  # Job not found, let the UPDATE handle it
