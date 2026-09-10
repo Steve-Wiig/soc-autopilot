@@ -8,7 +8,14 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from engine.telemetry_identity import deduplicate_events
+
+
 ROOT = Path(__file__).parent.parent
+
 NAS_DIR = Path("/mnt/backup-nas/soc-slm-telemetry")
 BUFFER_DIR = ROOT / "overnight" / ".telemetry_buffer"
 OUTBOX_DIR = BUFFER_DIR / "outbox"
@@ -16,14 +23,14 @@ PRIORITY_FILE = ROOT / "engine" / "model_priority.json"
 
 def gather_events():
     events = []
-    for p in [NAS_DIR, BUFFER_DIR, OUTBOX_DIR]:
+    for p in [NAS_DIR, BUFFER_DIR]:
         if p.exists():
             for f in p.rglob("*.jsonl"):
                 for line in f.read_text().splitlines():
                     if line.strip():
                         try: events.append(json.loads(line))
                         except: pass
-    return events
+    return deduplicate_events(events)
 
 def calculate_metrics(events):
     remeds = defaultdict(list)

@@ -2,19 +2,15 @@ import sqlite3
 import time
 import argparse
 import requests
+from engine.queue_priority import priority_case_sql
 import json
 import logging
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from engine.telemetry import log_attempt
 
 logger = logging.getLogger(__name__)
 
-SEVERITY_PRIORITY = {
-    'critical': 1,
-    'high': 2,
-    'medium': 3,
-    'low': 4,
-}
 DEFAULT_PRIORITY = 5
 
 
@@ -29,26 +25,67 @@ class WorkerConfig:
 
 
 def _ensure_priority_column(conn: sqlite3.Connection) -> bool:
-    """Add priority column and backfill if it doesn't exist."""
+    """Ensure the complete worker-compatible queue schema exists.
+
+    The repository historically contains a six-column Wazuh queue while the
+    worker requires additional lifecycle fields. This migration preserves the
+    existing queue contract and incrementally adds the worker-required fields.
+    """
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(triage_queue)")
-    columns = [row[1] for row in cursor.fetchall()]
-    
-    if 'priority' not in columns:
-        cursor.execute("ALTER TABLE triage_queue ADD COLUMN priority INTEGER DEFAULT ?", (DEFAULT_PRIORITY,))
-        cursor.execute("""
-            UPDATE triage_queue
-            SET priority = CASE severity
-                WHEN 'critical' THEN 1
-                WHEN 'high' THEN 2
-                WHEN 'medium' THEN 3
-                WHEN 'low' THEN 4
-                ELSE 5
-            END
-            WHERE priority IS NULL OR priority = ?
-        """, (DEFAULT_PRIORITY,))
-        return True
-    return False
+    columns = {row[1] for row in cursor.fetchall()}
+
+    changed = False
+
+    if "priority" not in columns:
+        cursor.execute(
+            "ALTER TABLE triage_queue "
+            f"ADD COLUMN priority INTEGER NOT NULL DEFAULT {int(DEFAULT_PRIORITY)}"
+        )
+        changed = True
+
+    worker_columns = {
+        "started_at": "TEXT",
+        "lease_expires_at": "TEXT",
+        "last_heartbeat_at": "TEXT",
+        "payload_ref": "TEXT",
+        "failure_reason": "TEXT",
+    }
+
+    for column, sql_type in worker_columns.items():
+        if column not in columns:
+            cursor.execute(
+                f"ALTER TABLE triage_queue ADD COLUMN {column} {sql_type}"
+            )
+            changed = True
+
+    # Always normalize the migration fields. This is intentionally safe to run
+    # repeatedly and also repairs a previously partial migration.
+    priority_expression = priority_case_sql("severity")
+    cursor.execute(
+        f"UPDATE triage_queue SET priority = {priority_expression}"
+    )
+
+    cursor.execute("""
+        UPDATE triage_queue
+        SET payload_ref = payload
+        WHERE payload_ref IS NULL
+    """)
+
+    # The worker persists successful verdicts here. This table is part of the
+    # worker's actual runtime contract even though engine/schema.sql does not
+    # currently declare it.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS verdicts (
+            job_id TEXT NOT NULL,
+            result TEXT NOT NULL,
+            processed_at TEXT NOT NULL
+        )
+    """)
+
+    return changed
+
+
 
 def _ensure_claim_index(conn: sqlite3.Connection, priority_added: bool) -> None:
     """Create or recreate the claim index if schema changed or missing."""
@@ -119,7 +156,7 @@ def reap_stale(conn: sqlite3.Connection) -> None:
     """
     now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     conn.execute(
-        "UPDATE triage_queue SET status = 'pending', lease_expires_at = NULL WHERE status = 'processing' AND lease_expires_at < ?",
+        "UPDATE triage_queue SET status = 'pending', started_at = NULL, lease_expires_at = NULL, last_heartbeat_at = NULL WHERE status = 'processing' AND lease_expires_at < ?",
         (now_str,)
     )
     conn.commit()
@@ -137,6 +174,7 @@ def run_worker(config: WorkerConfig) -> None:
     MAX_BACKOFF = 30
     
     while True:
+        emit_heartbeat(conn, status="idle")
         reap_stale(conn)
         
         # Claim job with priority logic
@@ -155,7 +193,12 @@ def run_worker(config: WorkerConfig) -> None:
                 )
                 RETURNING id, payload_ref
             """,
-            (datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(seconds=config.lease))
+            (
+                datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                (
+                    datetime.now(timezone.utc) + timedelta(seconds=config.lease)
+                ).strftime('%Y-%m-%d %H:%M:%S'),
+            )
         ).fetchone()
         conn.commit()
         
@@ -167,6 +210,7 @@ def run_worker(config: WorkerConfig) -> None:
         # Job found, reset backoff
         empty_queue_backoff = 1
             
+        emit_heartbeat(conn, status="active")
         job_id, payload = row['id'], row['payload_ref']
         
         # Retry logic with exponential backoff for SLM call
@@ -218,6 +262,35 @@ def run_worker(config: WorkerConfig) -> None:
                 conn.execute("UPDATE triage_queue SET status = 'failed', failure_reason = ? WHERE id = ?", (str(e), job_id))
                 conn.commit()
                 break
+
+
+# Heartbeat globals
+LAST_HEARTBEAT = 0
+HEARTBEAT_INTERVAL = 60
+
+
+def get_queue_depth(conn):
+    """Return the number of pending queue jobs."""
+    row = conn.execute(
+        "SELECT COUNT(*) FROM triage_queue WHERE status = 'pending'"
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def emit_heartbeat(conn, status="idle"):
+    """Emit a rate-limited Pi worker heartbeat."""
+    global LAST_HEARTBEAT
+
+    now = time.time()
+
+    if now - LAST_HEARTBEAT >= HEARTBEAT_INTERVAL:
+        log_attempt(
+            {"event_type": "pi_heartbeat"},
+            worker_type="pi",
+            status=status,
+            queue_depth=get_queue_depth(conn),
+        )
+        LAST_HEARTBEAT = now
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

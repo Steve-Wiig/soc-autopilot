@@ -62,7 +62,7 @@ These concepts are correct and must be kept:
 # PROMPT
 # ============================================================
 def build_prompt(bundle_text):
-    return f"""You are given the complete master documentation bundle for soc-autopilot v11.9
+    return f"""You are given the complete master documentation bundle for soc-autopilot v11.11
 and a set of REVIEWER CORRECTIONS that identify factual errors and truncated content.
 
 Produce a CORRECTED documentation package with exactly these sections, in order:
@@ -92,7 +92,7 @@ regenerated to complete it.
 
 RULES:
 - Output ONLY the corrected markdown. No preamble, no "here is", no explanations.
-- Start with "# soc-autopilot Documentation Errata & Corrections (v11.9)".
+- Start with "# soc-autopilot Documentation Errata & Corrections (v11.11)".
 - Be comprehensive in Section 2 (aim for 150-300 lines).
 - Use the ground truth table as your single source of truth.
 

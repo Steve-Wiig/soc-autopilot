@@ -108,6 +108,19 @@ UNIFIED DIFF FORMAT:
     
     return None
 
+
+def load_backlog():
+    if not BACKLOG.exists(): return []
+    try:
+        with open(BACKLOG, 'r') as f:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_SH)
+            data = json.load(f)
+            fcntl.flock(f, fcntl.LOCK_UN)
+            return data
+    except (json.JSONDecodeError, OSError):
+        return []
+
 def main():
     print("🍓 Pi Generator Worker started. Polling backlog...")
     cycle = 0
@@ -121,7 +134,7 @@ def main():
                 time.sleep(60)
                 continue
             
-            backlog = json.loads(BACKLOG.read_text())
+            backlog = load_backlog()
             generated = get_generated()
             attempted = load_attempted()
             

@@ -1,103 +1,31 @@
-# soc-autopilot: Autonomous Engineering Architecture
+# SOC-Autopilot: Architecture & Hardening Log
 
-This document outlines the cognitive architecture, safety gates, and operational topology of the autonomous self-improving pipeline.
+*Last updated: September 10, 2026*
 
-## 1. Core Pillars
+This document outlines the current distributed architecture of the `soc-autopilot` swarm, the hardware optimizations applied to prevent system hangs, and the data flow between the Ubuntu VM and the Raspberry Pi Critic.
 
-### Pillar 1: The Memory Layer (Defeat Ledger)
-*   **Purpose:** Prevents infinite API token burn on "poison pill" bugs.
-*   **Mechanism:** Hashes the AST (stripping docstrings/comments) and the normalized pytest traceback. 
-*   **Quarantine:** If a specific file AST + failure signature hits 3 strikes, the `is_ast_defeated()` pre-flight check instantly aborts generation.
+## 1. Hardware & Infrastructure
+- **Primary Node (Ubuntu VM):** Handles patch generation (`pi_generator.py`), consensus gating, and dashboard telemetry. Migrated from a flaky NAS mount (`/mnt/backup-nas`) to a local USB HDD to eliminate D-state kernel panics caused by unresponsive VFS I/O.
+- **Edge Critic (Raspberry Pi 4 @ 192.168.1.31):** Hosts the local LLM (Ollama) and the `pi_consumer.py` service. Evaluates generated patches for syntax, logic, and security flaws before they are applied to the codebase.
 
-### Pillar 2: The Output Contract (Patch-Diff)
-*   **Purpose:** Eliminates LLM truncation and massive token waste on large files.
-*   **Mechanism:** Forces both WHOLE-FILE and SURGICAL paths to output deterministic Aider-style `<<<<<<< SEARCH / >>>>>>> REPLACE` blocks.
-*   **Engine:** `engine/patch_parser.py` applies the diffs safely, falling back to fuzzy matching if the LLM hallucinates minor whitespace shifts.
+## 2. Pi Critic Optimizations
+To prevent the Pi from thermal throttling and hallucinating rejections, the following configurations were applied:
+- **Resource Reclamation:** Disabled Open WebUI (freed ~850MB RAM).
+- **Model Persistence:** Configured Ollama via systemd drop-in with `OLLAMA_KEEP_ALIVE=-1`. This forces the LLM to stay permanently loaded in RAM, eliminating 30-second "cold start" penalties on every review.
+- **Model Selection:** Standardized on `qwen2.5-coder:3b`. It strikes the optimal balance between logic comprehension and inference speed (~30s per patch).
+- **Prompt Engineering:** Replaced the "Hostile Security Auditor" prompt (which caused small models to hallucinate bugs to fulfill their persona) with an "Objective Senior Engineer" prompt.
+- **Thermal Pacing:** Added `time.sleep(2)` to the `pi_consumer.py` loop to give the CPU a breather between inferences, preventing thermal throttling during large backlog clearances.
 
-### Pillar 3: Cognitive Escalation (The Meta-Critic)
-*   **Purpose:** Breaks the "Local Minimum Trap" where the LLM repeatedly generates the same logically flawed code.
-*   **Mechanism:** When Attempt 1 passes syntax but fails `pytest`, a fast/cheap model (Mistral 7B) analyzes the traceback and generates a 1-sentence **Strategic Constraint**.
-*   **Refeed:** This constraint is injected into the Attempt 2 prompt, forcing the heavy model to adopt a fundamentally different algorithm.
+## 3. Dashboard Telemetry (`tools/dashboard.py`)
+The dashboard was hardened to remain responsive even when network drives or background workers are unresponsive.
+- **NAS Guard:** Uses `/proc/mounts` to verify if the NAS is actually mounted before attempting directory scans.
+- **Redis Telemetry:** Replaced the phantom `pi-worker` systemd check with a live query to the Pi's Redis queue depth (`pi_critic_queue` and `pi_critic_results`).
+- **Timeouts:** Added execution timeouts to the Consensus Gate (60s) and the PyTest suite (120s) to prevent infinite terminal hangs.
+- **`--fast` Flag:** Added an argparse flag to skip the heavy test suite for rapid status checks (`python3 tools/dashboard.py --fast`).
 
-### Pillar 4: The Red-Green Baseline
-*   **Purpose:** Turns the LLM from a "guesser" into a "stack-trace resolver" and eliminates stale advisories.
-*   **Mechanism:** Runs `pytest` *before* calling the LLM. If tests pass, the advisory is a false positive and is instantly deleted. If they fail, the raw stack trace is injected into the Attempt 1 prompt.
-
-## 2. Operational Topology & Safety Gates
-
-### Phase A: Gemini Pre-Fill (The Ghostbuster)
-*   Scans all source files and generates advisories.
-*   **Ghostbuster Protocol:** AST-driven negative constraint injected into the prompt forbidding the reporting of stylistic issues, missing docstrings, or type hints.
-
-### Phase B: OpenRouter Processing
-*   Drains the advisory queue and feeds issues to heavy coding models.
-*   **Stylistic Noise Filter:** Instantly defers any advisory categorized as `style`, `maintainability`, or `complexity` to protect the API budget.
-
-### The Bounded Repair Loop (Sniper Scope)
-*   **Test Isolation:** Maps the target file to its specific `test_*.py` file. Drops `pytest` feedback time from ~7s to ~0.2s.
-*   **The Loop:** Generation -> Patch Parser -> AST Check -> Pytest Check. If Pytest fails on Attempt 1, triggers the Meta-Critic and retries with the strategic constraint on Attempt 2.
-
-## 3. Telemetry & Evacuation
-*   **Stage 1:** 12 telemetry hooks write JSONL events to a local 1MB rotating buffer.
-*   **Stage 2:** A `cron` job runs every 5 minutes, checks the `st_dev` guardrail to ensure the NAS is mounted, and `rsync`s the outbox to the 200GB NAS archive.
-*   **Fail-Open:** If the NAS is asleep, the syncer safely aborts to protect the 30GB root disk.
-
-## 4. Future Roadmap (The Winter Projects)
-*   **The Efficacy Matrix:** Use JSONL telemetry to dynamically route tasks to the provider with the highest historical success rate.
-*   **Causal Triage:** Cluster tracebacks to fix root-cause imports instead of attacking 15 leaf-node test files.
-*   **TDD Sub-Agent:** Generate the failing `pytest` test *before* generating the fix.
-
-## 5. Advanced Cognitive Pillars (Post-Final Form)
-
-### Pillar 5: The Fuzzy Multi-File Patcher
-*   **Purpose:** Enables cross-file atomic transactions (e.g., changing a function signature and its imports simultaneously).
-*   **Mechanism:** Parses Aider-style `<<<<<<< path/to/file.py` blocks. If exact string matching fails due to whitespace hallucinations, it uses `difflib.SequenceMatcher` to find the closest 80% matching block and applies the patch surgically.
-
-### Pillar 6: Failure Autopsy & Prompt Evolution
-*   **Purpose:** Prevents the LLM from making the exact same hallucination on Attempt 2.
-*   **Mechanism:** When Attempt 1 fails (patch error or pytest failure), a fast LLM performs a "Failure Autopsy" to generate a 2-sentence cognitive constraint explaining *why* it failed (e.g., "abruptly truncated output").
-*   **Dynamic Tuning:** The system analyzes the autopsy and dynamically adjusts `max_tokens` (if truncated) or `temperature` (if logic was flawed) for Attempt 2.
-*   **Negative Prompting:** The raw, broken code from Attempt 1 is appended to the Attempt 2 prompt under a `<<<<<<< YOUR PREVIOUS FAILED ATTEMPT` block.
-
-### Pillar 7: Test Quarantine Sanitizer (The Bouncer)
-*   **Purpose:** Prevents hallucinated TDD tests from poisoning the Red-Green Baseline.
-*   **Mechanism:** Runs `pytest --collect-only` on auto-generated `test_tdd_auto_*.py` files. If they fail collection (e.g., bad imports), they are instantly moved to `.quarantined_tests/` outside the `tests/` directory, ensuring `pytest` recursively ignores them.
-
-## 6. Observability & Maintenance
-
-### The Black Box Flight Recorder
-*   **Mechanism:** Every prompt and raw response is logged to `reasoning_ledger.jsonl`.
-*   **Guardrail:** Uses `st_dev` checks to write directly to the NAS (`/dev/sdc`) when mounted, falling back to a local buffer when offline.
-
-### The System Doctor
-*   **Mechanism:** A comprehensive read-only diagnostic script (`tools/system_doctor.py`) that prints the entire state of the machine: Git state, queues, defeat ledger, API budgets, NAS health, and recent logs.
-
-## 5. Advanced Cognitive Pillars (Post-Final Form)
-
-### Pillar 5: The Fuzzy Multi-File Patcher
-*   **Purpose:** Enables cross-file atomic transactions (e.g., changing a function signature and its imports simultaneously).
-*   **Mechanism:** Parses Aider-style `<<<<<<< path/to/file.py` blocks. If exact string matching fails due to whitespace hallucinations, it uses `difflib.SequenceMatcher` to find the closest 80% matching block and applies the patch surgically.
-
-### Pillar 6: Failure Autopsy & Prompt Evolution
-*   **Purpose:** Prevents the LLM from making the exact same hallucination on Attempt 2.
-*   **Mechanism:** When Attempt 1 fails (patch error or pytest failure), a fast LLM performs a "Failure Autopsy" to generate a 2-sentence cognitive constraint explaining *why* it failed (e.g., "abruptly truncated output").
-*   **Dynamic Tuning:** The system analyzes the autopsy and dynamically adjusts `max_tokens` (if truncated) or `temperature` (if logic was flawed) for Attempt 2.
-*   **Negative Prompting:** The raw, broken code from Attempt 1 is appended to the Attempt 2 prompt under a `<<<<<<< YOUR PREVIOUS FAILED ATTEMPT` block.
-
-### Pillar 7: Test Quarantine Sanitizer (The Bouncer)
-*   **Purpose:** Prevents hallucinated TDD tests from poisoning the Red-Green Baseline.
-*   **Mechanism:** Runs `pytest --collect-only` on auto-generated `test_tdd_auto_*.py` files. If they fail collection (e.g., bad imports), they are instantly moved to `.quarantined_tests/` outside the `tests/` directory, ensuring `pytest` recursively ignores them.
-
-## 6. Observability & Maintenance
-
-### The Black Box Flight Recorder
-*   **Mechanism:** Every prompt and raw response is logged to `reasoning_ledger.jsonl`.
-*   **Guardrail:** Uses `st_dev` checks to write directly to the NAS (`/dev/sdc`) when mounted, falling back to a local buffer when offline.
-
-### The System Doctor
-*   **Mechanism:** A comprehensive read-only diagnostic script (`tools/system_doctor.py`) that prints the entire state of the machine: Git state, queues, defeat ledger, API budgets, NAS health, and recent logs.
-
-### Pillar 8: Stale Advisory Auto-Clear (The Ghost Protocol)
-*   **Purpose:** Protects the API budget from untestable or already-fixed advisories.
-*   **Mechanism:** Before invoking the LLM, the engine runs the Red-Green Baseline (`pytest`). If the baseline passes, the engine concludes the advisory is "stale" (the bug doesn't exist, or the test doesn't catch it) and immediately deletes it from the backlog without spending API tokens.
-*   **Observability:** Dropped items print `✅ Baseline tests passed. Stale advisory.` to the matrix rain, providing a paper trail of queue depletion.
+## 4. Data Flow & Automation
+1. **Generation:** `pi_generator.py` (VM) creates unified diffs and writes them to `pi_patches.jsonl`.
+2. **Dispatch:** `pi_idle_reviewer.py` (VM) reads the JSONL file and pushes jobs to the Pi's `pi_critic_queue` in Redis.
+3. **Review:** `pi_consumer.service` (Pi) pops jobs, evaluates them via Ollama (3B model), and pushes verdicts to `pi_critic_results`.
+4. **Ingestion:** A cron job runs `tools/pi_redis_ingestor.py` every 5 minutes to pull Pi results from Redis and append them to the local `improvement_ledger.jsonl`.
+5. **Consensus:** `process_oracle.py` reads the ledger, applies verified patches, and updates the scorecard.

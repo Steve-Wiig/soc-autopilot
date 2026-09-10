@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path("/home/swiig/Documents/soc-autopilot")
+ROOT = Path(__file__).resolve().parent.parent
 TARGET_DIRS = ["engine", "orchestrator", "memory", "tools"]
 
 class Auditor:

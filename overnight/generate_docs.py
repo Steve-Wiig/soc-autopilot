@@ -20,7 +20,7 @@ except ImportError:
     print("FAIL: requests not installed")
     sys.exit(2)
 
-ROOT = Path("/home/swiig/Documents/soc-autopilot")
+ROOT = Path(__file__).resolve().parent.parent
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent"
 MAX_ATTEMPTS = 3
 RATE_LIMIT_SLEEP = 7
@@ -82,7 +82,7 @@ def main():
     tasks = json.loads(tasks_file.read_text())
     open_tasks = [t for t in tasks if t.get("status") == "open"]
 
-    # Normalize: generator expects 'description'; v11.8 schema uses 'prompt_hint'
+    # Normalize: generator expects 'description'; v11.11 schema uses 'prompt_hint'
     for t in open_tasks:
         if not t.get("description"):
             t["description"] = (

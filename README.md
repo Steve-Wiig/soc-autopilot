@@ -1,132 +1,88 @@
-# soc-autopilot
+# SOC-Autopilot
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/Tests-274%20Passed%20(2%20transient%20failures)-orange.svg)](https://github.com/Steve-Wiig/soc-autopilot)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Architecture](https://img.shields.io/badge/Architecture-Hybrid%20Cloud%2BEdge-orange.svg)](docs/ARCHITECTURE.md)
+Local-first, evidence-driven security orchestration and autonomous software
+maintenance.
 
-**A locally operated Security Operations Center with LLM-assisted triage and a governed, self-improving codebase.**
+## What this project is
 
----
+SOC-Autopilot is being built around two separate autonomy domains that share
+verification discipline but have different authorities.
 
-### 🏗️ High-Level Architecture
+### 1. SOC operational autonomy
 
-```mermaid
-graph TD
-    A[Wazuh / pfSense] -->|Telemetry| B(Engine: Ingestion & Sanitization)
-    B --> C{Orchestrator & Queue}
-    C -->|Tier 1 Triage| D[Cloud LLMs: OpenRouter/Groq/Mistral]
-    C -->|Async Patch Gen/Review| E[Edge: Raspberry Pi + Qwen 3B]
-    C -->|State & Memory| F[(SQLite + planned pgvector)]
-    C -->|Audit Ledger| G[Hash-Chain Append-Only Log]
-    E -.->|Fallback / Quota-Free| C
-    C -->|Safety Gates| H[Pytest 274+ Suite]
-    H -->|Pass| I[Shadow Branch Commit]
-    I -->|Human Approval| J[Master Merge]
+```text
+telemetry
+  -> intake
+  -> normalize / sanitize
+  -> provenance + trust handling
+  -> context / enrichment
+  -> local/edge LLM
+  -> structured recommendation
+  -> deterministic policy
+  -> ALLOW / DENY / REVIEW
+  -> bounded writeback
+  -> audit / telemetry
 ```
 
----
+The LLM is the reasoning and proposal layer. It is not the final authority for
+consequential actions.
 
-### 🎯 Problem & Solution
+### 2. Development autonomy
 
-**Problem:** Enterprise SOAR/XDR tools are expensive, cloud-bound, and often lack transparent, auditable automation. LLMs, when wired directly to systems, are untrusted and prone to hallucination.
-
-**Solution:** `soc-autopilot` is a local-first, self-hosted platform (with cloud-assisted generation) that uses Small Language Models (SLMs) for Tier 1 triage and enrichment, governed by a strict, test-gated autonomous engineering pipeline.
-
-**Core Philosophy:** *LLMs propose → safety gates validate → tests verify → Git records → humans decide.*
-
----
-
-### 🛡️ Security & Governance Model
-
-This is not an "autonomous AI" that acts without oversight. It is a **bounded decision-support system** built on security engineering principles:
-
-**Development Phase (Current - Autonomous Code Improvement):**
-- **Zero Trust for LLM Output:** All generated code must pass AST validation, ghost-name checks, and a 274+ test pytest suite before being considered.
-- **Autonomous Merge:** Validated patches are automatically merged to master after passing the 10-stage safety pipeline and canary validation.
-- **Negative Memory:** The system stores proven and failed fix patterns to inform future generation.
-- **Tamper-Evident Auditing:** Pipeline decisions are tracked in structured JSONL ledgers. A tamper-evident hash-chain audit ledger is prototyped but not yet in production use.
-- **Hybrid Verification Plane:** A decoupled Raspberry Pi edge worker acts as an independent, heterogeneous code-review node, ensuring failure isolation and quota-free fallback.
-
-**Production Phase (Planned - Human-Gated Security Operations):**
-- **SOC Agent Proposals:** The system will propose security rules for Wazuh, pfSense, and Security Onion based on telemetry analysis.
-- **Human Approval Mandatory:** All security configuration changes require explicit operator approval before application to production systems.
-- **Automated Validation:** Proposed rules undergo syntax checks, policy validation, and impact analysis before presentation to operators.
-- **Audit Trail:** All proposals, approvals, rejections, and applications are recorded with full provenance.
-
-
----
-
-### 📊 Current Status & Evidence
-
-| Component                                  | Status          | Notes                                                         |
-| ------------------------------------------ | --------------- | ------------------------------------------------------------- |
-| Telemetry Sanitization & Queue Governance  | ✅ Implemented   | Two-pass regex + entropy sanitization; backpressure handling. |
-| Hash-Chain Audit Ledger | △ Prototype | Concurrency tool exists; production ledger planned. |
-| Self-Improvement Pipeline (10 Safety Gates) | ✅ Implemented   | TDD Red Phase, Forensic Analysis, Ghost Detection, Shadow Canary, Proven Memory, etc.          |
-| Negative/Proven Memory Stores              | ✅ Implemented   | System stores proven and failed fix patterns to inform future generation.               |
-| Hybrid Edge/Cloud Compute                  | ✅ Implemented   | Async Pi worker (Qwen 3B) decoupled via Redis.                |
-| Live Wazuh Integration              | △ Lab-Validated | Tested in local Dockerized lab environment.                   |
-| Longitudinal Learning Metrics              | △ Prototype     | Tracking fix acceptance rates; immutable eval corpus planned. |
-
----
-
-### 🚀 Quick Start
-
-#### Prerequisites
-- Suricata integration (planned - architecture supports it)
-
-* Python 3.10+
-* API keys for LLM providers (OpenRouter, Groq, Mistral)
-* Optional: Raspberry Pi 4B+ (8GB) for edge critique worker
-
-#### Installation
-
-```bash
-git clone https://github.com/Steve-Wiig/soc-autopilot.git
-cd soc-autopilot
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your API keys
+```text
+audit
+  -> diagnose
+  -> advisory
+  -> LLM engineering
+  -> tests
+  -> deterministic gates
+  -> independent verification
+  -> Pi / Bandit
+  -> canary
+  -> Git
+  -> repeat
 ```
 
-#### Verification
+The development loop may continuously improve the codebase, but it is not the
+SOC runtime and does not directly authorize SOC actions.
 
-```bash
-# Run the regression suite
-python3 -m pytest tests/ -q
-# Expected: 274 passed (2 transient test_tdd_auto_* failures are harmless)
-```
+## Local-first LLM policy
 
-#### Operator CLI
+Cloud LLMs remain useful for development, code generation, code review,
+adversarial review, testing, documentation, and architecture work.
 
-```bash
-dashboard          # Live status, scorecard, disk health, and edge worker status
-```
+Production SOC inference is intended to remain operator-controlled local/edge
+inference. A future distributed deployment may separate ingestion, inference,
+orchestration, enrichment, telemetry, and verification across hosts using
+stable authenticated interfaces.
 
----
+A deterministic policy layer is intended to stand between model-generated
+recommendations and consequential operational actions.
 
-### 📚 Documentation
+## Engineering philosophy
 
-For deep dives into the architecture, operations, and self-improvement mechanics:
+> LLMs propose -> safety gates validate -> tests verify -> independent
+> verification audits -> Git records -> humans decide where required.
 
-| Resource                                                   | Purpose                                              |
-| ---------------------------------------------------------- | ---------------------------------------------------- |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)             | System architecture, data flow, and design decisions |
-| [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md) | Operational workflows, troubleshooting, and runbooks |
-| [`docs/OVERNIGHT_PIPELINE.md`](docs/OVERNIGHT_PIPELINE.md) | Self-improvement pipeline internals and safety gates |
-| [`docs/WINTER_ROADMAP.md`](docs/WINTER_ROADMAP.md)         | Future development, including immutable eval corpus  |
+The project deliberately favors reproducibility, evidence, explicit trust
+boundaries, bounded autonomy, rollback, and observable failure handling.
 
----
+## Current-state terminology
 
-### ⚠️ Limitations
+- **OBSERVED** — supported by current repository evidence.
+- **EXPERIMENTAL** — implemented or partially implemented, but isolated or not
+  proven as the canonical production path.
+- **PLANNED** — intended design not yet fully implemented.
+- **UNKNOWN** — requires additional repository or runtime evidence.
 
-* **Not a replacement for human analysts:** The system is designed to augment Tier 1 triage and propose *candidate* fixes. Human approval is mandatory for all **production security configuration** changes. Codebase improvements merge autonomously after passing the 10-stage safety pipeline.
-* **Hardware constraints:** While the edge worker is resilient, high-volume local inference requires an NVIDIA GPU (16GB+ VRAM). The current default relies on free-tier cloud APIs + a Raspberry Pi for async review.
+## Canonical documentation
 
----
+- `docs/ARCHITECTURE.md`
+- `docs/CURRENT_RUNTIME_MAP.md`
+- `docs/SECURITY_MODEL.md`
+- `docs/DEVELOPMENT_AUTONOMY.md`
+- `docs/OPERATIONS_RUNBOOK.md`
+- `docs/adr/0001-separate-soc-and-development-autonomy.md`
 
-## License
-
-**MIT License**
-Copyright (c) 2026 Steve Wiig
+Historical and generated documents are not architectural authority unless they
+are explicitly identified as current evidence.

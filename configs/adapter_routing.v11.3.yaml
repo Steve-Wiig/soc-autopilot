@@ -1,8 +1,8 @@
 routing:
   version: 11.6.0
-  schema_validation: "v11.6.0-strict"
+  schema_validation: v11.6.0-strict
   global_policy:
-    default_fallback: "quarantine_ledger"
+    default_fallback: quarantine_ledger
     audit_chain_enforcement: true
   adapters:
     thehive:
@@ -10,22 +10,32 @@ routing:
       quota_cap_per_hour: 50
       burst_capacity: 10
       approval_required: false
-      error_policy: "retry_exponential_backoff"
+      error_policy: retry_exponential_backoff
     wazuh_proposals:
       mode: draft-only
       quota_cap_per_hour: 20
       burst_capacity: 5
       approval_required: true
-      error_policy: "hold_for_manual_review"
+      error_policy: hold_for_manual_review
     so_cases:
       mode: active
       quota_cap_per_hour: 100
       burst_capacity: 25
       approval_required: false
-      error_policy: "retry_immediate"
+      error_policy: retry_immediate
     pfsense_alias:
       mode: draft-only
       quota_cap_per_hour: 5
       burst_capacity: 1
       approval_required: true
-      error_policy: "reject_and_log"
+      error_policy: reject_and_log
+fallback:
+  local_slm:
+    endpoint: http://127.0.0.1:11435
+    model: qwen2.5-coder:1.5b
+    categories:
+    - maintainability
+    - blueprint_compliance
+    - documentation
+    max_tokens: 1024
+    timeout: 120

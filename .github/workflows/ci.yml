@@ -1,0 +1,20 @@
+name: Swarm CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        
+      - name: Run Test Suite
+        # We keep the ignore-glob because TDD auto-tests are dynamic artifacts
+        run: pytest -q --ignore-glob="tests/test_tdd_auto_*.py"

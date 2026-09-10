@@ -1,0 +1,38 @@
+SOC-AUTOPILOT CURRENT BASELINE
+==============================
+
+2026-09-08T01:10:27+00:00
+
+Repository: /home/swiig/Documents/soc-autopilot
+Branch: refactor/p1-extract-modules
+HEAD: 43a4a6d4e197
+
+Git status:
+?? ]
+?? docs/generated/
+?? runtime/
+
+Recent commits:
+43a4a6d4 chore: regenerate manifest [skip ci]
+c2512f4a fix: declare jsonschema test dependency
+1c05c497 chore: regenerate manifest [skip ci]
+5cadd362 feat(observability): add time-windowed scorecard metrics
+980008ad chore: regenerate manifest [skip ci]
+d7c8a211 fix(pipeline): enforce REVIEW terminal routing
+6ab36b5d chore: regenerate manifest [skip ci]
+ac484b56 fix(pipeline): safely defer escalation for passing low-risk improvements; fix dashboard worker checks
+d4e9038e chore: regenerate manifest [skip ci]
+1b9fde63 feat: implement Prevention and Cure for LLM self-improvement loop
+3942f350 chore: regenerate manifest [skip ci]
+d8822cd8 feat: add pre-flight safety gates and closed-loop LLM feedback
+
+Python:
+Python 3.14.4
+
+Test baseline:
+........................................................................ [ 21%]
+........................................................................ [ 42%]
+........................................................................ [ 63%]
+........................................................................ [ 85%]
+..................................................                       [100%]
+338 passed in 108.06s (0:01:48)

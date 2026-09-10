@@ -1,0 +1,2690 @@
+[
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 44,
+      "line_end": 51,
+      "description": "LLM calls executed sequentially; total latency is sum of both calls instead of max",
+      "suggestion": "Run both LLM calls concurrently using asyncio.gather() or ThreadPoolExecutor",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 3,
+      "line_end": 3,
+      "description": "Module-level sys.path.insert() causes import-time side effect, breaking test isolation and packaging",
+      "suggestion": "Remove sys.path manipulation; use proper package structure with relative imports or install package in editable mode",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 31,
+      "line_end": 41,
+      "description": "Prompt template hardcoded as inline string; difficult to modify, test, or version separately",
+      "suggestion": "Extract prompt to module-level constant or external template file with clear versioning",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 44,
+      "line_end": 51,
+      "description": "Duplicate error handling pattern for both LLM calls violates DRY principle",
+      "suggestion": "Extract to helper function: def call_judge(name, call_fn, *args) -> dict",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 3,
+      "line_end": 3,
+      "description": "Module-level side effect (sys.path.insert) violates v11.7 'No module-level side effects' rule",
+      "suggestion": "Remove sys.path.insert; restructure imports to use proper package-relative imports",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 24,
+      "line_end": 57,
+      "description": "No audit logging of consensus decisions violates Section 30 'Append-only audit patterns for handoffs'",
+      "suggestion": "Add audit log entry with proposal hash, both votes, timestamp, and final decision to append-only store",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 147,
+      "line_end": 155,
+      "description": "shannon_entropy iterates over all 256 possible byte values for every call, even for short strings. This is O(256 * n) per call instead of O(n) using a frequency counter.",
+      "suggestion": "Use collections.Counter to count character frequencies in a single pass: from collections import Counter; counts = Counter(data); then iterate over counts.values().",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 225,
+      "line_end": 258,
+      "description": "process_eve_file loads all sanitized rows into memory (rows list) before bulk insert. For large EVE files this causes high memory usage.",
+      "suggestion": "Process in batches: accumulate N rows (e.g., 1000), execute batch insert, clear list, repeat. Or use a generator with executemany in chunks.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 77,
+      "line_end": 103,
+      "description": "execute_in_transaction and execute_with_connection have nearly identical code (duplicate error handling, connection management). Violates DRY principle.",
+      "suggestion": "Create a single parameterized decorator factory that accepts a 'transactional' boolean, or extract common logic into a helper function.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 187,
+      "line_end": 207,
+      "description": "sanitize_event has hardcoded allowed_keys set. Adding new event types requires code changes. No validation that required fields exist.",
+      "suggestion": "Move allowed_keys to a module-level constant or configuration. Consider using a schema validation library (pydantic, jsonschema) for more robust validation.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "informational",
+      "line_start": 56,
+      "line_end": 75,
+      "description": "with_db decorator is defined but never used in the codebase. execute_in_transaction and execute_with_connection are used instead. Dead code increases maintenance burden.",
+      "suggestion": "Remove with_db decorator if unused, or refactor all database operations to use a single consistent decorator pattern.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 7,
+      "line_end": 7,
+      "description": "Module-level side effect: sys.path.insert() modifies global state at import time, violating 'No module-level side effects' rule",
+      "suggestion": "Remove sys.path manipulation; use proper package structure or relative imports. If overnight is a sibling package, install it properly or use importlib.",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 33,
+      "line_end": 34,
+      "description": "Hardcoded temperature=0.1 and max_tokens=200; not configurable for different proposal types",
+      "suggestion": "Add optional parameters to get_consensus for temperature and max_tokens with defaults.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 149,
+      "line_end": 158,
+      "description": "shannon_entropy iterates 256 times for every string, counting characters with str.count() each time (O(n*256)). For long strings this is very slow. Should use collections.Counter for O(n) single pass.",
+      "suggestion": "Replace with: from collections import Counter; counts = Counter(data); return sum(-(c/len(data)) * math.log2(c/len(data)) for c in counts.values())",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 77,
+      "line_end": 100,
+      "description": "execute_in_transaction and execute_with_connection have nearly identical error handling logic (try/except/log/raise RuntimeError). Code duplication increases maintenance burden and inconsistency risk.",
+      "suggestion": "Create a single generic decorator factory: def with_db_connection(transaction: bool = False): ... and use it for both cases. Or extract error handling to a helper function.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 192,
+      "line_end": 212,
+      "description": "sanitize_event hardcodes allowed_keys set. Adding new EVE fields requires code change. Not configurable for different Suricata versions or custom fields.",
+      "suggestion": "Move allowed_keys to module-level constant ALLOWED_EVE_KEYS. Consider loading from config file or environment variable for flexibility.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 230,
+      "line_end": 262,
+      "description": "process_eve_file loads all rows into memory before bulk insert. For large EVE files (GBs), this causes high memory usage. Should stream/insert in batches.",
+      "suggestion": "Process in batches: accumulate N rows (e.g., 1000), execute batch insert, clear list. Use cursor.executemany in loop. Keeps memory constant.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "low",
+      "line_start": 280,
+      "line_end": 295,
+      "description": "lease_event uses SQLite's datetime('now') which returns UTC, but the blueprint AMEND-63 prohibits datetime.utcnow() in Python code. While SQLite's function is acceptable, using Python datetime.now(timezone.utc) is more explicit and testable.",
+      "suggestion": "Compute timestamp in Python: from datetime import datetime, timezone, timedelta; lease_expires = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds); pass as ISO format string parameter.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "informational",
+      "line_start": 55,
+      "line_end": 75,
+      "description": "with_db decorator is overly complex with nested context managers and parameter shadowing bug. The same functionality is provided by execute_in_transaction and execute_with_connection. Consider removing with_db entirely.",
+      "suggestion": "Deprecate and remove with_db. Use execute_in_transaction for write operations and execute_with_connection for reads. Simplifies codebase.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 31,
+      "line_end": 63,
+      "description": "Missing append-only audit trail: no logging of patch operations for handoff/correction tracking per Section 30.",
+      "suggestion": "Add structured audit logging: log each patch attempt (file, search hash, replace hash, success/failure, timestamp) to append-only store.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 31,
+      "line_end": 63,
+      "description": "Missing approval-gated mutations: no mechanism to require approval for sensitive file modifications per Section 24.",
+      "suggestion": "Add approval callback parameter: apply_multi_file_patches(patches, approval_callback=None) where callback(file_path, diff) returns bool.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 12,
+      "line_end": 25,
+      "description": "Missing type hints on parse_multi_file_diff function parameters and return type.",
+      "suggestion": "Add type hints: def parse_multi_file_diff(raw_diff: str, root_dir: Path) -> list[FilePatch]:",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 27,
+      "line_end": 27,
+      "description": "Missing type hints on apply_multi_file_patches function parameters and return type.",
+      "suggestion": "Add type hints: def apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 25,
+      "description": "Missing docstring for parse_multi_file_diff function.",
+      "suggestion": "Add docstring describing parameters, return value, exceptions, and expected diff format.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 63,
+      "description": "Missing docstring for apply_multi_file_patches function.",
+      "suggestion": "Add docstring describing parameters, return value, exceptions, and fuzzy matching behavior.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 50,
+      "line_end": 50,
+      "description": "Magic number 0.80 for fuzzy match threshold with no explanation or configurability.",
+      "suggestion": "Define constant FUZZY_THRESHOLD = 0.80 at module level with docstring; consider making it a parameter.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 48,
+      "line_end": 55,
+      "description": "O(n*m) fuzzy matching with difflib.SequenceMatcher in loop: inefficient for large files, creates many string allocations.",
+      "suggestion": "Optimize: use difflib.get_matching_blocks once on full file, or limit search to \u00b150 lines of expected location, or use faster algorithm like Levenshtein on tokens.",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 6,
+      "line_end": 6,
+      "description": "Module-level side effect: sys.path.insert() modifies global state at import time, violating 'No module-level side effects' rule",
+      "suggestion": "Move sys.path manipulation inside a function or use proper package structure with relative imports. If overnight is a sibling package, use 'from ..overnight.llm_client import generate, _call_gemini'",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 9,
+      "line_end": 21,
+      "description": "Missing type hints and docstring for extract_json function",
+      "suggestion": "Add type hints: def extract_json(text: str) -> dict[str, Any]: and docstring explaining return format and error behavior",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 23,
+      "line_end": 57,
+      "description": "Missing type hints and docstring for get_consensus function; magic numbers for temperature and max_tokens",
+      "suggestion": "Add type hints: def get_consensus(proposal: str, api_keys: dict[str, str]) -> tuple[bool, dict, dict]:. Extract temperature=0.1 and max_tokens=200 as module-level constants with descriptive names",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 8,
+      "line_end": 8,
+      "description": "Module-level side effect: sys.path.insert() modifies global import path at import time",
+      "suggestion": "Remove sys.path manipulation. Use proper package structure with relative imports or install package in development mode (pip install -e .)",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 44,
+      "line_end": 54,
+      "description": "Library code performs blocking network I/O without timeout - violates robust library code principles",
+      "suggestion": "Add configurable timeout parameter to get_consensus() and propagate to LLM client calls",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 6,
+      "line_end": 6,
+      "description": "Multiple imports on single line (json, re, sys) violates PEP 8",
+      "suggestion": "Split into separate import lines: import json\\nimport re\\nimport sys",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 11,
+      "line_end": 29,
+      "description": "extract_json function missing docstring and complete type hints",
+      "suggestion": "Add docstring explaining purpose, parameters, return value. Add return type: -> dict[str, Any]",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 31,
+      "line_end": 57,
+      "description": "get_consensus function missing docstring and precise return type annotation",
+      "suggestion": "Add docstring. Change return type to tuple[bool, dict, dict] or create a NamedTuple/TypedDict for clarity",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 43,
+      "line_end": 54,
+      "description": "Sequential LLM calls (Judge 1 then Judge 2) doubles latency - could run in parallel",
+      "suggestion": "Use concurrent.futures.ThreadPoolExecutor or asyncio.gather to call both judges concurrently",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 17,
+      "line_end": 17,
+      "description": "Broad 'except Exception' catches KeyboardInterrupt and SystemExit, which should not be suppressed in library code",
+      "suggestion": "Change to 'except Exception as e:' and re-raise BaseException subclasses, or catch specific exception types from _call_gemini",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 159,
+      "line_end": 167,
+      "description": "`shannon_entropy` loops 256 times calling `data.count(chr(x))` each time, resulting in O(256*n) time with high constant factor. Slow for long payloads.",
+      "suggestion": "Use `collections.Counter(data)` to count frequencies in single pass, then compute entropy from counts.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 247,
+      "line_end": 258,
+      "description": "`process_eve_file` accumulates all rows in memory before bulk insert. Large EVE files (GBs) will cause OOM.",
+      "suggestion": "Process in batches: accumulate N rows (e.g., 1000), executemany, clear list, repeat. Use generator to stream file.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 57,
+      "line_end": 107,
+      "description": "Decorators `with_db`, `execute_in_transaction`, `execute_with_connection` lack `functools.wraps`, breaking function metadata (__name__, __doc__, annotations) used by debugging, logging, and introspection tools.",
+      "suggestion": "Add `@functools.wraps(func)` to each wrapper function. Import functools at top.",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "low",
+      "line_start": 23,
+      "line_end": 23,
+      "description": "`configure_logging` creates log directory with `os.makedirs(log_dir, exist_ok=True)` using LOG_PATH from env var. Combined with path traversal issue, could create directories in arbitrary locations.",
+      "suggestion": "Validate LOG_PATH is within allowed directory before creating. Same fix as path traversal issue.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 63,
+      "line_end": 78,
+      "description": "`with_db` decorator passes `cursor` or `conn` as first argument to wrapped function regardless of function signature. Causes TypeError if decorated function doesn't expect it. Decorator is unused in file but exported.",
+      "suggestion": "Either remove unused decorator, or make it inspect function signature and inject appropriately. Prefer explicit decorators like `execute_in_transaction`.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 135,
+      "line_end": 140,
+      "description": "Missing composite index on `(status, created_at)` for `get_pending_events` query which filters by status and orders by created_at. Current index on status alone requires filesort.",
+      "suggestion": "Add `CREATE INDEX IF NOT EXISTS idx_triage_status_created ON triage_queue(status, created_at)` in `init_db`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "informational",
+      "line_start": 109,
+      "line_end": 145,
+      "description": "`init_db` creates tables but has no schema versioning or migration path. Future schema changes will require manual intervention.",
+      "suggestion": "Add a `schema_version` table or PRAGMA user_version, and implement migration logic.",
+      "impact": "low",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 10,
+      "line_end": 10,
+      "description": "Module-level side effect: sys.path.insert() modifies global state on import, violating blueprint rule against module-level side effects",
+      "suggestion": "Move sys.path modification inside a function or use proper package structure with relative imports",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 12,
+      "line_end": 57,
+      "description": "Missing type hints for function signatures and return values, reducing IDE support and code clarity",
+      "suggestion": "Add type hints: extract_json(text: str) -> dict, get_consensus(proposal: str, api_keys: dict) -> tuple[bool, dict, dict]",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 25,
+      "description": "extract_json function lacks docstring explaining expected input format and return value structure",
+      "suggestion": "Add docstring with parameter description, return value schema, and examples",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 57,
+      "description": "get_consensus function lacks docstring explaining consensus logic, parameters, and return tuple structure",
+      "suggestion": "Add comprehensive docstring with parameter types, consensus requirements, and return value explanation",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 37,
+      "line_end": 48,
+      "description": "Sequential LLM calls (OpenRouter then Gemini) double latency; calls are independent and can be parallelized",
+      "suggestion": "Use asyncio.gather() or concurrent.futures to execute both LLM calls in parallel",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 13,
+      "description": "Magic numbers 1500 and 2000 for truncation limits lack context and are hard to adjust.",
+      "suggestion": "Define module-level constants: MAX_ERROR_CHARS = 1500; MAX_CODE_CHARS = 2000; use in f-strings.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 20,
+      "line_end": 20,
+      "description": "Magic numbers 200 (max_tokens) and 0.1 (temperature) hardcoded in call.",
+      "suggestion": "Define constants: AUTOPSY_MAX_TOKENS = 200; AUTOPSY_TEMPERATURE = 0.1; pass as named arguments.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 282,
+      "line_end": 296,
+      "description": "The `lease_event` function changes event status from 'pending' to 'leased' but does not call `_log_audit`, violating the append-only audit pattern requirement for status handoffs.",
+      "suggestion": "Add `_log_audit(cursor, event_id, 'pending', 'leased', 'worker')` after the successful UPDATE, similar to `complete_event`.",
+      "impact": "high",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 154,
+      "line_end": 163,
+      "description": "The `shannon_entropy` function iterates over all 256 possible byte values for each input string, resulting in O(n*256) time complexity. For long strings, this is inefficient.",
+      "suggestion": "Use `collections.Counter` to count character frequencies in a single pass, then compute entropy from the counts: `counts = Counter(data); return sum(-(c/len(data)) * math.log2(c/len(data)) for c in counts.values())`.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 55,
+      "line_end": 107,
+      "description": "Three decorators (`with_db`, `execute_in_transaction`, `execute_with_connection`) provide overlapping database connection/transaction functionality, increasing cognitive load and maintenance burden.",
+      "suggestion": "Consolidate into a single parameterized decorator (e.g., `with_db(transaction=True/False)`) and remove the other two, updating all call sites.",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 267,
+      "line_end": 280,
+      "description": "The `get_pending_events` function sets `conn.row_factory = sqlite3.Row` even though `get_connection` already sets it. Redundant assignment on every call.",
+      "suggestion": "Remove the redundant `conn.row_factory = sqlite3.Row` line.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "low",
+      "line_start": 290,
+      "line_end": 291,
+      "description": "The `lease_event` function uses SQLite's `datetime('now', ...)` which returns UTC time, but the blueprint requires `datetime.now(timezone.utc)` for application-level timestamps. While SQL functions are acceptable, consistency with Python-side time handling is preferred.",
+      "suggestion": "Compute expiration in Python: `expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)` and pass as parameter.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 217,
+      "line_end": 232,
+      "description": "The `enqueue_event` function expects a pre-sanitized event dictionary but does not validate or enforce this. Callers might pass unsanitized data.",
+      "suggestion": "Add a defensive `sanitize_event(event)` call at the start of `enqueue_event`, or document clearly that caller must sanitize.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 152,
+      "line_end": 160,
+      "description": "shannon_entropy() iterates over all 256 possible byte values for every string, even though most strings use far fewer characters. For long strings, this is O(256 * n) instead of O(n) with a frequency counter.",
+      "suggestion": "Use `collections.Counter` to count character frequencies in a single pass, then compute entropy only for characters that appear: `counts = Counter(data); return sum(-(c/len(data)) * math.log2(c/len(data)) for c in counts.values())`",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 227,
+      "line_end": 260,
+      "description": "process_eve_file() loads all sanitized rows into memory (`rows` list) before bulk insert. For large EVE files (GBs), this causes excessive memory usage and potential OOM.",
+      "suggestion": "Process in batches: accumulate N rows (e.g., 1000), execute batch insert, clear list, repeat. Use a generator to yield batches from the file.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 79,
+      "line_end": 107,
+      "description": "Two nearly identical decorators (`execute_in_transaction` and `execute_with_connection`) duplicate error handling logic. The only difference is whether they use the `transaction` context manager.",
+      "suggestion": "Consolidate into a single parameterized decorator or use `with_db(transaction=True/False)` once the shadowing bug is fixed. Remove the redundant decorator.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 192,
+      "line_end": 210,
+      "description": "sanitize_event() hardcodes `allowed_keys` set. Adding new event types requires code changes. The set is also missing some Suricata EVE fields like `files`, `smtp`, `rdp`, `smb`, `kerberos`, `snmp`.",
+      "suggestion": "Make allowed_keys a module-level constant or configurable via parameter. Add missing common Suricata event types. Consider a deny-list approach for known-sensitive fields instead of allow-list.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "low",
+      "line_start": 277,
+      "line_end": 292,
+      "description": "lease_event() uses SQLite's `datetime('now', ...)` which returns UTC but without explicit timezone awareness. While SQLite stores as TEXT, the blueprint requires `datetime.now(timezone.utc)` for application-level timestamps (AMEND-63).",
+      "suggestion": "Compute lease expiration in Python: `lease_expires = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)` and pass as ISO format string parameter.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "informational",
+      "line_start": 140,
+      "line_end": 150,
+      "description": "_log_audit() uses `actor: str = \"system\"` default but callers like `complete_event()` pass `\"worker\"`. The `enqueue_event()` passes `\"enqueue\"` as actor. Inconsistent actor naming convention.",
+      "suggestion": "Define an Enum for actor types (SYSTEM, ENQUEUE, WORKER, LEASE, etc.) and use consistently across all audit log calls.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "informational",
+      "line_start": 176,
+      "line_end": 186,
+      "description": "sanitize_recursive() creates new dict/list objects for every level of nesting, even when no redaction occurs. For large events with deep nesting, this causes unnecessary allocations.",
+      "suggestion": "Add a fast path: check if any value needs redaction before recursing. Or use a mutating approach with a visited set to handle cycles, modifying in place when safe.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "high",
+      "line_start": 65,
+      "line_end": 72,
+      "description": "O(n*m) sliding window with difflib.SequenceMatcher for each position is extremely slow for large files (e.g., 10k lines = ~100M comparisons)",
+      "suggestion": "Use difflib.get_close_matches() or implement a more efficient algorithm like Myers diff; consider limiting fuzzy search to files under a size threshold",
+      "impact": "high",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 24,
+      "line_end": 74,
+      "description": "Missing append-only audit logging for patch operations per Section 30 (handoffs/corrections audit trail)",
+      "suggestion": "Add audit log entry for each patch application including file, search hash, replace hash, timestamp, and operator",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 24,
+      "line_end": 74,
+      "description": "No approval gating for mutations per Section 24 - patches apply immediately without authorization check",
+      "suggestion": "Add approval_gate parameter or callback that must return True before applying each patch",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 72,
+      "line_end": 72,
+      "description": "Magic number 0.80 for fuzzy threshold hardcoded, not configurable",
+      "suggestion": "Make threshold a parameter with default: def apply_multi_file_patches(patches, fuzzy_threshold=0.80)",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 22,
+      "description": "parse_multi_file_diff missing docstring and return type hint",
+      "suggestion": "Add docstring describing expected diff format and return type annotation: -> list[FilePatch]",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 24,
+      "line_end": 74,
+      "description": "apply_multi_file_patches missing docstring and has high cyclomatic complexity",
+      "suggestion": "Add docstring, extract fuzzy matching logic to separate function, add type hints",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 3,
+      "line_end": 3,
+      "description": "The perform_autopsy function lacks a docstring, reducing readability and discoverability.",
+      "suggestion": "Add a comprehensive docstring explaining parameters, return value, and behavior.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 3,
+      "line_end": 3,
+      "description": "The api_keys parameter is typed as a plain dict, which is too permissive and obscures expected keys.",
+      "suggestion": "Change the type hint to Mapping[str, str] and import from typing.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 25,
+      "line_end": 26,
+      "description": "The function lacks a return type hint, reducing readability and static analysis.",
+      "suggestion": "Add a return type hint: def _locate_region(original: str, search: str) -> tuple[int, int]:",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 12,
+      "description": "No docstring for parse_multi_file_diff, reducing maintainability.",
+      "suggestion": "Add a docstring explaining parameters and return value.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 36,
+      "line_end": 53,
+      "description": "Function docstring declares return type as 3-tuple `(bool, dict, dict)` but actual return is 2-tuple `(bool, str)`, causing type confusion for callers",
+      "suggestion": "Update docstring to match actual return: `tuple[bool, str]` with description 'approval status and audit log string', or change implementation to return `(approved, vote1, vote2)` and move audit logging to a separate function.",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 55,
+      "line_end": 55,
+      "description": "Duplicate import of `generate, _call_gemini` inside function (line 55) when already imported at module level (line 8), violating DRY and causing confusion",
+      "suggestion": "Remove the inner import (line 55) and use module-level imports. If avoiding import-time side effects is needed, refactor `llm_client` to not have side effects on import.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 87,
+      "line_end": 92,
+      "description": "Audit log is constructed as a string and returned but never persisted to append-only storage, violating Section 30 (append-only audit patterns) and Section 24 (approval-gated mutations require durable audit trail)",
+      "suggestion": "Write audit_log to an append-only file or database within the function, or accept a callback/logger parameter for persistence. Ensure logs are immutable and tamper-evident.",
+      "impact": "high",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 20,
+      "line_end": 20,
+      "description": "Regex uses `re.DOTALL` with `[^}]*` on potentially large LLM responses (up to max_tokens=200 but could be larger in practice), causing unnecessary backtracking",
+      "suggestion": "Add a length check before regex: `if len(text) > 5000: text = text[:5000]`. Use non-greedy quantifier `[^}]*?` or better, a more precise pattern.",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 4,
+      "line_end": 8,
+      "description": "Module imports `re` and `_call_gemini` but `_call_gemini` is only used inside `get_consensus` (and re-imported there), while `re` is only used in `extract_json`",
+      "suggestion": "Move `import re` inside `extract_json` function. Remove `_call_gemini` from module-level import since it's re-imported in function.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 1,
+      "line_end": 49,
+      "description": "Magic numbers (1500, 2000, 200, 0.1) scattered in code without explanation or configurability",
+      "suggestion": "Define module-level constants: MAX_ERROR_CHARS=1500, MAX_CODE_CHARS=2000, MAX_TOKENS=200, TEMPERATURE=0.1",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 22,
+      "line_end": 22,
+      "description": "Fallback string is hardcoded and generic, provides no actionable guidance for specific failure modes",
+      "suggestion": "Make fallback configurable or derive from error_message type (e.g., 'Fix indentation' for IndentationError)",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "informational",
+      "line_start": 1,
+      "line_end": 49,
+      "description": "No module-level side effects detected (compliant), but no audit logging for autopsy results (Section 30 append-only pattern)",
+      "suggestion": "Consider adding audit log entry with timestamp, error hash, and generated constraint for traceability",
+      "impact": "low",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 70,
+      "line_end": 79,
+      "description": "Two LLM calls executed sequentially (Judge 1 then Judge 2), doubling latency; no parallelism or async support",
+      "suggestion": "Execute both judge calls concurrently using asyncio.gather() or ThreadPoolExecutor; add configurable timeout per judge to prevent slow model from blocking",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 30,
+      "description": "extract_json function lacks type hints, has complex nested logic, and returns inconsistent dict structures (sometimes with 'reason', sometimes not)",
+      "suggestion": "Add type hints: `def extract_json(text: str) -> dict[str, Any]`; define TypedDict for vote response; simplify to single parse attempt with clear error types; use dataclass for structured return",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 52,
+      "line_end": 52,
+      "description": "Import inside function (generate, _call_gemini) violates Python best practices, hides dependencies, and complicates testing/mocking",
+      "suggestion": "Move imports to module level; if circular import is concern, refactor llm_client to avoid circular dependency or use TYPE_CHECKING guard",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 63,
+      "line_end": 70,
+      "description": "Prompt template hardcoded as inline string with magic values (temperature=0.1, max_tokens=200), making tuning difficult and preventing A/B testing",
+      "suggestion": "Extract prompt template, model parameters, and judge configurations to module-level constants or config file; use dataclass for JudgeConfig",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 55,
+      "line_end": 55,
+      "description": "Input sanitization (Section 34) is trivial and ineffective against modern prompt injection; does not sanitize secrets/high-entropy tokens before insertion into prompt",
+      "suggestion": "Implement Section 34 compliant sanitization: detect and redact API keys, JWTs, high-entropy strings (>20 chars base64), internal IPs/hostnames before prompt construction",
+      "impact": "high",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "low",
+      "line_start": 85,
+      "line_end": 90,
+      "description": "Audit log (Section 30) is constructed but not persisted; no append-only storage mechanism shown (file, DB, or SIEM forwarder)",
+      "suggestion": "Implement actual append-only audit sink: write to SQLite :memory: with WAL mode, forward to syslog/ELK, or use structured logging handler; ensure audit log cannot be overwritten",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 1,
+      "line_end": 10,
+      "description": "Module-level import of overnight.llm_client may execute side effects (network, file I/O, config loading) on import, violating 'No module-level side effects' rule",
+      "suggestion": "Move import inside perform_autopsy function or use lazy import pattern to defer side effects until function execution.",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 47,
+      "line_end": 47,
+      "description": "Hardcoded model parameters (max_tokens=200, temperature=0.1) reduce flexibility; should be configurable via function parameters or config",
+      "suggestion": "Add optional parameters to perform_autopsy: max_tokens=200, temperature=0.1 with defaults, allowing callers to tune for different scenarios.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "critical",
+      "line_start": 72,
+      "line_end": 74,
+      "description": "Parameter 'transaction' in with_db decorator shadows the transaction context manager function. Calling transaction(conn) on line 74 attempts to invoke the boolean parameter as a function, causing TypeError at runtime.",
+      "suggestion": "Rename the parameter to avoid shadowing: def with_db(use_transaction: bool = False): and update line 73 to if use_transaction:",
+      "impact": "high",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 46,
+      "line_end": 46,
+      "description": "get_connection raises RuntimeError if configure_logging() not called, making database layer unusable without explicit logging setup. Violates graceful degradation - should fall back to stderr logging instead of bricking the application.",
+      "suggestion": "Remove the logger.handlers check or replace with lazy logging initialization. Allow database operations to proceed with default logging configuration.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 139,
+      "line_end": 148,
+      "description": "shannon_entropy iterates 256 times per call regardless of input length, O(256*n) complexity. For long payloads this is unnecessarily slow compared to Counter-based approach.",
+      "suggestion": "Use collections.Counter: from collections import Counter; counts = Counter(data); return sum(-(c/len(data))*math.log2(c/len(data)) for c in counts.values())",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 217,
+      "line_end": 250,
+      "description": "process_eve_file accumulates all rows in memory before bulk insert. Large EVE files (GBs) will cause OOM. No streaming/batch processing.",
+      "suggestion": "Process in batches of 1000-5000 rows: accumulate batch, executemany, clear batch. Use itertools.islice or manual counter.",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 52,
+      "line_end": 70,
+      "description": "with_db decorator is overly complex with parameter shadowing bug and nested context managers. Two similar decorators (execute_in_transaction, execute_with_connection) duplicate logic.",
+      "suggestion": "Consolidate into single decorator with explicit mode parameter: @db_operation(mode='transaction'|'connection'|'auto'). Remove with_db entirely.",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 72,
+      "line_end": 98,
+      "description": "execute_in_transaction and execute_with_connection have 80% duplicate code (error handling, logging, connection management). Violates DRY principle.",
+      "suggestion": "Create private _execute_core(func, use_transaction) helper. Both decorators delegate to it with appropriate mode.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 127,
+      "line_end": 137,
+      "description": "_log_audit docstring missing type annotation for cursor parameter and incomplete Args section.",
+      "suggestion": "Add cursor: sqlite3.Cursor to Args and complete parameter descriptions.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 44,
+      "line_end": 51,
+      "description": "O(n^2 * m) fuzzy matching with nested loops over window sizes and positions; inefficient for large files",
+      "suggestion": "Use difflib.SequenceMatcher on full file once to get matching blocks, or limit search to region around expected location using line anchors",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 24,
+      "line_end": 24,
+      "description": "_locate_region missing return type annotation and detailed docstring explaining the tuple semantics",
+      "suggestion": "Add type hint: -> tuple[int, int] and docstring: 'Returns (start_line_index, window_size) or (-1, 0) if not found'",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 54,
+      "line_end": 54,
+      "description": "apply_multi_file_patches missing docstring describing behavior, return value, and exceptions raised",
+      "suggestion": "Add comprehensive docstring with args, returns, raises, and note about in-memory modification (no disk writes)",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "informational",
+      "line_start": 77,
+      "line_end": 89,
+      "description": "No audit logging of patch applications; blueprint requires append-only audit patterns for handoffs/corrections",
+      "suggestion": "Add optional audit callback parameter to log (file, search_hash, replace_hash, timestamp, success) for traceability",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "high",
+      "line_start": 83,
+      "line_end": 88,
+      "description": "Audit log is constructed but never persisted. Violates 'Append-only audit patterns for handoffs/corrections [Section 30]' - no actual append-only storage (file/db) implemented.",
+      "suggestion": "Implement actual audit logging: open audit file in append mode (`open('audit.log', 'a')`) and write JSONL entry. Or use SQLite `:memory:` for in-process audit with persistence option.",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "medium",
+      "line_start": 53,
+      "line_end": 54,
+      "description": "Sanitization uses blacklist approach instead of allowlist/structured validation. Violates 'Sanitize before insert (secrets, high-entropy tokens) [Section 34]' - no secret/token detection or redaction.",
+      "suggestion": "Add secret scanning before LLM call: detect API keys, tokens, high-entropy strings using regex/entropy analysis. Redact or reject proposals containing secrets. Use allowlist for proposal structure if possible.",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 6,
+      "line_end": 6,
+      "description": "Importing private function `_call_gemini` from `overnight.llm_client`. Private APIs are not guaranteed stable; changes upstream will break this module.",
+      "suggestion": "Import only public `generate` function. If Gemini-specific call needed, request public wrapper in llm_client or implement adapter pattern with fallback.",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 33,
+      "line_end": 33,
+      "description": "Duplicate import of `generate, _call_gemini` inside `get_consensus` function. Already imported at module level (line 6). Causes confusion and potential inconsistency.",
+      "suggestion": "Remove line 33. Use module-level imports. If avoiding import-time side effects is the goal, lazy-import only the specific symbols needed inside function.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 8,
+      "line_end": 29,
+      "description": "Function `extract_json` lacks type hints for parameter and return type. Reduces IDE support and static analysis effectiveness.",
+      "suggestion": "Add type hints: `def extract_json(text: str) -> dict[str, Any]:` and import `Any` from typing.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 30,
+      "line_end": 93,
+      "description": "Function `get_consensus` lacks return type annotation. Returns `tuple[bool, str]` but annotated as generic `tuple`.",
+      "suggestion": "Add return type: `-> tuple[bool, str]` and parameter types: `proposal: str, api_keys: dict[str, str]`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 60,
+      "line_end": 75,
+      "description": "Two LLM calls executed sequentially (Judge 1 then Judge 2). Total latency = sum of both calls. Could be parallelized with asyncio or threading.",
+      "suggestion": "Use `asyncio.gather` or `concurrent.futures.ThreadPoolExecutor` to call both judges concurrently. Requires making `generate` and `_call_gemini` async or running in threads.",
+      "impact": "medium",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "blueprint_compliance",
+      "severity": "informational",
+      "line_start": 78,
+      "line_end": 78,
+      "description": "Consensus gate returns approval but no mutation gating logic present. Blueprint mentions 'Approval-gated mutations (pfSense, Wazuh rules, TheHive cases) [Section 24]' - this component only decides, doesn't enforce.",
+      "suggestion": "Document that this is the decision component only. Mutation gating should be implemented by caller. Or add optional `execute_if_approved` callback parameter for atomic decide-and-act.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 12,
+      "description": "The `parse_multi_file_diff` function lacks a docstring, making its purpose and expected input format unclear.",
+      "suggestion": "Add a comprehensive docstring explaining the diff format, the meaning of the markers, and the return value.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 25,
+      "line_end": 25,
+      "description": "The `_locate_region` helper has no return type annotation, reducing type safety and readability.",
+      "suggestion": "Add a return type hint, e.g., `-> tuple[int, int]`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 19,
+      "line_end": 20,
+      "description": "The `api_keys` parameter lacks a specific type hint, reducing type safety.",
+      "suggestion": "Add a type hint: `api_keys: Dict[str, str]` and import `Dict` from `typing`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 56,
+      "line_end": 56,
+      "description": "The function uses the private `_call_gemini` method, which may change or be removed in future versions of the client library.",
+      "suggestion": "Switch to the public API provided by `overnight.llm_client` (e.g., `call_gemini` or a documented wrapper).",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 19,
+      "line_end": 19,
+      "description": "The `api_keys` parameter is typed as a generic `dict`, lacking specificity about expected key/value types.",
+      "suggestion": "Add a more precise type hint, e.g., `Mapping[str, str]` or a TypedDict for known model keys.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 1,
+      "line_end": 1,
+      "description": "Using type hints requires importing typing, which is missing.",
+      "suggestion": "Add 'from typing import Mapping' at the top of the file.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 32,
+      "line_end": 32,
+      "description": "`_locate_region` lacks a return type annotation, reducing static analysis clarity.",
+      "suggestion": "Add a return type hint, e.g., `def _locate_region(original: str, search: str) -> tuple[int, int]:`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 70,
+      "line_end": 70,
+      "description": "Using `str.replace` for block replacement treats the search string as a literal, which may silently fail for patterns containing special characters or differing whitespace.",
+      "suggestion": "Consider normalizing whitespace before comparison or using the fuzzy matcher consistently, and document the intended matching semantics.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 3,
+      "line_end": 3,
+      "description": "Module-level import of `generate` and `_call_gemini` creates import-time side effects and duplicates import inside get_consensus()",
+      "suggestion": "Remove module-level import (lines 3-4). Keep only the local import inside get_consensus() to avoid side effects and make dependencies explicit.",
+      "impact": "medium",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 35,
+      "line_end": 36,
+      "description": "Duplicate import inside function adds noise and contradicts module-level import",
+      "suggestion": "Remove module-level import, keep only function-level import. Or vice versa, but not both.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 32,
+      "line_end": 93,
+      "description": "Function lacks type hints for parameters and return value, reducing IDE support and maintainability",
+      "suggestion": "Add type hints: `def get_consensus(proposal: str, api_keys: dict[str, str]) -> tuple[bool, str]:` and add TypeAlias for vote dict structure.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 48,
+      "line_end": 53,
+      "description": "Prompt template is hardcoded with magic strings, temperature, and max_tokens values",
+      "suggestion": "Extract prompt template, temperature, and max_tokens as module-level constants or configuration parameters for easier tuning and testing.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 87,
+      "line_end": 91,
+      "description": "Audit log uses string concatenation with f-strings and json.dumps for each field, creating multiple intermediate strings",
+      "suggestion": "Use list append and single join, or io.StringIO for building large audit strings. Pre-serialize votes once.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 30,
+      "description": "extract_json function lacks type hints and docstring doesn't specify return type structure",
+      "suggestion": "Add type hints: `def extract_json(text: str) -> dict[str, Any]:` and document expected keys (approve: bool, reason: str).",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 50,
+      "line_end": 55,
+      "description": "No caching of autopsy results for similar error signatures; repeated identical failures incur redundant LLM costs",
+      "suggestion": "Add LRU cache keyed by error signature (hash of error type + top stack frame) with TTL; return cached constraint on hit",
+      "impact": "low",
+      "effort": "medium"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 43,
+      "line_end": 50,
+      "description": "O(n^2) fuzzy matching with repeated string allocation: nested loops over window sizes and positions create new joined strings for each difflib.SequenceMatcher call, causing quadratic allocations on large files",
+      "suggestion": "Pre-compute stripped lines once, use difflib.SequenceMatcher on line lists directly (supports list inputs), or limit search to region around expected location",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 17,
+      "line_end": 17,
+      "description": "Missing return type hint: parse_multi_file_diff lacks return type annotation (should be list[FilePatch])",
+      "suggestion": "Add '-> list[FilePatch]' return annotation",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 29,
+      "line_end": 29,
+      "description": "Missing type hints and docstring: _locate_region lacks parameter types, return type (tuple[int, int]), and algorithm documentation",
+      "suggestion": "Add type hints: 'def _locate_region(original: str, search: str) -> tuple[int, int]:' and docstring explaining normalized/fuzzy strategy",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 55,
+      "line_end": 55,
+      "description": "Missing docstring: apply_multi_file_patches lacks documentation of behavior, error conditions, and return value semantics",
+      "suggestion": "Add docstring describing atomic application, fuzzy matching fallback, and that returned dict contains new content (not yet written to disk)",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 6,
+      "line_end": 6,
+      "description": "Imports private function _call_gemini (leading underscore) creating tight coupling to llm_client implementation details",
+      "suggestion": "Export a public wrapper function from llm_client (e.g., call_gemini) or use the public generate() interface with model parameter.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 55,
+      "line_end": 55,
+      "description": "Duplicate import of generate and _call_gemini inside function - already imported at module level",
+      "suggestion": "Remove the inner import. If avoiding import-time side effects is needed, refactor llm_client to not have side effects on import.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 73,
+      "line_end": 80,
+      "description": "Hardcoded temperature=0.1 and max_tokens=200 for both judges - not configurable for different use cases or model capabilities",
+      "suggestion": "Add optional parameters to get_consensus: temperature=0.1, max_tokens=200, and pass them to the LLM calls.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 36,
+      "line_end": 36,
+      "description": "Return type hint is bare 'tuple' instead of specific tuple[bool, str] or tuple[bool, dict, dict]",
+      "suggestion": "Add proper type hint: -> tuple[bool, str] (or tuple[bool, dict, dict] if changing return format)",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 20,
+      "line_end": 20,
+      "description": "Regex with re.DOTALL and greedy '[^}]*' can cause catastrophic backtracking on large malformed responses",
+      "suggestion": "Use non-greedy quantifier '[^}]*?' or better, replace with balanced-brace parsing algorithm.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 87,
+      "line_end": 91,
+      "description": "Audit log built with f-string concatenation instead of list join - minor but unnecessary allocation",
+      "suggestion": "Use list append and '\\n'.join() for building the audit log string.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 14,
+      "line_end": 14,
+      "description": "Module-level side effect: sys.path.insert() modifies global state at import time, violating blueprint rule 'No module-level side effects (file I/O, network, exit calls) [v11.7]'",
+      "suggestion": "Move path manipulation inside the function or use proper package structure with relative imports. If overnight is a sibling package, use 'from ..overnight.llm_client import generate' with proper __init__.py files.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 28,
+      "line_end": 28,
+      "description": "api_keys parameter typed as bare 'dict' without structure. No validation that required keys exist before passing to generate().",
+      "suggestion": "Use TypedDict or Protocol for api_keys structure. Add runtime validation: if not api_keys.get('openrouter') and not api_keys.get('groq'): raise ValueError('No valid API keys provided').",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 39,
+      "line_end": 39,
+      "description": "Magic number 200 for max_tokens hardcoded in function call. Should be a named constant or configurable parameter.",
+      "suggestion": "Define AUTOPSY_MAX_TOKENS = 200 at module level and use that constant.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 15,
+      "line_end": 15,
+      "description": "parse_multi_file_diff missing type hint for raw_diff parameter",
+      "suggestion": "Add type hint: def parse_multi_file_diff(raw_diff: str, root_dir: Path) -> list[FilePatch]:",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 27,
+      "line_end": 27,
+      "description": "_locate_region missing return type hint and parameter type hints",
+      "suggestion": "Add type hints: def _locate_region(original: str, search: str) -> tuple[int, int]:",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 57,
+      "line_end": 84,
+      "description": "File re-read from disk for each patch instead of caching in memory, causing O(n) disk I/O for n patches",
+      "suggestion": "Read each file once, cache content in dict, apply all patches to cached content, write once per file",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 48,
+      "line_end": 55,
+      "description": "Fuzzy matching has O(n^2 * m) complexity with nested loops over window sizes and positions",
+      "suggestion": "Limit fuzzy search to a reasonable window around likely matches, or use difflib.get_close_matches with a cutoff",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 55,
+      "description": "_locate_region lacks docstring explaining the fuzzy matching algorithm and return values",
+      "suggestion": "Add comprehensive docstring with parameter descriptions, return value explanation, and algorithm notes",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 57,
+      "line_end": 84,
+      "description": "apply_multi_file_patches lacks docstring explaining behavior, return value, and exceptions",
+      "suggestion": "Add docstring with parameter descriptions, return value (dict[Path, str]), and raised exceptions",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using print for error reporting mixes standard output with logging and is not configurable.",
+      "suggestion": "Use the logging module (e.g., logger.error(...)) to record the exception.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "high",
+      "line_start": 10,
+      "line_end": 10,
+      "description": "Module-level side effect modifies sys.path during import, violating blueprint requirement for no module-level side effects.",
+      "suggestion": "Remove the sys.path insertion and rely on proper package installation or move the path manipulation into a dedicated initialization function called explicitly by the application.",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 28,
+      "description": "The function docstring does not describe the parameters, possible exceptions, or the fallback behavior, reducing clarity for future maintainers.",
+      "suggestion": "Expand the docstring to include `:param bad_code:`, `:param error_message:`, `:param api_keys:`, and describe the fallback return value and error handling.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "high",
+      "line_start": 10,
+      "line_end": 10,
+      "description": "Modifying sys.path at import time introduces a global side effect, violating the blueprint rule against module-level side effects.",
+      "suggestion": "Remove the sys.path insertion from the module level; perform path adjustments inside a function or configure the package layout to avoid needing to modify sys.path.",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 34,
+      "line_end": 34,
+      "description": "No validation that `api_keys` contains the required keys before passing it to the LLM client, which could cause runtime errors.",
+      "suggestion": "Add a validation step that checks for expected keys in `api_keys` and raise a clear exception if they are missing.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using print for error reporting is less structured than proper logging.",
+      "suggestion": "Replace print with logging using the standard logging module at appropriate level (e.g., logger.error).",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 28,
+      "description": "The function docstring lacks detailed documentation of parameters, return value, and possible exceptions.",
+      "suggestion": "Expand the docstring to describe bad_code, error_message, api_keys, the returned constraint string, and the error handling behavior.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 22,
+      "line_end": 22,
+      "description": "api_keys parameter is typed as dict; more precise typing (Mapping[str, str]) would improve clarity.",
+      "suggestion": "Change the type hint to Mapping[str, str] from typing.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Direct use of print for error reporting is a side effect and makes log management harder.",
+      "suggestion": "Replace the print statement with a call to the standard logging framework (e.g., logging.error(...)).",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Uses print for error reporting, which is unsuitable for library code and makes log management difficult.",
+      "suggestion": "Import the logging module and replace the print statement with logger.error(...).",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 6,
+      "line_end": 6,
+      "description": "The module does not import the logging library despite needing structured error reporting.",
+      "suggestion": "Add `import logging` at the top and create a module\u2011level logger (e.g., `logger = logging.getLogger(__name__)`).",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 27,
+      "description": "api_keys is typed as a generic dict, losing specificity about expected key/value types.",
+      "suggestion": "Use a more precise type hint, such as `Mapping[str, str]` from the typing module.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using `print` for error reporting mixes diagnostics with standard output and is less configurable.",
+      "suggestion": "Replace the `print` statement with a logger call, e.g., `logger.warning(\"Autopsy LLM call failed: %s\", e)`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 28,
+      "description": "The function docstring does not describe parameters, expected structure of `api_keys`, or possible exceptions.",
+      "suggestion": "Expand the docstring to include a detailed description of each argument, the expected keys in `api_keys`, and the error handling behavior.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 27,
+      "description": "Function lacks runtime validation of its string arguments, which could cause TypeError if None is passed.",
+      "suggestion": "Add explicit checks that bad_code and error_message are strings (or coerce them) and raise a clear RuntimeError if not.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "high",
+      "line_start": 10,
+      "line_end": 10,
+      "description": "Module-level modification of sys.path introduces side effects at import time, violating blueprint rule against module-level side effects.",
+      "suggestion": "Move the path insertion into a function (e.g., a helper that adjusts sys.path before importing generate) or configure the package via proper package layout; avoid altering sys.path at import.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using print for error reporting can be noisy and is not configurable.",
+      "suggestion": "Replace print with logging (e.g., logging.error) and configure a logger for the module.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 5,
+      "description": "Module-level side effect: inserting into sys.path modifies global interpreter state.",
+      "suggestion": "Remove the sys.path manipulation and rely on proper package imports or use a relative import if necessary.",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Direct use of print for error reporting bypasses structured logging and may be missed in production logs.",
+      "suggestion": "Replace print with logging, e.g., import logging; logger = logging.getLogger(__name__); logger.warning(\"Autopsy LLM call failed: %s\", e)",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 28,
+      "line_end": 28,
+      "description": "Docstring does not describe parameters, possible exceptions, or return value details.",
+      "suggestion": "Expand the docstring to include parameter types, purpose, and behavior on failure.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 22,
+      "line_end": 23,
+      "description": "The api_keys parameter lacks a precise type hint, reducing type safety.",
+      "suggestion": "Update the signature to perform_autopsy(bad_code: str, error_message: str, api_keys: Optional[dict[str, str]]) -> str and import Optional from typing.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 35,
+      "line_end": 36,
+      "description": "Using print for error logging is less flexible than the logging module.",
+      "suggestion": "Import logging, configure a logger, and replace print with logger.exception('Autopsy LLM call failed: %s', e).",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using `print` for error reporting introduces uncontrolled stdout output and bypasses the project's logging system.",
+      "suggestion": "Replace `print` with a logger call, e.g., `logger.error(\"Autopsy LLM call failed: %s\", e)`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 28,
+      "description": "The function docstring lacks detail about parameters, expected format of `api_keys`, and behavior on failure.",
+      "suggestion": "Expand the docstring to describe each argument, possible exceptions, and the fallback mechanism.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 27,
+      "description": "The type hint for `api_keys` is generic `dict`, providing no information about required key names or value types.",
+      "suggestion": "Use a TypedDict or a more specific type hint, e.g., `api_keys: Mapping[str, str]` with documentation of required keys.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "high",
+      "line_start": 10,
+      "line_end": 10,
+      "description": "Module-level side effect modifies sys.path at import time, violating the blueprint rule against module-level side effects and can interfere with import resolution.",
+      "suggestion": "Remove the sys.path insertion from the top-level; instead compute the project root inside a function or rely on proper package installation. For example, move the path manipulation into perform_autopsy or a dedicated initializer.",
+      "impact": "high",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 19,
+      "line_end": 19,
+      "description": "Function `parse_multi_file_diff` lacks a docstring describing its purpose, parameters, and return value.",
+      "suggestion": "Add a proper docstring explaining the diff format, arguments, and returned list of `FilePatch` objects.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 32,
+      "line_end": 32,
+      "description": "Function `_locate_region` has no type annotation for its return value.",
+      "suggestion": "Annotate the return type as `tuple[int, int]`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/multi_file_patcher.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 61,
+      "line_end": 61,
+      "description": "Function `apply_multi_file_patches` lacks a docstring describing its behavior, parameters, and return structure.",
+      "suggestion": "Add a comprehensive docstring covering the patch application process, error conditions, and the dictionary it returns.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 28,
+      "description": "Function lacks a comprehensive docstring describing parameters, return value, and possible exceptions.",
+      "suggestion": "Add a detailed docstring that documents `bad_code`, `error_message`, `api_keys`, the return format, and error handling behavior.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Use of a raw print statement for error logging reduces consistency and testability.",
+      "suggestion": "Replace `print` with a logger from the standard `logging` module, configured at the library level.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 35,
+      "line_end": 36,
+      "description": "Using print for error logging is not ideal for library code.",
+      "suggestion": "Replace print with the logging module: logging.warning(\"Autopsy LLM call failed: %s\", e).",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 22,
+      "line_end": 22,
+      "description": "Missing type hint for the api_keys parameter.",
+      "suggestion": "Change the signature to perform_autopsy(bad_code: str, error_message: str, api_keys: Mapping[str, str]) -> str.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 22,
+      "line_end": 23,
+      "description": "Function docstring lacks parameter descriptions.",
+      "suggestion": "Expand the docstring to describe each parameter and the return value.",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using print for error reporting is not appropriate for library code and can clutter stdout.",
+      "suggestion": "Replace the print statement with logging using the standard logging module.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 28,
+      "line_end": 28,
+      "description": "Function docstring is brief and does not describe parameters, return value, or possible exceptions.",
+      "suggestion": "Expand the docstring to include detailed descriptions of arguments, return type, and error handling behavior.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Errors from the LLM call are printed directly to stdout, which is not appropriate for library code.",
+      "suggestion": "Replace the print statement with a logging call, e.g., logger.error(\"Autopsy LLM call failed: %s\", e).",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using print for error reporting mixes diagnostic output with standard output and bypasses structured logging.",
+      "suggestion": "Replace the print statement with a call to the project's logger (e.g., logger.error(...)).",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 12,
+      "line_end": 15,
+      "description": "The optional import of `generate` lacks type hints and documentation, making static analysis harder.",
+      "suggestion": "Add a type alias, e.g., `from typing import Callable, Optional; generate: Optional[Callable[..., str]] = None`, and document the fallback behavior in a comment.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 41,
+      "line_end": 41,
+      "description": "Using print for error reporting mixes standard output with logging and is not suitable for production environments.",
+      "suggestion": "Replace print with logging.error or logging.exception to integrate with the platform's logging system.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/failure_autopsy.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 27,
+      "line_end": 28,
+      "description": "The function docstring lacks detail about parameter expectations and the exact format of the returned constraint.",
+      "suggestion": "Expand the docstring to describe the required structure of the returned string and any expectations for api_keys.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 54,
+      "line_end": 54,
+      "description": "Redundant import of `generate, _call_gemini` inside function (line 54) when already imported at module level (line 8). Adds confusion and slight overhead.",
+      "suggestion": "Remove the internal import. Module-level import is sufficient and preferred for library code.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 36,
+      "line_end": 36,
+      "description": "Return type annotation `-> tuple` is too vague. Should specify `tuple[bool, str]` for approval status and audit log, or better yet, use a NamedTuple/dataclass for clarity.",
+      "suggestion": "Change to `-> tuple[bool, str]` or define `ConsensusResult = NamedTuple('ConsensusResult', [('approved', bool), ('audit_log', str)])` and use that.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/consensus_gate.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 10,
+      "line_end": 34,
+      "description": "Function `extract_json` lacks type hints for return dict structure. Should use TypedDict for `{\"approve\": bool, \"reason\": str}` to enable static analysis.",
+      "suggestion": "Add `from typing import TypedDict` and define `class VoteResult(TypedDict): approve: bool; reason: str` then annotate `-> VoteResult`.",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "medium",
+      "line_start": 154,
+      "line_end": 162,
+      "description": "shannon_entropy iterates 256 times for every call regardless of actual characters present",
+      "suggestion": "Use collections.Counter to count only present characters, then compute entropy",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 264,
+      "line_end": 278,
+      "description": "get_pending_events sets conn.row_factory = sqlite3.Row on every call, redundant since get_connection already sets it",
+      "suggestion": "Remove the row_factory assignment in get_pending_events",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "medium",
+      "line_start": 80,
+      "line_end": 106,
+      "description": "execute_in_transaction and execute_with_connection are nearly identical decorators with duplicated error handling logic",
+      "suggestion": "Create a single parameterized decorator or helper function to eliminate duplication",
+      "impact": "medium",
+      "effort": "small"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "maintainability",
+      "severity": "low",
+      "line_start": 172,
+      "line_end": 176,
+      "description": "redact_value only handles strings, not bytes or other types that could contain secrets",
+      "suggestion": "Add handling for bytes type and other common secret containers",
+      "impact": "low",
+      "effort": "trivial"
+    },
+    "attempts": 3
+  },
+  {
+    "file": "engine/intake_eve.py",
+    "issue": {
+      "category": "performance",
+      "severity": "low",
+      "line_start": 245,
+      "line_end": 255,
+      "description": "process_eve_file builds entire rows list in memory before bulk insert, could OOM on large files",
+      "suggestion": "Process in chunks (e.g., 1000 rows at a time) using executemany in batches",
+      "impact": "low",
+      "effort": "small"
+    },
+    "attempts": 3
+  }
+]

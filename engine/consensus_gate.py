@@ -90,4 +90,4 @@ def get_consensus(proposal: str, api_keys: dict) -> tuple:
         f"VOTE2: {json.dumps(vote2, ensure_ascii=False)}\n"
         f"DECISION: {'APPROVED' if approved else 'REJECTED'}\n"
     )
-    return approved, audit_log
+    return approved, vote1, vote2

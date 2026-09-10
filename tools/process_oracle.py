@@ -56,6 +56,7 @@ def main():
         
         approved, v1, v2 = get_consensus(proposal_text, api_keys)
         data["votes"] = {"judge1": v1, "judge2": v2}
+        p_file.write_text(json.dumps(data, indent=2))
         
         if NAS_PENDING in p_file.parents:
             dest_approved = NAS_APPROVED / p_file.name

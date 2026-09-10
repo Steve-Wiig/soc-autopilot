@@ -3,19 +3,55 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from engine.telemetry_identity import event_identity
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
 NAS_DIR = Path("/mnt/backup-nas/soc-slm-telemetry")
-LOCAL_DIR = Path("/home/swiig/Documents/soc-autopilot/overnight/.telemetry_buffer")
+LOCAL_DIR = ROOT / "overnight/.telemetry_buffer"
 
 def load_events():
     events = []
-    for d in [NAS_DIR, LOCAL_DIR / "outbox", LOCAL_DIR]:
-        if d.exists():
-            for f in d.rglob("*.jsonl"):
-                try:
-                    with open(f) as fp:
-                        for line in fp:
-                            if line.strip(): events.append(json.loads(line))
-                except Exception: pass
+    seen_files = set()
+    seen_events = set()
+
+    # LOCAL_DIR already recursively includes outbox.
+    # Do not scan LOCAL_DIR/outbox separately.
+    sources = [NAS_DIR, LOCAL_DIR]
+
+    for d in sources:
+        if not d.exists():
+            continue
+
+        for f in d.rglob("*.jsonl"):
+            if f in seen_files:
+                continue
+
+            seen_files.add(f)
+
+            try:
+                with open(f) as fp:
+                    for line in fp:
+                        if not line.strip():
+                            continue
+
+                        event = json.loads(line)
+
+                        identity = event_identity(event)
+
+                        if identity in seen_events:
+                            continue
+
+                        seen_events.add(identity)
+                        events.append(event)
+
+            except Exception:
+                pass
+
     return events
 
 def generate_report(events):

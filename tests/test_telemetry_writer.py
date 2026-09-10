@@ -141,3 +141,46 @@ def test_concurrent_writers(temp_buffer):
                     total_records += 1
                     
     assert total_records == num_threads * writes_per_thread
+
+# ----- Phase 1: Pi telemetry tests -----
+def test_log_attempt_with_extra_fields(tmpdir):
+    writer = TelemetryWriter(buffer_root=tmpdir)
+    writer.log_attempt({"base": "value"}, worker_type="pi", pi_latency_ms=123)
+    with open(writer.current_file, 'r') as f:
+        event = json.loads(f.readline())
+    assert event["base"] == "value"
+    assert event["worker_type"] == "pi"
+    assert event["pi_latency_ms"] == 123
+
+def test_heartbeat_event(tmpdir):
+    writer = TelemetryWriter(buffer_root=tmpdir)
+    writer.log_attempt({"event_type": "pi_heartbeat"}, worker_type="pi", status="idle")
+    with open(writer.current_file, 'r') as f:
+        event = json.loads(f.readline())
+    assert event["event_type"] == "pi_heartbeat"
+    assert event["worker_type"] == "pi"
+    assert event["status"] == "idle"
+
+def test_sanitization_keeps_extra_fields(tmpdir):
+    writer = TelemetryWriter(buffer_root=tmpdir)
+    writer.log_attempt({"api_keys": "secret"}, worker_type="pi", prompt="should be removed")
+    with open(writer.current_file, 'r') as f:
+        event = json.loads(f.readline())
+    assert "api_keys" not in event
+    assert "prompt" not in event
+    assert event["worker_type"] == "pi"
+
+def test_extra_fields_override(tmpdir):
+    writer = TelemetryWriter(buffer_root=tmpdir)
+    writer.log_attempt({"worker_type": "old"}, worker_type="pi")
+    with open(writer.current_file, 'r') as f:
+        event = json.loads(f.readline())
+    assert event["worker_type"] == "pi"
+
+def test_backward_compatibility(tmpdir):
+    writer = TelemetryWriter(buffer_root=tmpdir)
+    writer.log_attempt({"event": "legacy"})
+    with open(writer.current_file, 'r') as f:
+        event = json.loads(f.readline())
+    assert event["event"] == "legacy"
+# ----- end new tests -----
