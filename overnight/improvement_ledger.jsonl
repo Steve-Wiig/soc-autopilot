@@ -373,3 +373,21 @@
 {"timestamp": "2026-09-06T06:12:56.335957", "file": "engine/defeat_ledger.py", "category": "maintainability", "status": "DEFERRED", "reason": "Routed to Local SLM (Validation Phase)"}
 {"timestamp": "2026-09-06T06:12:57.150232", "file": "engine/enrichment_scheduler.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
 {"timestamp": "2026-09-06T06:12:59.043687", "file": "engine/enrichment_scheduler.py", "category": "performance", "status": "ESCALATED", "reason": "Lacks regression test"}
+{"timestamp": "2026-09-05T18:52:20.373809", "file": "engine/failure_autopsy.py", "job_id": "9a5979b83ffc0146", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T18:55:07.374172", "file": "engine/failure_autopsy.py", "job_id": "dc13268a1b0c5fee", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T18:58:07.481781", "file": "engine/consensus_gate.py", "job_id": "274bb8a5014703b0", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T19:01:07.590717", "file": "engine/multi_file_patcher.py", "job_id": "8c6c513691892661", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T19:04:07.699670", "file": "engine/failure_autopsy.py", "job_id": "0a017b20fa24e7bd", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T19:07:07.807690", "file": "engine/consensus_gate.py", "job_id": "de3084b4c25ea98c", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T20:26:38.650809", "file": "engine/failure_autopsy.py", "job_id": "f54cacc59d750f53", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T20:37:00.315668", "file": "engine/failure_autopsy.py", "job_id": "9f87651edaa13ac2", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T20:47:05.347709", "file": "engine/ioc_extractor.py", "job_id": "b39f051376ad64a9", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-05T23:52:10.490803", "file": "engine/failure_autopsy.py", "job_id": "fdb272fb9125cc34", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T00:52:00.833920", "file": "engine/cer_critic.py", "job_id": "7a36e22391708274", "status": "APPLIED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T01:10:57.858943", "file": "engine/consensus_gate.py", "job_id": "494b8a07c7404ce2", "status": "APPLIED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T01:17:25.670766", "file": "engine/consensus_gate.py", "job_id": "750023bed0623343", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T07:58:21.527704", "file": "engine/consensus_gate.py", "job_id": "fc74f9e0f1d78803", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T10:27:16.432492", "file": "engine/defeat_ledger.py", "job_id": "e8c0b909b27598ef", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T10:58:36.566601", "file": "engine/cer_critic.py", "job_id": "b2efeb28beda79eb", "status": "REJECTED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T11:28:02.799230", "file": "engine/consensus_gate.py", "job_id": "25731113febe36b5", "status": "APPLIED", "reason": "No reason provided", "source": "pi_critic"}
+{"timestamp": "2026-09-06T12:27:30.099915", "file": "engine/failure_autopsy.py", "job_id": "b53ed1f71cc809b9", "status": "APPLIED", "reason": "No reason provided", "source": "pi_critic"}
