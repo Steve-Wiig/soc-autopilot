@@ -153,3 +153,60 @@ def get_default_router() -> ModelRouter:
         base_url="https://openrouter.ai/api", priority=30, timeout=120, api_key_env="OPENROUTER_API_KEY"
     )))
     return router
+
+# P0-1: Fail-closed enforcement for production inference
+class LocalInferenceUnavailableError(Exception):
+    """Raised when local/edge inference is unavailable for production SOC."""
+    pass
+
+def _enforce_local_only_for_production(role: str, available_providers: list) -> str:
+    """
+    Enforce that production SOC roles never fall back to cloud.
+    
+    Production roles: triage, primary, code_review
+    If local/edge unavailable: FAIL CLOSED (raise exception)
+    """
+    production_roles = {'triage', 'primary', 'code_review'}
+    
+    if role not in production_roles:
+        # Development roles can use cloud
+        return available_providers[0] if available_providers else None
+    
+    # Production role - must use local/edge only
+    local_providers = [p for p in available_providers if p.get('type') in ('local', 'edge')]
+    
+    if not local_providers:
+        raise LocalInferenceUnavailableError(
+            f"Production role '{role}' requires local/edge inference. "
+            f"Cloud fallback is disabled. FAIL CLOSED."
+        )
+    
+    return local_providers[0]
+
+# P0-1: Runtime mode enforcement
+def get_routing_mode() -> str:
+    """
+    Get deterministic routing mode.
+    Returns: 'production', 'development', or 'test'
+    """
+    import os
+    mode = os.environ.get('SOC_ROUTING_MODE', 'production').lower()
+    if mode not in ('production', 'development', 'test'):
+        mode = 'production'
+    return mode
+
+def route_inference(role: str, available_providers: list) -> str:
+    """
+    Route inference request with production fail-closed enforcement.
+    
+    Production mode: local/edge only, fail closed on outage
+    Development mode: cloud allowed
+    Test mode: mock providers
+    """
+    mode = get_routing_mode()
+    
+    if mode == 'production':
+        return _enforce_local_only_for_production(role, available_providers)
+    
+    # Development/test can use any provider
+    return available_providers[0] if available_providers else None

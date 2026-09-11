@@ -116,3 +116,77 @@ def apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:
         modified_files[patch.file_path] = new_content
 
     return modified_files
+
+# P0-2: Path containment validation
+from pathlib import Path
+from typing import Set, Union
+
+def validate_mutation_target(
+    repo_root: Path,
+    authorized_files: Set[Union[str, Path]],
+    candidate_path: Union[str, Path],
+) -> Path:
+    """Validate mutation target is inside repo and authorized."""
+    repo_root = Path(repo_root).resolve()
+    if isinstance(candidate_path, str):
+        candidate_path = Path(candidate_path)
+    
+    # Reject absolute paths
+    if candidate_path.is_absolute():
+        raise ValueError(f"Absolute paths rejected: {candidate_path}")
+    
+    # Resolve and check containment
+    resolved = (repo_root / candidate_path).resolve()
+    try:
+        resolved.relative_to(repo_root)
+    except ValueError:
+        raise ValueError(f"Path escapes repository: {candidate_path}")
+    
+    # Check authorization
+    auth_resolved = {(repo_root / Path(f)).resolve() for f in authorized_files}
+    if resolved not in auth_resolved:
+        raise ValueError(f"Path not authorized: {candidate_path}")
+    
+    return resolved
+
+# P0-2: Strict patch location matching
+def _find_patch_location_strict(source: str, search_text: str) -> int:
+    """Strict patch location matching - no fuzzy fallback."""
+    # Exact match
+    exact_matches = []
+    start = 0
+    while True:
+        pos = source.find(search_text, start)
+        if pos == -1:
+            break
+        exact_matches.append(pos)
+        start = pos + 1
+    
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        raise ValueError(f"AMBIGUOUS PATCH: Found {len(exact_matches)} exact matches.")
+    
+    # Normalized exact match - handle multi-line properly
+    normalized_search = ' '.join(search_text.split())
+    normalized_source = ' '.join(source.split())
+    
+    norm_pos = normalized_source.find(normalized_search)
+    if norm_pos != -1:
+        # Map back to original position
+        # Count characters before normalized position
+        original_pos = 0
+        norm_count = 0
+        for i, char in enumerate(source):
+            if not char.isspace():
+                if norm_count == norm_pos:
+                    original_pos = i
+                    break
+                norm_count += 1
+            elif char in ' \t\n' and i > 0 and source[i-1] in ' \t\n':
+                continue
+            else:
+                norm_count += 1
+        return original_pos
+    
+    raise ValueError("PATCH LOCATION NOT FOUND: Fuzzy matching disabled for autonomous mutation.")

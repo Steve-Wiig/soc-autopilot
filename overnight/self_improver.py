@@ -1406,3 +1406,44 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# P0-3: Authoritative promotion state machine
+# Only the terminal MERGED state counts as a successful fix
+# proven_fixes.jsonl is written ONLY when state == MERGED
+
+VALID_PROMOTION_STATES = frozenset({
+    "GENERATED", "TESTED", "CANARY_PASSED",
+    "PENDING_HUMAN_MERGE", "MERGED", "REJECTED", "REVERTED"
+})
+
+def is_merged(state: str) -> bool:
+    """Terminal success check."""
+    return state == "MERGED"
+
+def write_proven_fix(candidate: dict, state: str, proven_fixes_path: str = "proven_fixes.jsonl") -> bool:
+    """
+    Write proven_fixes.jsonl only for terminal success.
+    Non-terminal states (TESTED, CANARY_PASSED, PENDING_HUMAN_MERGE) return False.
+    """
+    if state not in VALID_PROMOTION_STATES:
+        raise ValueError(f"Invalid promotion state: {state}")
+    
+    if not is_merged(state):
+        return False
+    
+    import json
+    with open(proven_fixes_path, "a") as f:
+        record = {
+            "candidate_id": candidate.get("candidate_id"),
+            "candidate_hash": candidate.get("candidate_hash"),
+            "state": "MERGED",
+            "timestamp": candidate.get("timestamp"),
+            "merged_by": candidate.get("merged_by", "human"),
+        }
+        f.write(json.dumps(record) + "\n")
+    
+    return True
+
+def compute_applied_fix_count(ledger_entries: list) -> int:
+    """Scorecard counts only terminal MERGED entries."""
+    return sum(1 for entry in ledger_entries if entry.get("state") == "MERGED")
