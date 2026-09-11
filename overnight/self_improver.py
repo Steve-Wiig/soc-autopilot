@@ -7,6 +7,7 @@ A Staff-Level, Self-Healing, Test-Driven, Causal-Triage Autonomous Engineering S
 """
 import sys, json, subprocess, time, argparse, ast, re, os, hashlib, uuid
 from pathlib import Path
+from engine.memory_store import load_records, append_unique
 from datetime import datetime, timedelta
 from collections import Counter
 
@@ -585,13 +586,7 @@ def _retrieve_similar_fixes(issue, max_examples=2):
         if not PROVEN_FIXES_PATH.exists():
             return ""
 
-        entries = []
-        for line in PROVEN_FIXES_PATH.read_text().strip().split("\n"):
-            if line.strip():
-                try:
-                    entries.append(json.loads(line))
-                except Exception:
-                    pass
+        entries = load_records(PROVEN_FIXES_PATH)
 
         if not entries:
             return ""
@@ -1555,27 +1550,26 @@ def write_proven_fix(candidate: dict, state: str, proven_fixes_path: str = "prov
     if not is_merged(state):
         return False
 
-    import json
-    with open(proven_fixes_path, "a") as f:
-        record = {
-            "memory_type": "PROVEN_FIX",
-            "candidate_id": candidate.get("candidate_id"),
-            "candidate_hash": candidate.get("candidate_hash"),
-            "state": "MERGED",
-            "timestamp": candidate.get("timestamp"),
-            "merged_by": candidate.get("merged_by", "human"),
+    record = {
+        "memory_type": "PROVEN_FIX",
+        "candidate_id": candidate.get("candidate_id"),
+        "candidate_hash": candidate.get("candidate_hash"),
+        "state": "MERGED",
+        "timestamp": candidate.get("timestamp"),
+        "merged_by": candidate.get("merged_by", "human"),
 
-            # Preserved evidence fields for retrieval compatibility.
-            # Promotion authority still comes only from MERGED state.
-            "category": candidate.get("category", ""),
-            "file": candidate.get("file", ""),
-            "advisory": candidate.get("advisory", ""),
-            "fix_diff": candidate.get("fix_diff", ""),
-            "forensic_summary": candidate.get("forensic_summary", ""),
-        }
-        f.write(json.dumps(record) + "\n")
+        # Preserved evidence fields for retrieval compatibility.
+        "category": candidate.get("category", ""),
+        "file": candidate.get("file", ""),
+        "advisory": candidate.get("advisory", ""),
+        "fix_diff": candidate.get("fix_diff", ""),
+        "forensic_summary": candidate.get("forensic_summary", ""),
+    }
 
-    return True
+    return append_unique(
+        Path(proven_fixes_path),
+        record,
+    )
 
 def compute_applied_fix_count(ledger_entries: list) -> int:
     """Scorecard counts only terminal MERGED entries."""
