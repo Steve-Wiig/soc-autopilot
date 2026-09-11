@@ -1,3 +1,4 @@
+from engine.canonical_envelope import TrustLabels
 import re
 import json
 
@@ -31,3 +32,14 @@ def fence_payload_for_llm(payload: dict) -> str:
         f"{raw_data}\n"
         "</untrusted_evidence>"
     )
+
+
+def enforce_trust_boundary(payload: dict, labels: 'TrustLabels') -> str:
+    """
+    Programmatically enforces the trust boundary based on TrustLabels.
+    If content is marked untrusted, it MUST be fenced.
+    """
+    if labels.untrusted_content:
+        return fence_payload_for_llm(payload)
+    # If trusted, still serialize safely
+    return json.dumps(payload)

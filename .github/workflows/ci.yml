@@ -2,29 +2,45 @@ name: Swarm CI
 on: [push, pull_request]
 
 jobs:
-  test:
+  security-and-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          fetch-depth: 0 # Required for gitleaks history scan
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-        
+
+      - name: Secret Scanning with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency Vulnerability Scan
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
 
       - name: Lint with Ruff
-        run: pip install ruff && ruff check .
-        
+        run: |
+          pip install ruff
+          ruff check .
+
       - name: Security scan with Bandit
-        run: pip install bandit && bandit -r engine/ overnight/ tools/ -ll
-        
+        run: |
+          pip install bandit
+          bandit -r engine/ overnight/ tools/ -ll
+
       - name: Validate YAML configs
-        run: pip install yamllint && yamllint orchestrator/ configs/
+        run: |
+          pip install yamllint
+          yamllint orchestrator/ configs/
 
       - name: Run Test Suite
-        # We keep the ignore-glob because TDD auto-tests are dynamic artifacts
         run: pytest -q --ignore-glob="tests/test_tdd_auto_*.py"

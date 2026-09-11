@@ -61,4 +61,5 @@ def generate_strategic_constraint(failed_code: str, traceback: str, original_pro
             if len(constraint) > 300: constraint = constraint[:297] + "..."
             return f"CRITICAL STRATEGY SHIFT: {constraint}"
     except Exception as e:
-        return f"CRITICAL STRATEGY SHIFT: Meta-Critic failed ({e}). Adopt a fundamentally different algorithmic strategy."
+        # P1: Verifier Degradation - Fail loudly instead of silent pass
+        raise RuntimeError(f"CRITIC_UNAVAILABLE: Meta-Critic failed ({e}). Pipeline must route to REVIEW.")
