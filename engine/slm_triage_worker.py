@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
 from engine.queue_priority import priority_case_sql
+from engine.queue_manager import ensure_queue_schema
 from engine.telemetry import log_attempt
 from engine.model_registry import get_default_router
 from engine.inference_service import InferenceService
@@ -25,40 +26,11 @@ class WorkerConfig:
     max_retries: int
     base_delay: float
 
-def _ensure_priority_column(conn: sqlite3.Connection) -> bool:
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(triage_queue)")
-    columns = {row[1] for row in cursor.fetchall()}
-    changed = False
-    if "priority" not in columns:
-        cursor.execute(f"ALTER TABLE triage_queue ADD COLUMN priority INTEGER NOT NULL DEFAULT {int(DEFAULT_PRIORITY)}")
-        changed = True
-    worker_columns = {"started_at": "TEXT", "lease_expires_at": "TEXT", "last_heartbeat_at": "TEXT", "payload_ref": "TEXT", "failure_reason": "TEXT"}
-    for column, sql_type in worker_columns.items():
-        if column not in columns:
-            cursor.execute(f"ALTER TABLE triage_queue ADD COLUMN {column} {sql_type}")
-            changed = True
-    priority_expression = priority_case_sql("severity")
-    cursor.execute(f"UPDATE triage_queue SET priority = {priority_expression}")
-    cursor.execute("UPDATE triage_queue SET payload_ref = payload WHERE payload_ref IS NULL")
-    cursor.execute("CREATE TABLE IF NOT EXISTS verdicts (job_id TEXT NOT NULL, result TEXT NOT NULL, processed_at TEXT NOT NULL)")
-    return changed
-
-def _ensure_claim_index(conn: sqlite3.Connection, priority_added: bool) -> None:
-    cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_triage_claim'")
-    index_exists = cursor.fetchone() is not None
-    if priority_added or not index_exists:
-        cursor.execute("DROP INDEX IF EXISTS idx_triage_claim")
-        cursor.execute("CREATE INDEX idx_triage_claim ON triage_queue(status, priority, created_at) WHERE status = 'pending'")
-
 def get_db(db_path: str) -> sqlite3.Connection:
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        priority_added = _ensure_priority_column(conn)
-        _ensure_claim_index(conn, priority_added)
-        conn.commit()
+        ensure_queue_schema(conn) # Delegate to canonical queue authority
         return conn
     except Exception as e:
         logger.error(f"DB_ERROR: {e}")

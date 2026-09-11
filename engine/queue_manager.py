@@ -517,3 +517,28 @@ class TriageQueueManager:
             )
         self.conn.commit()
         logger.info("Job %d marked as %s", job_id, status)
+
+
+# --- Schema Migration Authority (Moved from worker) ---
+def ensure_queue_schema(conn):
+    """Canonical authority for triage_queue schema migrations."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(triage_queue)")
+    columns = {row[1] for row in cursor.fetchall()}
+    changed = False
+
+    if "priority" not in columns:
+        cursor.execute("ALTER TABLE triage_queue ADD COLUMN priority INTEGER NOT NULL DEFAULT 5")
+        changed = True
+
+    worker_columns = {"started_at": "TEXT", "lease_expires_at": "TEXT", "last_heartbeat_at": "TEXT", "payload_ref": "TEXT", "failure_reason": "TEXT", "severity": "TEXT"}
+    for column, sql_type in worker_columns.items():
+        if column not in columns:
+            cursor.execute(f"ALTER TABLE triage_queue ADD COLUMN {column} {sql_type}")
+            changed = True
+
+    if changed or not conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_triage_claim'").fetchone():
+        conn.execute("DROP INDEX IF EXISTS idx_triage_claim")
+        conn.execute("CREATE INDEX idx_triage_claim ON triage_queue(status, priority, created_at) WHERE status = 'pending'")
+    
+    conn.commit()
