@@ -59,7 +59,7 @@ def test_first_start_migrates_complete_worker_contract():
     conn = make_legacy_db()
 
     changed = ensure_queue_schema(conn)
-        conn.commit()
+    conn.commit()
 
     assert changed is True
 
@@ -121,7 +121,7 @@ def test_second_start_is_idempotent():
     conn = make_legacy_db()
 
     changed_first = ensure_queue_schema(conn)
-        conn.commit()
+    conn.commit()
 
     before = {
         "columns": columns(conn),
@@ -152,7 +152,7 @@ def test_second_start_is_idempotent():
     }
 
     changed_second = ensure_queue_schema(conn)
-        conn.commit()
+    conn.commit()
 
     after = {
         "columns": columns(conn),
@@ -206,7 +206,7 @@ def test_partial_priority_only_migration_is_repaired():
     conn.commit()
 
     changed = ensure_queue_schema(conn)
-        conn.commit()
+    conn.commit()
 
     assert changed is True
 
