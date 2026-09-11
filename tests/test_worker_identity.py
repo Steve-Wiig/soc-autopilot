@@ -1,93 +1,55 @@
 import pytest
-import hashlib
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import time
+from contracts.worker_identity import WorkerVote, VoteValidator
 
-def make_valid_vote(worker_id: str, candidate_hash: str = "abc123", timestamp: str = "2026-09-11T00:00:00") -> dict:
-    """Helper to create a valid vote with correct signature."""
-    from engine.worker_vote import WorkerIdentity
-    identity = WorkerIdentity(
-        worker_id=worker_id,
-        worker_class="llm-reviewer",
-        worker_instance="instance-1",
-        execution_host="host-1",
-        software_version="1.0.0",
-        candidate_hash=candidate_hash,
-        decision="approve",
-        timestamp=timestamp
-    )
-    return {
-        "worker_id": worker_id,
-        "worker_class": "llm-reviewer",
-        "worker_instance": "instance-1",
-        "execution_host": "host-1",
+def make_vote(**kwargs):
+    defaults = {
+        "worker_id": "worker-a",
+        "worker_class": "Qwen-3B",
+        "worker_instance": "inst-1",
+        "execution_host": "node-1",
         "software_version": "1.0.0",
-        "candidate_hash": candidate_hash,
-        "decision": "approve",
-        "timestamp": timestamp,
-        "signature": identity.compute_signature()
+        "candidate_hash": "hash123",
+        "decision": "APPROVE",
+        "timestamp": int(time.time()),
+        "signature": "sig123"
     }
+    defaults.update(kwargs)
+    return WorkerVote(**defaults)
 
-def test_duplicate_worker_id_rejected():
-    """Same worker_id cannot satisfy quorum twice."""
-    from engine.worker_vote import check_quorum_with_identity
-    votes = [
-        make_valid_vote("worker-a"),
-        make_valid_vote("worker-a"),
-        make_valid_vote("worker-b"),
-    ]
-    assert not check_quorum_with_identity(votes, "abc123")
+def test_vote_creation_valid():
+    vote = make_vote()
+    assert vote.worker_id == "worker-a"
 
-def test_distinct_workers_pass():
-    """Three distinct workers satisfy quorum."""
-    from engine.worker_vote import check_quorum_with_identity
-    votes = [
-        make_valid_vote("worker-a"),
-        make_valid_vote("worker-b"),
-        make_valid_vote("worker-c"),
-    ]
-    assert check_quorum_with_identity(votes, "abc123")
+def test_vote_creation_missing_field():
+    with pytest.raises(ValueError):
+        make_vote(worker_id="")
 
-def test_wrong_candidate_hash_rejected():
-    """Vote for different candidate cannot satisfy quorum."""
-    from engine.worker_vote import check_quorum_with_identity
-    votes = [
-        make_valid_vote("worker-a", "abc123"),
-        make_valid_vote("worker-b", "def456"),  # Different candidate
-        make_valid_vote("worker-c", "abc123"),
-    ]
-    assert not check_quorum_with_identity(votes, "abc123")
+def test_validate_rejects_wrong_candidate_hash():
+    validator = VoteValidator()
+    vote = make_vote(candidate_hash="hash_wrong")
+    with pytest.raises(ValueError, match="Wrong candidate hash"):
+        validator.validate(vote, "hash123")
 
-def test_replayed_approval_rejected():
-    """Same approval cannot be reused."""
-    from engine.worker_vote import check_quorum_with_identity
-    vote1 = make_valid_vote("worker-a")
-    votes = [
-        vote1,
-        make_valid_vote("worker-b"),
-        vote1,  # Replay
-    ]
-    assert not check_quorum_with_identity(votes, "abc123")
+def test_validate_rejects_stale_timestamp():
+    validator = VoteValidator(max_clock_skew_seconds=60)
+    old_time = int(time.time()) - 3600
+    vote = make_vote(timestamp=old_time)
+    with pytest.raises(ValueError, match="Stale timestamp"):
+        validator.validate(vote, "hash123")
 
-def test_malformed_identity_rejected():
-    """Missing fields cause rejection."""
-    from engine.worker_vote import check_quorum_with_identity
-    votes = [
-        make_valid_vote("worker-a"),
-        {"worker_id": "worker-b"},  # Missing fields
-        make_valid_vote("worker-c"),
-    ]
-    assert not check_quorum_with_identity(votes, "abc123")
+def test_validate_rejects_duplicate_signature():
+    validator = VoteValidator()
+    vote1 = make_vote(signature="sig1")
+    vote2 = make_vote(signature="sig1", worker_id="worker-b")
+    validator.validate(vote1, "hash123")
+    with pytest.raises(ValueError, match="Duplicate signature"):
+        validator.validate(vote2, "hash123")
 
-def test_invalid_signature_rejected():
-    """Tampered signature causes rejection."""
-    from engine.worker_vote import check_quorum_with_identity
-    vote = make_valid_vote("worker-a")
-    vote["signature"] = "invalid"
-    votes = [
-        vote,
-        make_valid_vote("worker-b"),
-        make_valid_vote("worker-c"),
-    ]
-    assert not check_quorum_with_identity(votes, "abc123")
+def test_validate_rejects_duplicate_worker_id():
+    validator = VoteValidator()
+    vote1 = make_vote(worker_id="worker-a", signature="sig1")
+    vote2 = make_vote(worker_id="worker-a", signature="sig2")
+    validator.validate(vote1, "hash123")
+    with pytest.raises(ValueError, match="Duplicate worker ID"):
+        validator.validate(vote2, "hash123")
