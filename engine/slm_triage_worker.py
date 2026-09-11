@@ -1,3 +1,4 @@
+from engine.queue_manager import TriageQueueManager
 import sqlite3
 import time
 import argparse
@@ -66,6 +67,14 @@ def emit_heartbeat(conn, status="idle"):
 
 def run_worker(config: WorkerConfig) -> None:
     conn = get_db(config.db)
+    queue_manager = TriageQueueManager(db_path=config.db, lease_interval=config.lease, max_attempts=config.max_retries)
+    # Share the connection to ensure we're using the same DB instance
+    queue_manager.conn = conn
+    queue_manager.cursor = conn.cursor()
+    queue_manager = TriageQueueManager(db_path=config.db, lease_interval=config.lease, max_attempts=config.max_retries)
+    # Share the connection to ensure we're using the same DB instance
+    queue_manager.conn = conn
+    queue_manager.cursor = conn.cursor()
     empty_queue_backoff = 1
     MAX_BACKOFF = 30
     router = get_default_router()
