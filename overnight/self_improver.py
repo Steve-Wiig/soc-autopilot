@@ -47,6 +47,15 @@ def _load_json(path):
     try: return json.loads(path.read_text()) if path.exists() else []
     except Exception: return []
 
+def _compute_file_hash(file_path):
+    """Compute SHA-256 hash of a file for provenance tracking."""
+    try:
+        return hashlib.sha256(file_path.read_bytes()).hexdigest()
+    except Exception:
+        return None
+
+
+
 def _save_json(path, data): path.write_text(json.dumps(data, indent=2))
 
 # ============================================================
@@ -1146,6 +1155,18 @@ def drain_fix_backlog(api_keys, max_fixes=3):
     for item in backlog:
         if done >= max_fixes: remaining.append(item); continue
         fpath = ROOT / item["file"]
+        
+        # --- HARDENING: Source Provenance Check ---
+        current_hash = _compute_file_hash(fpath)
+        recorded_hash = item.get("source_hash")
+        
+        if not fpath.exists() or not current_hash or (recorded_hash and recorded_hash != current_hash):
+            print(f"       ⚠️ STALE ADVISORY: {item['file']} has changed or provenance is missing. Deferring.")
+            item["deferred_reason"] = "STALE_SOURCE_HASH_MISMATCH"
+            deferred.append(item)
+            continue
+        # ------------------------------------------
+        
         # --- EFFICIENCY: LOCAL SLM PRE-ROUTER (TOP OF LOOP) ---
         # Intercept stylistic advisories BEFORE checking cloud budget
         try:
@@ -1300,7 +1321,12 @@ def process_advisory_queue(api_keys, budget, state):
             print(f"       📥 {len(auto_fixable)} fixable issues queued to backlog")
             if auto_fixable:
                 backlog = _load_json(FIX_BACKLOG)
-                for issue in auto_fixable: backlog.append({"file": str(source_file.relative_to(ROOT)), "issue": issue})
+                current_hash = _compute_file_hash(source_file)
+                for issue in auto_fixable:
+                    entry = {"file": str(source_file.relative_to(ROOT)), "issue": issue}
+                    if current_hash:
+                        entry["source_hash"] = current_hash
+                    backlog.append(entry)
                 _save_json(FIX_BACKLOG, backlog)
             qpath.unlink()
         except Exception as e:
