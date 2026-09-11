@@ -1,12 +1,7 @@
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from engine.slm_triage_worker import (
-    _ensure_claim_index,
-    _ensure_priority_column,
-    heartbeat,
-    reap_stale,
-)
+from engine.queue_manager import ensure_queue_schema
 
 
 def make_db(tmp_path):
@@ -65,9 +60,8 @@ def make_db(tmp_path):
 
     conn.commit()
 
-    _ensure_priority_column(conn)
-    _ensure_claim_index(conn, True)
-
+    ensure_queue_schema(conn)
+    
     now = datetime.now(timezone.utc)
 
     future = (
