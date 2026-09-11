@@ -2,14 +2,14 @@ from engine.development_worker_gate import (
     REQUIRED_APPROVALS,
     REQUIRED_VOTES,
     QuorumDecision,
-    WorkerVote,
+    WorkerApprovalVote,
     evaluate_worker_quorum,
 )
 
 
 def votes(*approvals):
     return [
-        WorkerVote(judge=f"judge-{idx}", approve=approved)
+        WorkerApprovalVote(judge=f"judge-{idx}", approve=approved)
         for idx, approved in enumerate(approvals, 1)
     ]
 
@@ -73,9 +73,9 @@ def test_four_votes_cannot_pass():
 def test_duplicate_judges_cannot_pass():
     decision = evaluate_worker_quorum(
         [
-            WorkerVote("judge-a", True),
-            WorkerVote("judge-a", True),
-            WorkerVote("judge-b", True),
+            WorkerApprovalVote("judge-a", True),
+            WorkerApprovalVote("judge-a", True),
+            WorkerApprovalVote("judge-b", True),
         ]
     )
 
@@ -85,9 +85,9 @@ def test_duplicate_judges_cannot_pass():
 def test_empty_judge_identity_cannot_pass():
     decision = evaluate_worker_quorum(
         [
-            WorkerVote("", True),
-            WorkerVote("judge-b", True),
-            WorkerVote("judge-c", True),
+            WorkerApprovalVote("", True),
+            WorkerApprovalVote("judge-b", True),
+            WorkerApprovalVote("judge-c", True),
         ]
     )
 

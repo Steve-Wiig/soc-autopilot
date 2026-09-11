@@ -21,8 +21,8 @@ try:
             "timestamp": ts,
             "file": data.get("file"),
             "job_id": data.get("job_id"),
-            "status": "APPLIED" if verdict.get("approved") else "REJECTED",
-            "reason": verdict.get("reason", "No reason"),
+          "status": "PI_APPROVED" if verdict.get("approved") else "PI_REJECTED",
+              "reason": verdict.get("reason", "No reason"),
             "source": "pi_critic"
         }
         with open(ledger_path, "a") as f:

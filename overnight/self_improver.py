@@ -11,6 +11,9 @@ from datetime import datetime, timedelta
 from collections import Counter
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from engine.advisory_provenance import compute_source_hash, validate_advisory_provenance
+from engine.advisory_identity import AdvisoryIdentity
+from contracts.promotion_state import PromotionState
 from overnight.llm_client import generate, load_api_keys, strip_fences, gemini_pre_analysis, _call_gemini
 from overnight.budget_manager import APIBudgetManager
 from overnight.code_reviewer import review_file, extract_json_from_response, build_review_prompt, get_file_context
@@ -46,6 +49,8 @@ except ImportError: perform_autopsy = lambda *a, **k: ""
 def _load_json(path):
     try: return json.loads(path.read_text()) if path.exists() else []
     except Exception: return []
+
+
 
 def _save_json(path, data): path.write_text(json.dumps(data, indent=2))
 
@@ -125,7 +130,8 @@ def _record_ledger(file_path, issue, status, reason=""):
         "file": _safe_relative_path(file_path),
         "category": issue.get("category", "unknown"),
         "status": status,
-        "reason": reason
+        "reason": reason,
+        "source_hash": compute_source_hash(file_path)
     }
     with open(ledger_path, "a") as f:
         f.write(json.dumps(entry) + "\n")
@@ -500,7 +506,8 @@ def _store_proven_fix(file_path, issue, diff_text, forensic_context):
             "file": _safe_relative_path(file_path),
             "advisory": issue.get("description", "")[:200],
             "fix_diff": diff_text[:2000],
-            "forensic_summary": forensic_context[:300] if forensic_context else ""
+            "forensic_summary": forensic_context[:300] if forensic_context else "",
+            "source_hash": compute_source_hash(file_path)
         }
         with open(PROVEN_FIXES_PATH, "a") as f:
             f.write(json.dumps(entry) + "\n")
@@ -572,7 +579,7 @@ def _retrieve_similar_fixes(issue, max_examples=2):
 # ============================================================
 FAILED_FIXES_PATH = ROOT / "overnight" / "failed_fixes.jsonl"
 
-def _store_failed_fix(file_path, issue, diff_text, constraint):
+def _store_failed_fix(file_path, issue, diff_text, constraint, advisory_fingerprint=None):
     """Store a failed fix attempt as a negative pattern to avoid."""
     try:
         entry = {
@@ -581,8 +588,17 @@ def _store_failed_fix(file_path, issue, diff_text, constraint):
             "file": _safe_relative_path(file_path),
             "advisory": issue.get("description", "")[:200],
             "failed_diff": diff_text[:1500],
-            "constraint": constraint[:300] if constraint else ""
+            "constraint": constraint[:300] if constraint else "",
+            "source_hash": compute_source_hash(file_path)
         }
+        if advisory_fingerprint:
+            entry["advisory_fingerprint"] = advisory_fingerprint
+        elif entry["source_hash"]:
+            entry["advisory_fingerprint"] = AdvisoryIdentity(
+                _safe_relative_path(file_path),
+                issue.get("description", ""),
+                entry["source_hash"],
+            ).fingerprint()
         with open(FAILED_FIXES_PATH, "a") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception:
@@ -642,7 +658,7 @@ def _cleanup_tdd_artifact(tdd_path):
         print(f"       ⚠️ TDD artifact cleanup failed: {exc}")
 
 
-def apply_auto_fix(file_path, issue, api_keys):
+def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
     try: original = file_path.read_text()
     except Exception: return False
 
@@ -926,10 +942,12 @@ def apply_auto_fix(file_path, issue, api_keys):
                         subprocess.run(["git", "push", "-u", "origin", shadow_branch], cwd=ROOT, capture_output=True)
                         print(f"       🟢 CANARY PASSED: Branch {shadow_branch} pushed to GitHub.")
                         print(f"       🛑 HUMAN GATE: Please review the PR and merge manually.")
-                        print(f"       🟢 CANARY PASSED: Merged to master")
-                        # STORE PROVEN FIX (Improvement #6)
-                        _store_proven_fix(file_path, issue, raw, forensic_context)
-                        _record_ledger(file_path, issue, "APPLIED", "Canary passed")
+                        _record_ledger(
+                            file_path,
+                            issue,
+                            "SHADOW_PUSHED",
+                            "Canary passed; awaiting human review/merge",
+                        )
                         return True
                     else:
                         for path, content in backups.items(): path.write_text(content)
@@ -961,7 +979,7 @@ def apply_auto_fix(file_path, issue, api_keys):
                 continue
             else:
                 _record_ledger(file_path, issue, "REJECTED", "Failed generation/tests")
-                _store_failed_fix(file_path, issue, raw, critic_constraint)
+                _store_failed_fix(file_path, issue, raw, critic_constraint, advisory_fingerprint)
                 check_and_record_defeat(str(file_path), original, tb)
                 return False
         return False
@@ -1144,6 +1162,18 @@ def drain_fix_backlog(api_keys, max_fixes=3):
     for item in backlog:
         if done >= max_fixes: remaining.append(item); continue
         fpath = ROOT / item["file"]
+
+        # --- HARDENING: Source Provenance Check ---
+        current_hash = _compute_file_hash(fpath)
+        recorded_hash = item.get("source_hash")
+
+        if not fpath.exists() or not current_hash or (recorded_hash and recorded_hash != current_hash):
+            print(f"       ⚠️ STALE ADVISORY: {item['file']} has changed or provenance is missing. Deferring.")
+            item["deferred_reason"] = "STALE_SOURCE_HASH_MISMATCH"
+            deferred.append(item)
+            continue
+        # ------------------------------------------
+
         # --- EFFICIENCY: LOCAL SLM PRE-ROUTER (TOP OF LOOP) ---
         # Intercept stylistic advisories BEFORE checking cloud budget
         try:
@@ -1157,8 +1187,17 @@ def drain_fix_backlog(api_keys, max_fixes=3):
             if item in remaining: remaining.remove(item)
             continue
         # ----------------------------------------------------------------
+        # --- HARDENING: Source Provenance Validation ---
+        validation = validate_advisory_provenance(item, ROOT)
+        if not validation["is_current"]:
+            print(f"       ⚠️ STALE ADVISORY: {item['file']} - {validation['reason']}. Deferring.")
+            item["deferred_reason"] = validation["reason"]
+            deferred.append(item)
+            continue
+        # ------------------------------------------
+
         if not fpath.exists(): continue
-        if apply_auto_fix(fpath, item["issue"], api_keys):
+        if apply_auto_fix(fpath, item["issue"], api_keys, item.get("advisory_fingerprint")):
             done += 1
         else:
             item["attempts"] = item.get("attempts", 0) + 1
@@ -1192,7 +1231,19 @@ def prefill_advisory_queue(files, api_keys, budget):
         try:
             advisory = gemini_pre_analysis(f.relative_to(ROOT), f.read_text(), api_keys)
             if advisory:
-                qpath.write_text(json.dumps({"file_path": str(f.relative_to(ROOT)), "advisory_notes": advisory, "created_at": datetime.now().isoformat()}, indent=2))
+                advisory_data = {
+                    "file_path": str(f.relative_to(ROOT)),
+                    "advisory_notes": advisory,
+                    "created_at": datetime.now().isoformat(),
+                    "source_hash": compute_source_hash(f)
+                }
+                if advisory_data["source_hash"]:
+                    advisory_data["advisory_fingerprint"] = AdvisoryIdentity(
+                        advisory_data["file_path"],
+                        advisory_data["advisory_notes"],
+                        advisory_data["source_hash"],
+                    ).fingerprint()
+                qpath.write_text(json.dumps(advisory_data, indent=2))
         except Exception: pass
         time.sleep(1)
 
@@ -1203,32 +1254,81 @@ def normalize_advisory(text: str) -> str:
     text = text.translate(str.maketrans('', '', string.punctuation))
     return ' '.join(text.split())
 
-def _check_cooldown(file_path: str, advisory_notes: str):
+def _check_cooldown(file_path: str, advisory_notes: str, source_hash: str | None = None):
     import json, hashlib, string
     from datetime import datetime
     from pathlib import Path
+
     def norm(t):
-        if not t: return ""
+        if not t:
+            return ""
         return ' '.join(t.lower().translate(str.maketrans('', '', string.punctuation)).split())
+
     try:
-        fixes_path = Path(__file__).parent / "failed_fixes.jsonl"
-        if not fixes_path.exists(): return False, ""
+        fixes_path = FAILED_FIXES_PATH
+        if not fixes_path.exists():
+            return False, ""
+
         rel_path = str(file_path).replace(str(Path(__file__).parent.parent) + "/", "")
-        target_hash = hashlib.sha256(f"{rel_path}::{norm(advisory_notes)}".encode()).hexdigest()
+        target_hash = hashlib.sha256(
+            f"{rel_path}::{norm(advisory_notes)}".encode()
+        ).hexdigest()
+
+        target_fingerprint = None
+        if source_hash:
+            target_fingerprint = AdvisoryIdentity(
+                rel_path,
+                advisory_notes,
+                source_hash,
+            ).fingerprint()
+
         now = datetime.now()
         failures = 0
-        with open(fixes_path, 'r') as f:
+
+        with open(fixes_path, "r") as f:
             for line in f:
-                if not line.strip(): continue
-                try: entry = json.loads(line)
-                except: continue
-                if entry.get("file") != rel_path: continue
-                stored_hash = hashlib.sha256(f"{rel_path}::{norm(entry.get('advisory', ''))}".encode()).hexdigest()
-                if stored_hash == target_hash:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+
+                if entry.get("file") != rel_path:
+                    continue
+
+                matches = False
+                if target_fingerprint and entry.get("advisory_fingerprint"):
+                    matches = entry["advisory_fingerprint"] == target_fingerprint
+                elif target_fingerprint:
+                    stored_source_hash = entry.get("source_hash")
+                    if stored_source_hash:
+                        matches = AdvisoryIdentity(
+                            rel_path,
+                            entry.get("advisory", ""),
+                            stored_source_hash,
+                        ).fingerprint() == target_fingerprint
+                    else:
+                        stored_hash = hashlib.sha256(
+                            f"{rel_path}::{norm(entry.get('advisory', ''))}".encode()
+                        ).hexdigest()
+                        matches = stored_hash == target_hash
+                else:
+                    stored_hash = hashlib.sha256(
+                        f"{rel_path}::{norm(entry.get('advisory', ''))}".encode()
+                    ).hexdigest()
+                    matches = stored_hash == target_hash
+
+                if matches:
                     try:
-                        if (now - datetime.fromisoformat(entry["timestamp"])).total_seconds() <= 86400: failures += 1
-                    except: pass
-                if failures >= 3: return True, f"Death loop cooldown ({failures} failures in 24h)"
+                        if (now - datetime.fromisoformat(entry["timestamp"])).total_seconds() <= 86400:
+                            failures += 1
+                    except Exception:
+                        pass
+
+                if failures >= 3:
+                    return True, f"Death loop cooldown ({failures} failures in 24h)"
+
         return False, ""
     except Exception as e:
         return True, f"Death loop cooldown (error: {type(e).__name__})"
@@ -1278,7 +1378,7 @@ def process_advisory_queue(api_keys, budget, state):
 
 
 
-            skip, reason = _check_cooldown(data["file_path"], data.get("advisory_notes", ""))
+            skip, reason = _check_cooldown(data["file_path"], data.get("advisory_notes", ""), data.get("source_hash"))
             if skip:
                 print(f"       ⏸️ {reason}. Skipping to save tokens.")
                 dummy_issue = {"description": data.get("advisory_notes", "")[:200], "category": "maintainability"}
@@ -1298,7 +1398,14 @@ def process_advisory_queue(api_keys, budget, state):
             print(f"       📥 {len(auto_fixable)} fixable issues queued to backlog")
             if auto_fixable:
                 backlog = _load_json(FIX_BACKLOG)
-                for issue in auto_fixable: backlog.append({"file": str(source_file.relative_to(ROOT)), "issue": issue})
+                current_hash = compute_source_hash(source_file)
+                for issue in auto_fixable:
+                    entry = {"file": str(source_file.relative_to(ROOT)), "issue": issue}
+                    if current_hash:
+                        entry["source_hash"] = current_hash
+                    if data.get("advisory_fingerprint"):
+                        entry["advisory_fingerprint"] = data["advisory_fingerprint"]
+                    backlog.append(entry)
                 _save_json(FIX_BACKLOG, backlog)
             qpath.unlink()
         except Exception as e:
@@ -1366,3 +1473,39 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# P0-3: Authoritative promotion state machine
+# Only the terminal MERGED state counts as a successful fix
+# proven_fixes.jsonl is written ONLY when state == MERGED
+
+def is_merged(state: str) -> bool:
+    """Terminal success check."""
+    return state == PromotionState.MERGED.value
+
+def write_proven_fix(candidate: dict, state: str, proven_fixes_path: str = "proven_fixes.jsonl") -> bool:
+    """
+    Write proven_fixes.jsonl only for terminal success.
+    Non-terminal states (TESTED, CANARY_PASSED, PENDING_HUMAN_MERGE) return False.
+    """
+    if not isinstance(state, str) or state not in {s.value for s in PromotionState}:
+        raise ValueError(f"Invalid promotion state: {state}")
+
+    if not is_merged(state):
+        return False
+
+    import json
+    with open(proven_fixes_path, "a") as f:
+        record = {
+            "candidate_id": candidate.get("candidate_id"),
+            "candidate_hash": candidate.get("candidate_hash"),
+            "state": "MERGED",
+            "timestamp": candidate.get("timestamp"),
+            "merged_by": candidate.get("merged_by", "human"),
+        }
+        f.write(json.dumps(record) + "\n")
+
+    return True
+
+def compute_applied_fix_count(ledger_entries: list) -> int:
+    """Scorecard counts only terminal MERGED entries."""
+    return sum(1 for entry in ledger_entries if entry.get("state") == "MERGED")

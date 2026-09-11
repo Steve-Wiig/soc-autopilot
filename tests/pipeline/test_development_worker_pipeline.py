@@ -1,5 +1,5 @@
 from engine.aider_development_worker import AiderWorkerResult
-from engine.development_worker_gate import WorkerVote
+from engine.development_worker_gate import WorkerApprovalVote
 from engine.development_worker_pipeline import evaluate_worker_proposal
 
 
@@ -17,7 +17,7 @@ def worker_result(*files):
 
 def approval_votes(*approvals):
     return [
-        WorkerVote(
+        WorkerApprovalVote(
             judge=f"judge-{idx}",
             approve=approved,
             reason="test vote",

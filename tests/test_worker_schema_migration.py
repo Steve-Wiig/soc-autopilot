@@ -2,10 +2,7 @@ import json
 import sqlite3
 
 from engine.queue_priority import severity_to_priority
-from engine.slm_triage_worker import (
-    _ensure_claim_index,
-    _ensure_priority_column,
-)
+from engine.queue_manager import ensure_queue_schema
 
 
 def make_legacy_db():
@@ -61,8 +58,7 @@ def columns(conn):
 def test_first_start_migrates_complete_worker_contract():
     conn = make_legacy_db()
 
-    changed = _ensure_priority_column(conn)
-    _ensure_claim_index(conn, changed)
+    changed = ensure_queue_schema(conn)
     conn.commit()
 
     assert changed is True
@@ -124,8 +120,7 @@ def test_first_start_migrates_complete_worker_contract():
 def test_second_start_is_idempotent():
     conn = make_legacy_db()
 
-    changed_first = _ensure_priority_column(conn)
-    _ensure_claim_index(conn, changed_first)
+    changed_first = ensure_queue_schema(conn)
     conn.commit()
 
     before = {
@@ -156,8 +151,7 @@ def test_second_start_is_idempotent():
         """).fetchall(),
     }
 
-    changed_second = _ensure_priority_column(conn)
-    _ensure_claim_index(conn, changed_second)
+    changed_second = ensure_queue_schema(conn)
     conn.commit()
 
     after = {
@@ -211,8 +205,7 @@ def test_partial_priority_only_migration_is_repaired():
     )
     conn.commit()
 
-    changed = _ensure_priority_column(conn)
-    _ensure_claim_index(conn, changed)
+    changed = ensure_queue_schema(conn)
     conn.commit()
 
     assert changed is True
@@ -253,8 +246,8 @@ def test_partial_priority_only_migration_is_repaired():
 def test_verdicts_table_is_created_idempotently():
     conn = make_legacy_db()
 
-    _ensure_priority_column(conn)
-    _ensure_priority_column(conn)
+    ensure_queue_schema(conn)
+    ensure_queue_schema(conn)
     conn.commit()
 
     conn.execute("""
