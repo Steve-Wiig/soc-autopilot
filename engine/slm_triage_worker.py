@@ -12,6 +12,7 @@ from engine.queue_priority import priority_case_sql
 from engine.telemetry import log_attempt
 from engine.model_registry import get_default_router
 from engine.inference_service import InferenceService
+from engine.trust_boundary import fence_payload_for_llm, scan_for_injection
 from contracts.slm_recommendation import SLMRawRecommendation, RecommendationEnvelope, EXPECTED_SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,21 @@ def run_worker(config: WorkerConfig) -> None:
         job_id, payload = row['id'], row['payload_ref']
         
         try:
-            inference_result = inference_service.generate(prompt=str(payload), role="triage", scope="soc")
+            payload_dict = json.loads(payload) if isinstance(payload, str) else payload
+            
+            # P0: Prompt Injection Defense
+            if scan_for_injection(payload):
+                logger.warning(f"Potential prompt injection detected in job {job_id}. Forcing REVIEW.")
+                forced_verdict = {"recommendation_id": f"REC-{job_id}-INJECTION", "decision_id": f"DEC-{job_id}-INJECTION", "outcome": "REVIEW", "reason": "Prompt injection pattern detected"}
+                conn.execute("INSERT INTO verdicts (job_id, result, processed_at) VALUES (?, ?, ?)",
+                    (job_id, json.dumps(forced_verdict), datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')))
+                conn.execute("UPDATE triage_queue SET status = 'completed' WHERE id = ?", (job_id,))
+                conn.commit()
+                continue
+
+            # P0: Structured Prompt Fencing (Trust Boundary Enforcement)
+            fenced_prompt = fence_payload_for_llm(payload_dict)
+            inference_result = inference_service.generate(prompt=fenced_prompt, role="triage", scope="soc")
             raw_output = inference_result.raw_output
             raw_output_hash = hashlib.sha256(raw_output.encode('utf-8')).hexdigest()
             cleaned_output = re.sub(r'^```json\s*', '', raw_output.strip(), flags=re.MULTILINE)
