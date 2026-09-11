@@ -142,7 +142,7 @@ def run_worker(config: WorkerConfig) -> None:
             decision_id = f"DEC-{job_id}-{int(time.time())}"
 
             conn.execute("INSERT INTO verdicts (job_id, result, processed_at) VALUES (?, ?, ?)",
-                (job_id, json.dumps({"recommendation_id": recommendation_id, "decision_id": decision_id, "outcome": decision_outcome, "envelope": envelope.model_dump()}), datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')))
+                (job_id, json.dumps({"recommendation_id": recommendation_id, "decision_id": decision_id, "outcome": decision_outcome, "envelope": envelope.model_dump(mode='json')}), datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')))
             conn.execute("UPDATE triage_queue SET status = 'completed' WHERE id = ?", (job_id,))
             conn.commit()
 
