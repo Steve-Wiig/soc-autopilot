@@ -1,3 +1,4 @@
+from engine.queue_priority import priority_case_sql
 from pathlib import Path
 import logging
 import sqlite3
@@ -536,6 +537,48 @@ def ensure_queue_schema(conn):
         if column not in columns:
             cursor.execute(f"ALTER TABLE triage_queue ADD COLUMN {column} {sql_type}")
             changed = True
+
+    # Ensure payload_ref is populated from payload (moved from worker)
+    cursor.execute("UPDATE triage_queue SET payload_ref = payload WHERE payload_ref IS NULL")
+    
+    # Recalculate priority based on severity (moved from worker)
+    priority_expression = priority_case_sql("severity")
+    cursor.execute(f"UPDATE triage_queue SET priority = {priority_expression}")
+
+    # Ensure verdicts table exists (moved from worker)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS verdicts (
+            job_id TEXT NOT NULL,
+            result TEXT NOT NULL,
+            processed_at TEXT NOT NULL
+        )
+    """)
+
+    if changed or not conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_triage_claim'").fetchone():
+        conn.execute("DROP INDEX IF EXISTS idx_triage_claim")
+        conn.execute("CREATE INDEX idx_triage_claim ON triage_queue(status, priority, created_at) WHERE status = 'pending'")
+        changed = True
+    
+    conn.commit()
+    return changed
+
+
+    if "priority" not in columns:
+        cursor.execute("ALTER TABLE triage_queue ADD COLUMN priority INTEGER NOT NULL DEFAULT 5")
+        changed = True
+
+    worker_columns = {"started_at": "TEXT", "lease_expires_at": "TEXT", "last_heartbeat_at": "TEXT", "payload_ref": "TEXT", "failure_reason": "TEXT", "severity": "TEXT"}
+    for column, sql_type in worker_columns.items():
+        if column not in columns:
+            cursor.execute(f"ALTER TABLE triage_queue ADD COLUMN {column} {sql_type}")
+            changed = True
+
+    # Ensure payload_ref is populated from payload (moved from worker)
+    cursor.execute("UPDATE triage_queue SET payload_ref = payload WHERE payload_ref IS NULL")
+    
+    # Recalculate priority based on severity (moved from worker)
+    priority_expression = priority_case_sql("severity")
+    cursor.execute(f"UPDATE triage_queue SET priority = {priority_expression}")
 
     if changed or not conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_triage_claim'").fetchone():
         conn.execute("DROP INDEX IF EXISTS idx_triage_claim")
