@@ -61,6 +61,24 @@ The canonical future contract should distinguish at minimum:
 6. External content is data, not executable authority.
 7. Consequential writeback requires a bounded action contract.
 
+## Implemented security invariants
+
+The current repository provides concrete development-side controls for several
+security invariants:
+
+- advisory identity is bound to file path, advisory content, and source hash;
+- advisory provenance is checked before autonomous fix processing;
+- promotion state is defined by a shared lifecycle contract;
+- autonomous patch generation is subject to deterministic safety, test, and
+  integrity gates;
+- autonomous development changes pass through shadow-canary and human
+  promotion boundaries;
+- malformed or incompatible governance evidence is rejected by the strict
+  ledger event parser.
+
+These controls apply to the current development-autonomy workflow. They do not
+constitute authorization for unattended production SOC operation.
+
 ## Proposed envelope
 
 **PLANNED:**

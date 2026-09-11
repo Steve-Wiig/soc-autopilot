@@ -19,6 +19,8 @@ Security issues involving any of the following should be treated as security-sen
 
 Please report suspected vulnerabilities privately rather than publishing exploit details before remediation.
 
+Use GitHub's private vulnerability-reporting mechanism for this repository when available. If private reporting is not enabled, contact the project maintainer through GitHub privately rather than opening a public issue with exploit details.
+
 Include, where possible:
 
 - affected component or file
@@ -27,6 +29,10 @@ Include, where possible:
 - relevant sanitized logs or test output
 
 Do not include credentials, API keys, or other secrets.
+
+## Supported versions
+
+SOC-Autopilot is experimental/research software rather than a released product. Security fixes are developed against the active development/default branch. Historical checkpoint branches and old commits are not maintained release versions.
 
 ## Security principles
 

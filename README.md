@@ -4,6 +4,18 @@ Local-first, evidence-driven security orchestration and autonomous software main
 
 > **LLMs propose → safety gates validate → tests verify → independent verification audits → Git records → humans decide where required.**
 
+## Current state
+
+SOC-Autopilot is an experimental/research project currently focused on hardening and consolidation rather than feature expansion.
+
+The autonomous development workflow is not the same thing as autonomous production SOC authorization. Validation and promotion controls remain part of the safety boundary.
+
+## Validation
+
+The engineering workflow favors:
+
+`invariant -> regression test -> smallest safe change -> targeted verification -> full regression suite -> promotion / human review where required`
+
 ## What this project is
 
 SOC-Autopilot explores two separate autonomy domains that share verification discipline but have different authorities:
