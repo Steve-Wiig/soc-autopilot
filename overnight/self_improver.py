@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from collections import Counter
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from engine.advisory_provenance import compute_source_hash, validate_advisory_provenance
 from overnight.llm_client import generate, load_api_keys, strip_fences, gemini_pre_analysis, _call_gemini
 from overnight.budget_manager import APIBudgetManager
 from overnight.code_reviewer import review_file, extract_json_from_response, build_review_prompt, get_file_context
@@ -134,7 +135,8 @@ def _record_ledger(file_path, issue, status, reason=""):
         "file": _safe_relative_path(file_path),
         "category": issue.get("category", "unknown"),
         "status": status,
-        "reason": reason
+        "reason": reason,
+        "source_hash": compute_source_hash(file_path)
     }
     with open(ledger_path, "a") as f:
         f.write(json.dumps(entry) + "\n")
@@ -509,7 +511,8 @@ def _store_proven_fix(file_path, issue, diff_text, forensic_context):
             "file": _safe_relative_path(file_path),
             "advisory": issue.get("description", "")[:200],
             "fix_diff": diff_text[:2000],
-            "forensic_summary": forensic_context[:300] if forensic_context else ""
+            "forensic_summary": forensic_context[:300] if forensic_context else "",
+            "source_hash": compute_source_hash(file_path)
         }
         with open(PROVEN_FIXES_PATH, "a") as f:
             f.write(json.dumps(entry) + "\n")
@@ -590,7 +593,8 @@ def _store_failed_fix(file_path, issue, diff_text, constraint):
             "file": _safe_relative_path(file_path),
             "advisory": issue.get("description", "")[:200],
             "failed_diff": diff_text[:1500],
-            "constraint": constraint[:300] if constraint else ""
+            "constraint": constraint[:300] if constraint else "",
+            "source_hash": compute_source_hash(file_path)
         }
         with open(FAILED_FIXES_PATH, "a") as f:
             f.write(json.dumps(entry) + "\n")
@@ -1180,6 +1184,15 @@ def drain_fix_backlog(api_keys, max_fixes=3):
             if item in remaining: remaining.remove(item)
             continue
         # ----------------------------------------------------------------
+        # --- HARDENING: Source Provenance Validation ---
+        validation = validate_advisory_provenance(item, ROOT)
+        if not validation["is_current"]:
+            print(f"       ⚠️ STALE ADVISORY: {item['file']} - {validation['reason']}. Deferring.")
+            item["deferred_reason"] = validation["reason"]
+            deferred.append(item)
+            continue
+        # ------------------------------------------
+
         if not fpath.exists(): continue
         if apply_auto_fix(fpath, item["issue"], api_keys):
             done += 1
@@ -1215,7 +1228,13 @@ def prefill_advisory_queue(files, api_keys, budget):
         try:
             advisory = gemini_pre_analysis(f.relative_to(ROOT), f.read_text(), api_keys)
             if advisory:
-                qpath.write_text(json.dumps({"file_path": str(f.relative_to(ROOT)), "advisory_notes": advisory, "created_at": datetime.now().isoformat()}, indent=2))
+                advisory_data = {
+                    "file_path": str(f.relative_to(ROOT)),
+                    "advisory_notes": advisory,
+                    "created_at": datetime.now().isoformat(),
+                    "source_hash": compute_source_hash(f)
+                }
+                qpath.write_text(json.dumps(advisory_data, indent=2))
         except Exception: pass
         time.sleep(1)
 
