@@ -1,9 +1,9 @@
 # SOC Autopilot - Build Manifest
 
-MASTER SHA256: (current HEAD: c3c6e40)
-Full SHA: c3c6e40a96a38d8d5be68287601ff0731f73e16c
-Branch: checkpoint-worker-vote-migration-20260911-131723
-Generated: 2026-09-11T13:27:32Z
+MASTER SHA256: (current HEAD: d8cd67d)
+Full SHA: d8cd67d5f3886f82dca515ef68dcac1029ad1795
+Branch: checkpoint-worker-approval-rename-20260911-133025
+Generated: 2026-09-11T13:40:21Z
 
 ## Architecture Version: v11.11
 - Shadow Canary (10-stage safety pipeline)
