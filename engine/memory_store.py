@@ -33,6 +33,7 @@ def record_fingerprint(record: dict) -> str:
         "failed_diff",
         "candidate_hash",
         "failure_signature",
+        "signature",
     ]
 
     payload = {
@@ -123,6 +124,37 @@ def append_unique(
         )
 
     return True
+
+
+def append_record(
+    path: Path,
+    record: dict,
+) -> None:
+    """
+    Append an event record without deduplication.
+
+    Intended for immutable event streams:
+    - defeat attempts
+    - telemetry events
+    - audit history
+
+    Unlike append_unique(), repeated identical
+    records are expected and preserved.
+    """
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with path.open(
+        "a",
+        encoding="utf-8",
+    ) as f:
+        f.write(
+            json.dumps(record)
+            + "\n"
+        )
 
 
 def find_matching(

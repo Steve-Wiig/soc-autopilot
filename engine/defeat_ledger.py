@@ -7,10 +7,12 @@ Prevents the autonomous loop from burning API tokens on unfixable bugs.
 """
 import ast
 import hashlib
-import json
 import re
+import time
 from pathlib import Path
 from typing import Optional
+
+from engine.memory_store import load_records, append_record
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -56,60 +58,71 @@ def normalize_traceback(traceback_text: str) -> str:
     normalized = re.sub(r'line \d+', 'line <N>', normalized)
     return re.sub(r'\s+', ' ', normalized).strip()
 
-def check_and_record_defeat(file_path: str, source_code: str, traceback_text: str) -> bool:
+def check_and_record_defeat(
+    file_path: str,
+    source_code: str,
+    traceback_text: str
+) -> bool:
     """
-    Checks if this exact failure has been seen before. 
-    Records the attempt. Returns True if the item is now DEFEATED (quarantine it).
+    Append one defeat attempt event.
+
+    The ledger is append-only.
+    State is derived from historical events.
     """
+
     ast_hash = hash_ast(source_code)
-    tb_hash = hashlib.sha256(normalize_traceback(traceback_text).encode('utf-8')).hexdigest()
+
+    tb_hash = hashlib.sha256(
+        normalize_traceback(traceback_text).encode("utf-8")
+    ).hexdigest()
+
     signature = f"{ast_hash}_{tb_hash}"
-    
-    LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
-    
-    ledger = {}
-    if LEDGER_PATH.exists():
-        try:
-            for line in LEDGER_PATH.read_text().splitlines():
-                if line.strip():
-                    entry = json.loads(line)
-                    ledger[entry['signature']] = entry
-        except Exception:
-            pass
-            
-    if signature in ledger:
-        ledger[signature]['attempts'] += 1
-        ledger[signature]['last_file_path'] = file_path
-    else:
-        ledger[signature] = {
-            'signature': signature,
-            'ast_hash': ast_hash,
-            'tb_hash': tb_hash,
-            'attempts': 1,
-            'last_file_path': file_path
-        }
-        
-    with open(LEDGER_PATH, 'w') as f:
-        for entry in ledger.values():
-            f.write(json.dumps(entry) + '\n')
-            
-    is_defeated = ledger[signature]['attempts'] >= DEFEAT_THRESHOLD
-    return is_defeated
+
+    attempts = 1
+
+    for entry in load_records(LEDGER_PATH):
+        if entry.get("signature") == signature:
+            attempts += 1
+
+    event = {
+        "event": "DEFEAT_ATTEMPT",
+        "signature": signature,
+        "ast_hash": ast_hash,
+        "tb_hash": tb_hash,
+        "file_path": file_path,
+        "attempt": attempts,
+        "timestamp": time.time(),
+    }
+
+    append_record(
+        LEDGER_PATH,
+        event,
+    )
+
+    return attempts >= DEFEAT_THRESHOLD
+
 
 def is_ast_defeated(source_code: str) -> bool:
     """
-    Pre-flight check: Returns True if this file's AST is already quarantined.
-    Prevents wasting API tokens on poisoned files.
+    Returns True when defeat history exceeds threshold.
     """
+
     ast_hash = hash_ast(source_code)
-    if not LEDGER_PATH.exists():
-        return False
+
+    attempts = 0
+
     try:
-        for line in LEDGER_PATH.read_text().splitlines():
-            if line.strip():
-                entry = json.loads(line)
-                if entry.get('ast_hash') == ast_hash and entry.get('attempts', 0) >= DEFEAT_THRESHOLD:
+        for entry in load_records(LEDGER_PATH):
+            if (
+                entry.get("ast_hash") == ast_hash
+                and entry.get("event") == "DEFEAT_ATTEMPT"
+            ):
+                attempts += 1
+
+                if attempts >= DEFEAT_THRESHOLD:
                     return True
+
     except Exception:
         pass
+
     return False
