@@ -145,14 +145,30 @@ class APIBudgetManager:
             "last_day": self._count_in_window(provider, 1440),
         }
 
+    def _effective_limit(self, value: int) -> int:
+        """Return enforcement limit after safety margin."""
+        return max(1, int(value * SAFETY_MARGIN))
+
     def get_remaining(self, provider: str) -> Dict[str, int]:
-        """Get remaining budget for all windows."""
+        """Get remaining budget based on actual enforcement limits."""
         usage = self.get_usage(provider)
         limits = self.limits.get(provider, {})
         return {
-            "per_minute": max(0, limits.get("per_minute", 0) - usage["last_minute"]),
-            "per_hour": max(0, limits.get("per_hour", 0) - usage["last_hour"]),
-            "per_day": max(0, limits.get("per_day", 0) - usage["last_day"]),
+            "per_minute": max(
+                0,
+                self._effective_limit(limits.get("per_minute", 0))
+                - usage["last_minute"]
+            ),
+            "per_hour": max(
+                0,
+                self._effective_limit(limits.get("per_hour", 0))
+                - usage["last_hour"]
+            ),
+            "per_day": max(
+                0,
+                self._effective_limit(limits.get("per_day", 0))
+                - usage["last_day"]
+            ),
         }
 
     def get_limits_for_model(self, model: str = None) -> Dict:
@@ -180,19 +196,19 @@ class APIBudgetManager:
         # Check per-minute
         minute_cutoff = now - timedelta(minutes=1)
         minute_calls = [c for c in calls if c > minute_cutoff]
-        if len(minute_calls) >= limits['per_minute']:
+        if len(minute_calls) >= self._effective_limit(limits['per_minute']):
             return False
         
         # Check per-hour
         hour_cutoff = now - timedelta(hours=1)
         hour_calls = [c for c in calls if c > hour_cutoff]
-        if len(hour_calls) >= limits['per_hour']:
+        if len(hour_calls) >= self._effective_limit(limits['per_hour']):
             return False
         
         # Check per-day
         day_cutoff = now - timedelta(hours=24)
         day_calls = [c for c in calls if c > day_cutoff]
-        if len(day_calls) >= limits['per_day']:
+        if len(day_calls) >= self._effective_limit(limits['per_day']):
             return False
         
         return True
@@ -231,7 +247,7 @@ class APIBudgetManager:
         ]:
             limit = limits.get(window, float("inf"))
             current = usage[key]
-            threshold = int(limit * SAFETY_MARGIN)
+            threshold = self._effective_limit(limit)
             if current >= threshold:
                 return False
 

@@ -45,3 +45,6 @@ engine/inference_ledger.jsonl
 /runtime/
 /docs/archive/
 /.env
+
+# Local safety backups created during surgical refactors
+*.backup*
