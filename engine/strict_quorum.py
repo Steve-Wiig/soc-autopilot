@@ -32,6 +32,7 @@ def enforce_quorum(candidate: DevelopmentCandidate, votes: List[WorkerVote]) -> 
     for v in votes:
         try:
             normalized = normalize_worker_vote(v)
+
             validator.validate(
                 normalized,
                 candidate.diff_sha256
