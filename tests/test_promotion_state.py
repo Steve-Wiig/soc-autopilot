@@ -8,7 +8,7 @@ def test_canary_passed_not_written_as_proven(tmp_path):
     """CANARY_PASSED must not populate proven_fixes.jsonl."""
     from overnight.self_improver import write_proven_fix
     fix_path = str(tmp_path / "proven_fixes.jsonl")
-    
+
     result = write_proven_fix({"candidate_id": "c1"}, "CANARY_PASSED", fix_path)
     assert result is False
     assert not Path(fix_path).exists()
@@ -17,7 +17,7 @@ def test_pending_human_merge_not_written(tmp_path):
     """PENDING_HUMAN_MERGE must not populate proven_fixes.jsonl."""
     from overnight.self_improver import write_proven_fix
     fix_path = str(tmp_path / "proven_fixes.jsonl")
-    
+
     result = write_proven_fix({"candidate_id": "c1"}, "PENDING_HUMAN_MERGE", fix_path)
     assert result is False
 
@@ -25,7 +25,7 @@ def test_merged_writes_proven_fix(tmp_path):
     """MERGED state is the only one that writes proven_fixes.jsonl."""
     from overnight.self_improver import write_proven_fix
     fix_path = str(tmp_path / "proven_fixes.jsonl")
-    
+
     result = write_proven_fix(
         {"candidate_id": "c1", "candidate_hash": "abc123"},
         "MERGED", fix_path

@@ -21,7 +21,7 @@ def scan_for_injection(text: str) -> bool:
 
 def fence_payload_for_llm(payload: dict) -> str:
     """
-    Wraps untrusted external data in explicit XML-like tags to prevent 
+    Wraps untrusted external data in explicit XML-like tags to prevent
     the LLM from confusing it with system instructions (Trust Boundary Enforcement).
     """
     raw_data = json.dumps(payload, indent=2)

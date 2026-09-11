@@ -130,23 +130,23 @@ def validate_mutation_target(
     repo_root = Path(repo_root).resolve()
     if isinstance(candidate_path, str):
         candidate_path = Path(candidate_path)
-    
+
     # Reject absolute paths
     if candidate_path.is_absolute():
         raise ValueError(f"Absolute paths rejected: {candidate_path}")
-    
+
     # Resolve and check containment
     resolved = (repo_root / candidate_path).resolve()
     try:
         resolved.relative_to(repo_root)
     except ValueError:
         raise ValueError(f"Path escapes repository: {candidate_path}")
-    
+
     # Check authorization
     auth_resolved = {(repo_root / Path(f)).resolve() for f in authorized_files}
     if resolved not in auth_resolved:
         raise ValueError(f"Path not authorized: {candidate_path}")
-    
+
     return resolved
 
 # P0-2: Strict patch location matching
@@ -161,16 +161,16 @@ def _find_patch_location_strict(source: str, search_text: str) -> int:
             break
         exact_matches.append(pos)
         start = pos + 1
-    
+
     if len(exact_matches) == 1:
         return exact_matches[0]
     if len(exact_matches) > 1:
         raise ValueError(f"AMBIGUOUS PATCH: Found {len(exact_matches)} exact matches.")
-    
+
     # Normalized exact match - handle multi-line properly
     normalized_search = ' '.join(search_text.split())
     normalized_source = ' '.join(source.split())
-    
+
     norm_pos = normalized_source.find(normalized_search)
     if norm_pos != -1:
         # Map back to original position
@@ -188,5 +188,5 @@ def _find_patch_location_strict(source: str, search_text: str) -> int:
             else:
                 norm_count += 1
         return original_pos
-    
+
     raise ValueError("PATCH LOCATION NOT FOUND: Fuzzy matching disabled for autonomous mutation.")

@@ -62,7 +62,7 @@ def make_db(tmp_path):
     conn.commit()
 
     ensure_queue_schema(conn)
-    
+
     now = datetime.now(timezone.utc)
 
     future = (

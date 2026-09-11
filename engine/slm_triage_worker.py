@@ -88,19 +88,19 @@ def run_worker(config: WorkerConfig) -> None:
             (datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'), (datetime.now(timezone.utc) + timedelta(seconds=config.lease)).strftime('%Y-%m-%d %H:%M:%S'))
         ).fetchone()
         conn.commit()
-        
+
         if not row:
             time.sleep(empty_queue_backoff)
             empty_queue_backoff = min(empty_queue_backoff * 2, MAX_BACKOFF)
             continue
-            
+
         empty_queue_backoff = 1
         emit_heartbeat(conn, status="active")
         job_id, payload = row['id'], row['payload_ref']
-        
+
         try:
             payload_dict = json.loads(payload) if isinstance(payload, str) else payload
-            
+
             # P0: Prompt Injection Defense
             if scan_for_injection(payload):
                 logger.warning(f"Potential prompt injection detected in job {job_id}. Forcing REVIEW.")
@@ -118,7 +118,7 @@ def run_worker(config: WorkerConfig) -> None:
             raw_output_hash = hashlib.sha256(raw_output.encode('utf-8')).hexdigest()
             cleaned_output = re.sub(r'^```json\s*', '', raw_output.strip(), flags=re.MULTILINE)
             cleaned_output = re.sub(r'\s*```\s*$', '', cleaned_output, flags=re.MULTILINE)
-            
+
             try:
                 raw_rec = SLMRawRecommendation.model_validate_json(cleaned_output)
             except Exception as e:

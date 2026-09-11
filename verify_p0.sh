@@ -136,7 +136,7 @@ if ! command -v pytest &> /dev/null; then
 else
     echo "  Running targeted P0 acceptance tests and adversarial simulation..."
     echo "  (Timeout set to 60 seconds to prevent hanging)"
-    
+
     TEST_OUTPUT=$(timeout 60 pytest -q \
         -k "routing_isolation or path_containment or patch_ambiguity or promotion_state or pi_approval or worker_identity or adversarial_simulation" \
         --tb=short 2>&1)

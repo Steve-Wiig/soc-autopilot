@@ -1,6 +1,6 @@
 # Current Runtime Map: Canonical SOC Inference Path
 
-This document describes the **actual, enforced runtime path** for production SOC triage. 
+This document describes the **actual, enforced runtime path** for production SOC triage.
 
 ## Core Architectural Principle
 **LLM proposes -> Deterministic policy decides -> Bounded action occurs -> Telemetry records evidence.**

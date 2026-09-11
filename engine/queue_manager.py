@@ -540,7 +540,7 @@ def ensure_queue_schema(conn):
 
     # Ensure payload_ref is populated from payload (moved from worker)
     cursor.execute("UPDATE triage_queue SET payload_ref = payload WHERE payload_ref IS NULL")
-    
+
     # Recalculate priority based on severity (moved from worker)
     priority_expression = priority_case_sql("severity")
     cursor.execute(f"UPDATE triage_queue SET priority = {priority_expression}")
@@ -558,7 +558,7 @@ def ensure_queue_schema(conn):
         conn.execute("DROP INDEX IF EXISTS idx_triage_claim")
         conn.execute("CREATE INDEX idx_triage_claim ON triage_queue(status, priority, created_at) WHERE status = 'pending'")
         changed = True
-    
+
     conn.commit()
     return changed
 
@@ -575,7 +575,7 @@ def ensure_queue_schema(conn):
 
     # Ensure payload_ref is populated from payload (moved from worker)
     cursor.execute("UPDATE triage_queue SET payload_ref = payload WHERE payload_ref IS NULL")
-    
+
     # Recalculate priority based on severity (moved from worker)
     priority_expression = priority_case_sql("severity")
     cursor.execute(f"UPDATE triage_queue SET priority = {priority_expression}")
@@ -583,5 +583,5 @@ def ensure_queue_schema(conn):
     if changed or not conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_triage_claim'").fetchone():
         conn.execute("DROP INDEX IF EXISTS idx_triage_claim")
         conn.execute("CREATE INDEX idx_triage_claim ON triage_queue(status, priority, created_at) WHERE status = 'pending'")
-    
+
     conn.commit()

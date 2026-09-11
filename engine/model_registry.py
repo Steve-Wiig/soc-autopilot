@@ -162,25 +162,25 @@ class LocalInferenceUnavailableError(Exception):
 def _enforce_local_only_for_production(role: str, available_providers: list) -> str:
     """
     Enforce that production SOC roles never fall back to cloud.
-    
+
     Production roles: triage, primary, code_review
     If local/edge unavailable: FAIL CLOSED (raise exception)
     """
     production_roles = {'triage', 'primary', 'code_review'}
-    
+
     if role not in production_roles:
         # Development roles can use cloud
         return available_providers[0] if available_providers else None
-    
+
     # Production role - must use local/edge only
     local_providers = [p for p in available_providers if p.get('type') in ('local', 'edge')]
-    
+
     if not local_providers:
         raise LocalInferenceUnavailableError(
             f"Production role '{role}' requires local/edge inference. "
             f"Cloud fallback is disabled. FAIL CLOSED."
         )
-    
+
     return local_providers[0]
 
 # P0-1: Runtime mode enforcement
@@ -198,15 +198,15 @@ def get_routing_mode() -> str:
 def route_inference(role: str, available_providers: list) -> str:
     """
     Route inference request with production fail-closed enforcement.
-    
+
     Production mode: local/edge only, fail closed on outage
     Development mode: cloud allowed
     Test mode: mock providers
     """
     mode = get_routing_mode()
-    
+
     if mode == 'production':
         return _enforce_local_only_for_production(role, available_providers)
-    
+
     # Development/test can use any provider
     return available_providers[0] if available_providers else None

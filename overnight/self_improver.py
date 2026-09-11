@@ -1162,18 +1162,18 @@ def drain_fix_backlog(api_keys, max_fixes=3):
     for item in backlog:
         if done >= max_fixes: remaining.append(item); continue
         fpath = ROOT / item["file"]
-        
+
         # --- HARDENING: Source Provenance Check ---
         current_hash = _compute_file_hash(fpath)
         recorded_hash = item.get("source_hash")
-        
+
         if not fpath.exists() or not current_hash or (recorded_hash and recorded_hash != current_hash):
             print(f"       ⚠️ STALE ADVISORY: {item['file']} has changed or provenance is missing. Deferring.")
             item["deferred_reason"] = "STALE_SOURCE_HASH_MISMATCH"
             deferred.append(item)
             continue
         # ------------------------------------------
-        
+
         # --- EFFICIENCY: LOCAL SLM PRE-ROUTER (TOP OF LOOP) ---
         # Intercept stylistic advisories BEFORE checking cloud budget
         try:
@@ -1489,10 +1489,10 @@ def write_proven_fix(candidate: dict, state: str, proven_fixes_path: str = "prov
     """
     if not isinstance(state, str) or state not in {s.value for s in PromotionState}:
         raise ValueError(f"Invalid promotion state: {state}")
-    
+
     if not is_merged(state):
         return False
-    
+
     import json
     with open(proven_fixes_path, "a") as f:
         record = {
@@ -1503,7 +1503,7 @@ def write_proven_fix(candidate: dict, state: str, proven_fixes_path: str = "prov
             "merged_by": candidate.get("merged_by", "human"),
         }
         f.write(json.dumps(record) + "\n")
-    
+
     return True
 
 def compute_applied_fix_count(ledger_entries: list) -> int:

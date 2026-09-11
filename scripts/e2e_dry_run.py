@@ -24,7 +24,7 @@ VALID_LLM_OUTPUT = json.dumps({
 
 class MockOllamaHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args): pass
-    
+
     def do_GET(self):
         if self.path == "/v1/models":
             self.send_response(200)
@@ -52,10 +52,10 @@ def setup_db():
     conn.execute("""CREATE TABLE verdicts (
         job_id TEXT NOT NULL, result TEXT NOT NULL, processed_at TEXT NOT NULL
     )""")
-    
+
     alert = json.dumps({"event_id": "EVE-999", "rule": {"description": "PowerShell encoded command detected"}})
     conn.execute("""
-        INSERT INTO triage_queue (payload, payload_ref, status, priority, severity, created_at, attempts) 
+        INSERT INTO triage_queue (payload, payload_ref, status, priority, severity, created_at, attempts)
         VALUES (?, ?, 'pending', 5, 'MEDIUM', datetime('now'), 0)
     """, (alert, alert))
     conn.commit()
@@ -63,7 +63,7 @@ def setup_db():
 
 def main():
     print("🚀 Starting E2E Canonical Path Dry Run...\n")
-    
+
     server = HTTPServer(("localhost", MOCK_PORT), MockOllamaHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -79,15 +79,15 @@ def main():
     print("⏳ Running slm_triage_worker.py for 5 seconds...")
     worker_cmd = [sys.executable, "-m", "engine.slm_triage_worker", "--db", DB_PATH, "--lease", "60"]
     process = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
-    
-    time.sleep(5) 
+
+    time.sleep(5)
     process.terminate()
     process.wait()
 
     print("\n🔍 Checking database results...")
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    
+
     queue_status = conn.execute("SELECT status, failure_reason FROM triage_queue WHERE id = 1").fetchone()
     print(f"  Queue Status: {queue_status['status']}")
     if queue_status['failure_reason']:
