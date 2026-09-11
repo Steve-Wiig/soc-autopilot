@@ -142,11 +142,11 @@ def get_default_router() -> ModelRouter:
     router = ModelRouter()
     router.register(OpenAICompatibleProvider(ProviderConfig(
         name="android_qwen", scope=ProviderScope.LOCAL_SOC, roles=("triage", "code_review"),
-        base_url="http://192.168.1.19:12434", priority=10, timeout=30, model="qwen2.5-coder-1.5b-instruct-q6_k.gguf"
+        base_url=os.environ.get("SOC_MOCK_LLM_URL", "http://192.168.1.19:12434"), priority=10, timeout=30, model="qwen2.5-coder-1.5b-instruct-q6_k.gguf"
     )))
     router.register(OpenAICompatibleProvider(ProviderConfig(
         name="local_ollama", scope=ProviderScope.LOCAL_SOC, roles=("triage", "code_review", "primary"),
-        base_url="http://localhost:11434", priority=20, timeout=60
+        base_url=os.environ.get("SOC_MOCK_LLM_URL", "http://localhost:11434"), priority=20, timeout=60
     )))
     router.register(OpenAICompatibleProvider(ProviderConfig(
         name="openrouter", scope=ProviderScope.DEVELOPMENT, roles=("primary", "code_review", "dev_triage"),
