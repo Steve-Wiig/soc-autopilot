@@ -29,7 +29,7 @@ from typing import Sequence
 from engine.aider_development_worker import AiderWorkerResult
 from engine.development_worker_gate import (
     QuorumDecision,
-    WorkerVote,
+    WorkerApprovalVote,
     evaluate_worker_quorum,
 )
 
@@ -45,7 +45,7 @@ def evaluate_worker_proposal(
     result: AiderWorkerResult,
     allowed_files: Sequence[str | Path],
     *,
-    votes: Sequence[WorkerVote],
+    votes: Sequence[WorkerApprovalVote],
     safety_ok: bool,
     regression_ok: bool,
     safety_reason: str = "",
@@ -61,7 +61,7 @@ def evaluate_worker_proposal(
       - safety failure
       - regression/acceptance failure
 
-    Only the supplied independent WorkerVote objects participate
+    Only the supplied independent WorkerApprovalVote objects participate
     in the 2-of-3 approval quorum.
     """
 

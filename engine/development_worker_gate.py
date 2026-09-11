@@ -19,7 +19,7 @@ REQUIRED_APPROVALS = 2
 
 
 @dataclass(frozen=True)
-class WorkerVote:
+class WorkerApprovalVote:
     judge: str
     approve: bool
     reason: str = ""
@@ -37,7 +37,7 @@ class QuorumDecision:
 
 
 def evaluate_worker_quorum(
-    votes: Sequence[WorkerVote],
+    votes: Sequence[WorkerApprovalVote],
     hard_vetoes: Iterable[str] = (),
 ) -> QuorumDecision:
     """Evaluate the 2-of-3 development-worker approval rule."""
@@ -45,15 +45,15 @@ def evaluate_worker_quorum(
     vetoes = tuple(str(v).strip() for v in hard_vetoes if str(v).strip())
     vote_list = list(votes)
 
-    judges = [vote.judge.strip() for vote in vote_list if isinstance(vote, WorkerVote)]
-    malformed = [vote for vote in vote_list if not isinstance(vote, WorkerVote)]
+    judges = [vote.judge.strip() for vote in vote_list if isinstance(vote, WorkerApprovalVote)]
+    malformed = [vote for vote in vote_list if not isinstance(vote, WorkerApprovalVote)]
 
     if len(vote_list) != REQUIRED_VOTES:
         return QuorumDecision(
             approved=False,
             approval_count=sum(
                 1 for vote in vote_list
-                if isinstance(vote, WorkerVote) and vote.approve is True
+                if isinstance(vote, WorkerApprovalVote) and vote.approve is True
             ),
             vote_count=len(vote_list),
             required_approvals=REQUIRED_APPROVALS,
