@@ -1,3 +1,4 @@
+import os
 """
 engine/defeat_ledger.py
 -----------------------
@@ -15,7 +16,12 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 LEDGER_PATH = ROOT / "overnight" / "defeat_ledger.jsonl"
-DEFEAT_THRESHOLD = 3  # 3 strikes and you're out
+DEFEAT_THRESHOLD = int(
+    os.getenv(
+        "DEFEAT_THRESHOLD",
+        "3"
+    )
+)  # 3 strikes and you're out
 
 def _strip_docstrings_and_comments(node: ast.AST):
     """Recursively strip docstrings from modules, classes, and functions."""
@@ -35,9 +41,11 @@ def hash_ast(source_code: str) -> str:
         tree = ast.parse(source_code)
         _strip_docstrings_and_comments(tree)
         dump = ast.dump(tree, annotate_fields=True, include_attributes=False)
-        return hashlib.sha256(dump.encode('utf-8')).hexdigest()[:16]
+        return hashlib.sha256(
+            dump.encode("utf-8")
+        ).hexdigest()
     except SyntaxError:
-        return hashlib.sha256(source_code.encode('utf-8')).hexdigest()[:16]
+        return hashlib.sha256(source_code.encode('utf-8')).hexdigest()
 
 def normalize_traceback(traceback_text: str) -> str:
     """
@@ -54,7 +62,7 @@ def check_and_record_defeat(file_path: str, source_code: str, traceback_text: st
     Records the attempt. Returns True if the item is now DEFEATED (quarantine it).
     """
     ast_hash = hash_ast(source_code)
-    tb_hash = hashlib.sha256(normalize_traceback(traceback_text).encode('utf-8')).hexdigest()[:12]
+    tb_hash = hashlib.sha256(normalize_traceback(traceback_text).encode('utf-8')).hexdigest()
     signature = f"{ast_hash}_{tb_hash}"
     
     LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)

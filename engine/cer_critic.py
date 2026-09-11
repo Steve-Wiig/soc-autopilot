@@ -3,7 +3,10 @@ import json
 import urllib.request
 import re
 
-CRITIC_MODEL = os.getenv("OPENROUTER_FREE_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
+CRITIC_MODEL = os.getenv(
+    "CER_CRITIC_MODEL",
+    os.getenv("OPENROUTER_FREE_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
+)
 
 def compress_traceback(traceback: str, max_chars: int = 1600) -> str:
     if not traceback: return ""
