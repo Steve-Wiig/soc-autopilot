@@ -393,8 +393,10 @@ def _generate_tdd_test(issue_desc: str, target_file: str, api_keys: dict) -> str
         f"You are a senior QA engineer. Write a minimal failing pytest test for:\n"
         f"ISSUE: {issue_desc}\nTARGET FILE: {target_file}\n"
         f"PROJECT STRUCTURE: Files live in subdirectories (tools/, engine/, memory/).\n"
-        f"IMPORT RULE: To import, you MUST use sys.path manipulation. Example:\n"
-        f"import sys\nsys.path.insert(0, 'tools')  # or 'engine'\nfrom file_name import function_name\n\n"
+        f"IMPORT RULE: Use package-relative imports. pytest runs from the repo\n"
+        f"root, so engine/, tools/, overnight/ are importable as packages.\n"
+        f"Example: from engine.file_name import function_name\n"
+        f"Do NOT import sys, os, subprocess, or shutil.\n\n"
         f"{sig_context}\n"
         "Output ONLY the python code for the test function. No markdown.\n"
     )
@@ -880,25 +882,26 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         tdd_write_path = None
         category = issue.get("category", "").lower()
 
-        # No TDD test was generated at all. For ordinary functional/stale
-        # advisories this is the terminal stale decision.
-        if tdd_test_code is None:
+        # W10: low-risk bypass means "no TDD precondition", not "no fix".
+        # Fall through to the generation loop so the fix can actually be
+        # applied. The loop records APPLIED/REJECTED. Previously this recorded
+        # APPLIED + returned False, causing drain to retry forever and burn
+        # one TDD generation call per retry.
+        if category in ['maintainability', 'blueprint_compliance', 'performance']:
+            print(f"       ✅ LOW-RISK BYPASS: Proceeding without regression test (baseline passed).")
+            # fall through
+        elif tdd_test_code is None:
             if category in FUNCTIONAL_CATEGORIES or category in ['style', 'documentation', '']:
                 print(f"       ✅ Baseline passed; no regression test generated for '{category}'. Marking stale.")
                 _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
                 return True
-            if category in ['maintainability', 'blueprint_compliance', 'performance']:
-                print(f"       ✅ LOW-RISK BYPASS: Applying '{category}' fix without new regression test (baseline passed).")
-                _record_ledger(file_path, issue, "APPLIED", "Low-risk bypass: baseline passed, no regression test required")
-                return False
-
-        if category in ['maintainability', 'blueprint_compliance', 'performance']:
-            print(f"       ✅ LOW-RISK BYPASS: Applying '{category}' fix without new regression test (baseline passed).")
-            _record_ledger(file_path, issue, "APPLIED", "Low-risk bypass: baseline passed, no regression test required")
+            print(f"       ⚠️ Baseline passed for '{category}' with no TDD. Dropping as stale.")
+            _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
+            return True
         else:
             print(f"       ⚠️ Baseline passed for '{category}', but unable to generate/validate regression test. Dropping.")
             _record_ledger(file_path, issue, "STALE", "Baseline passed, no valid regression test generated")
-        return False
+            return False
 
     try:
         # 3. GENERATION LOOP
