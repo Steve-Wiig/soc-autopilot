@@ -1387,6 +1387,17 @@ def prefill_advisory_queue(files, api_keys, budget):
             h = existing.get("source_hash")
             if h:
                 already_queued_hashes.add(h)
+    # W8b: backlog + deferred entries also carry source_hash. Include them so
+    # a file whose advisory already failed / was deferred is not re-analyzed
+    # every cycle. Hash changes if the file changes, so this is not permanent.
+    for bl_path in (FIX_BACKLOG, DEFERRED_BACKLOG):
+        bl = _load_json(bl_path)
+        if isinstance(bl, list):
+            for item in bl:
+                if isinstance(item, dict):
+                    h = item.get("source_hash")
+                    if h:
+                        already_queued_hashes.add(h)
 
     for i, f in enumerate(files, 1):
         qpath = QUEUE_DIR / f"{str(f.relative_to(ROOT)).replace('/', '__').replace('.py', '')}.json"
@@ -1593,7 +1604,12 @@ def process_advisory_queue(api_keys, budget, state):
                         entry["advisory_fingerprint"] = data["advisory_fingerprint"]
                     backlog.append(entry)
                 _save_json(FIX_BACKLOG, backlog)
-            qpath.unlink()
+                qpath.unlink()
+            else:
+                # W8a: no auto-fixable issues in this advisory. Archive instead
+                # of unlink so prefill dedup prevents re-analyzing the same
+                # content next cycle. Loop broke at 8x on consensus_gate.py.
+                _archive_advisory(qpath, "no_auto_fixable")
         except Exception as e:
             print(f"       ❌ Queue Error: {e}")
         time.sleep(2)
@@ -1614,39 +1630,70 @@ def _process_async_tdd_queue():
     if not TDD_EVAL_QUEUE.exists(): return
     lines = TDD_EVAL_QUEUE.read_text().strip().split("\n")
     if not lines: return
-    
-    print(f"\n🧠 [ASYNC LOCAL REVIEWER] Processing {len(lines)} pending TDD evaluations...")
-    processed = []
-    
+
+    _deadletter = ROOT / "overnight" / "tdd_eval_deadletter.jsonl"
+    _max_attempts = 3
+
+    print(f"\n\U0001f9e0 [ASYNC LOCAL REVIEWER] Processing {len(lines)} pending TDD evaluations...")
+    kept = []
+    resolved = 0
+
     for line in lines:
         if not line.strip(): continue
         try:
             entry = json.loads(line)
-            # Call local Ollama model (Port 11434 is default, 11435 is sandbox)
+        except Exception:
+            try:
+                _deadletter.parent.mkdir(parents=True, exist_ok=True)
+                with open(_deadletter, "a") as df:
+                    df.write(json.dumps({"reason": "unparseable", "raw": line[:500]}) + "\n")
+            except Exception:
+                pass
+            resolved += 1
+            continue
+
+        entry["attempts"] = int(entry.get("attempts", 0)) + 1
+
+        try:
             import requests
             prompt = f"Evaluate this pytest test for quality. Is it a valid test? Reply ONLY 'GOOD' or 'BAD'.\n\nIssue: {entry.get('issue_desc')}\nTest:\n{entry.get('tdd_code')}"
             resp = requests.post("http://127.0.0.1:11434/api/generate", json={"model": "qwen2.5-coder:1.5b", "prompt": prompt, "stream": False}, timeout=30)
-            
+
             verdict = "UNKNOWN"
             if resp.status_code == 200:
-                text = resp.json().get("response", "").upper()
-                if "GOOD" in text: verdict = "GOOD_TEST"
-                elif "BAD" in text: verdict = "BAD_TEST"
-                
+                text_v = resp.json().get("response", "").upper()
+                if "GOOD" in text_v: verdict = "GOOD_TEST"
+                elif "BAD" in text_v: verdict = "BAD_TEST"
+
             _record_ledger(
                 ROOT / entry.get("file", "unknown.py"),
                 {"description": entry.get("issue_desc", ""), "category": entry.get("category", "unknown")},
                 "TDD_EVALUATED",
                 f"Local LLM Verdict: {verdict}"
             )
-            processed.append(line)
+            resolved += 1
         except Exception as e:
-            print(f"       ⚠️ Async review failed for item: {e}")
-            
-    # Clear processed items
-    remaining = [l for l in lines if l not in processed]
-    TDD_EVAL_QUEUE.write_text("\n".join(remaining) + "\n" if remaining else "")
-    print(f"🧠 [ASYNC LOCAL REVIEWER] Finished. {len(processed)} items evaluated.")
+            print(f"       \u26a0\ufe0f Async review failed for item (attempt {entry['attempts']}): {e}")
+            if entry["attempts"] >= _max_attempts:
+                try:
+                    _deadletter.parent.mkdir(parents=True, exist_ok=True)
+                    with open(_deadletter, "a") as df:
+                        df.write(json.dumps({"reason": "max_attempts", "entry": entry}) + "\n")
+                except Exception:
+                    pass
+                resolved += 1
+            else:
+                kept.append(json.dumps(entry))
+
+    try:
+        tmp = TDD_EVAL_QUEUE.with_suffix(".jsonl.tmp")
+        tmp.write_text("\n".join(kept) + "\n" if kept else "")
+        tmp.replace(TDD_EVAL_QUEUE)
+    except Exception as e:
+        print(f"       \u26a0\ufe0f TDD queue rewrite failed: {e}")
+
+    print(f"\U0001f9e0 [ASYNC LOCAL REVIEWER] Finished. {resolved} resolved, {len(kept)} retrying.")
+
 
 def main():
     for bak in sorted(ROOT.rglob("*.orig_backup")):
