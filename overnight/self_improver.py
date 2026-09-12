@@ -758,8 +758,9 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         if not branch:
             print("❌ Detached HEAD detected, aborting")
             return False
-    except Exception:
-        pass
+    except subprocess.CalledProcessError as e:
+        print(f"❌ git branch check failed: {e}")
+        return False
 
     if is_ast_defeated(original): return False
     if issue.get('category', '').lower() in ['style', 'documentation']: return False
@@ -1665,10 +1666,26 @@ def main():
 
     if a.continuous:
         cycle = 1
+        _base_iv = a.loop_interval
+        _cur_iv = _base_iv
+        _IDLE_MAX = 300
+        _LEDGER = ROOT / "overnight" / "improvement_ledger.jsonl"
         while True:
+            try:
+                _led_before = _LEDGER.stat().st_size if _LEDGER.exists() else 0
+            except Exception:
+                _led_before = 0
             print(f"\n{'='*60}")
             print(f"🔄 CONTINUOUS MODE - Cycle {cycle} - {datetime.now().isoformat()}")
             print(f"{'='*60}\n")
+            try:
+                _p = len(list(QUEUE_DIR.glob("*.json"))) if QUEUE_DIR.exists() else 0
+                _b = len(_load_json(FIX_BACKLOG))
+                _d = len(_load_json(DEFERRED_BACKLOG))
+                _t = sum(1 for l in TDD_EVAL_QUEUE.read_text().splitlines() if l.strip()) if TDD_EVAL_QUEUE.exists() else 0
+                print(f"📊 queues: pending={_p} backlog={_b} deferred={_d} tdd_queue={_t}")
+            except Exception as _e:
+                print(f"📊 queues: (snapshot failed: {_e})")
 
             try:
                 if a.drain_backlog:
@@ -1688,8 +1705,16 @@ def main():
             
             print(budget.report())
 
-            print(f"\n💤 Sleeping {a.loop_interval}s before next cycle...")
-            time.sleep(a.loop_interval)
+            try:
+                _led_after = _LEDGER.stat().st_size if _LEDGER.exists() else 0
+            except Exception:
+                _led_after = _led_before
+            if _led_after > _led_before:
+                _cur_iv = _base_iv
+            else:
+                _cur_iv = min(_cur_iv * 2, _IDLE_MAX)
+            print(f"\n💤 Sleeping {_cur_iv}s (base={_base_iv}s, idle_max={_IDLE_MAX}s)...")
+            time.sleep(_cur_iv)
             cycle += 1
     else:
         if a.drain_backlog:
