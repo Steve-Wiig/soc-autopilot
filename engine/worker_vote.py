@@ -1,10 +1,37 @@
+"""
+engine/worker_vote.py
+---------------------
+P0-5: worker identity and quorum validation with HMAC integrity.
 
-# P0-5: Strong worker identity binding
-# Prevents duplicate logical identities from satisfying quorum
+Caveat: `validate_worker_vote` and `check_quorum_with_identity` are not
+currently called from any production path. This module implements the
+cryptographic contract they should uphold, but wiring them into a live
+vote pipeline is a separate design task. See the project issue tracker.
 
+Key management:
+    WORKER_VOTE_HMAC_KEY must be set in the environment. If it is unset,
+    validation fails closed (returns False) rather than accepting unsigned
+    votes.
+"""
+
+import hashlib
+import hmac
+import os
 from dataclasses import dataclass
 from typing import Optional
-import hashlib
+
+
+WORKER_VOTE_HMAC_KEY_ENV = "WORKER_VOTE_HMAC_KEY"
+
+
+def _get_hmac_key() -> bytes:
+    key = os.environ.get(WORKER_VOTE_HMAC_KEY_ENV, "")
+    if not key:
+        raise RuntimeError(
+            f"{WORKER_VOTE_HMAC_KEY_ENV} must be configured for worker vote validation"
+        )
+    return key.encode("utf-8")
+
 
 @dataclass(frozen=True)
 class WorkerIdentity:
@@ -18,80 +45,98 @@ class WorkerIdentity:
     decision: str
     timestamp: str
 
-    def compute_signature(self) -> str:
-        """Deterministic identity signature."""
-        data = f"{self.worker_id}:{self.worker_class}:{self.worker_instance}:{self.execution_host}:{self.software_version}:{self.candidate_hash}:{self.decision}:{self.timestamp}"
-        return hashlib.sha256(data.encode()).hexdigest()
+    def _canonical_payload(self) -> bytes:
+        return ":".join([
+            self.worker_id,
+            self.worker_class,
+            self.worker_instance,
+            self.execution_host,
+            self.software_version,
+            self.candidate_hash,
+            self.decision,
+            self.timestamp,
+        ]).encode("utf-8")
 
-def validate_worker_vote(vote: dict, candidate_hash: str) -> bool:
-    """
-    Validate worker vote with identity binding.
-    Rejects:
-    - Duplicate logical worker IDs
-    - Votes for different candidates
-    - Malformed identity
-    - Replayed approvals
-    """
-    required_fields = {'worker_id', 'worker_class', 'worker_instance',
-                      'execution_host', 'software_version', 'candidate_hash',
-                      'decision', 'timestamp'}
+    def compute_signature(self, hmac_key: Optional[bytes] = None) -> str:
+        """HMAC-SHA256 signature over the canonical identity payload.
 
-    # Check all required fields present
+        If `hmac_key` is None, the key is read from WORKER_VOTE_HMAC_KEY.
+        Raises RuntimeError if no key is available.
+        """
+        if hmac_key is None:
+            hmac_key = _get_hmac_key()
+        return hmac.new(hmac_key, self._canonical_payload(), hashlib.sha256).hexdigest()
+
+
+def validate_worker_vote(
+    vote: dict,
+    candidate_hash: str,
+    hmac_key: Optional[bytes] = None,
+) -> bool:
+    """
+    Validate a single worker vote.
+
+    Returns True only if all required fields are present, the candidate
+    hash matches, and the HMAC signature verifies against the configured
+    key. Fails closed (returns False) on any error including missing key.
+    """
+    required_fields = {
+        'worker_id', 'worker_class', 'worker_instance',
+        'execution_host', 'software_version', 'candidate_hash',
+        'decision', 'timestamp',
+    }
+
     if not required_fields.issubset(vote.keys()):
         return False
 
-    # Candidate hash must match
     if vote['candidate_hash'] != candidate_hash:
         return False
 
-    # Construct identity and verify signature
-    identity = WorkerIdentity(
-        worker_id=vote['worker_id'],
-        worker_class=vote['worker_class'],
-        worker_instance=vote['worker_instance'],
-        execution_host=vote['execution_host'],
-        software_version=vote['software_version'],
-        candidate_hash=vote['candidate_hash'],
-        decision=vote['decision'],
-        timestamp=vote['timestamp']
-    )
-
-    expected_sig = identity.compute_signature()
-    if vote.get('signature') != expected_sig:
+    try:
+        identity = WorkerIdentity(
+            worker_id=vote['worker_id'],
+            worker_class=vote['worker_class'],
+            worker_instance=vote['worker_instance'],
+            execution_host=vote['execution_host'],
+            software_version=vote['software_version'],
+            candidate_hash=vote['candidate_hash'],
+            decision=vote['decision'],
+            timestamp=vote['timestamp'],
+        )
+        expected_sig = identity.compute_signature(hmac_key)
+    except (RuntimeError, KeyError):
         return False
 
-    return True
+    provided = vote.get('signature', '')
+    return hmac.compare_digest(provided, expected_sig)
 
-def check_quorum_with_identity(votes: list, candidate_hash: str, required_count: int = 3) -> bool:
+
+def check_quorum_with_identity(
+    votes: list,
+    candidate_hash: str,
+    required_count: int = 3,
+    hmac_key: Optional[bytes] = None,
+) -> bool:
     """
     Check quorum with strict identity enforcement.
+
     Prevents:
-    - Same worker_id appearing multiple times
-    - Votes for different candidates
-    - Replayed approvals
+      - Same worker_id appearing multiple times
+      - Votes for different candidates
+      - Unsigned or tampered votes
     """
     if len(votes) < required_count:
         return False
 
     seen_worker_ids = set()
-    seen_signatures = set()
 
     for vote in votes:
-        # Validate vote
-        if not validate_worker_vote(vote, candidate_hash):
+        if not validate_worker_vote(vote, candidate_hash, hmac_key=hmac_key):
             return False
 
-        # Prevent duplicate logical workers
         worker_id = vote['worker_id']
         if worker_id in seen_worker_ids:
             return False
         seen_worker_ids.add(worker_id)
-
-        # Prevent replay attacks - replay detection via signature uniqueness
-        # candidate_hash must be distinct for each vote - prevent reuse across candidates
-        signature = vote['signature']
-        if signature in seen_signatures:
-            return False
-        seen_signatures.add(signature)
 
     return True
