@@ -41,7 +41,12 @@ r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), h
             elif not ts:
                 ts = datetime.now().isoformat()
 
-            entry = {
+            if not data.get("ledger_event_id"):
+            raise ValueError("Missing canonical ledger identity")
+        
+        entry = {
+            "ledger_event_id": data.get("ledger_event_id"),
+            
                 "timestamp": ts,
                 "file": data.get("file", "unknown"),
                 "job_id": job_id,

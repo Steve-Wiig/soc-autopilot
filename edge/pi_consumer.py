@@ -56,7 +56,7 @@ while True:
             job = json.loads(job_json)
 
     # --- ENFORCED SECURITY CHECKS (P0 FIX) ---
-    if not _verify_job_signature(job_data, job.get("signature", ""), os.environ.get("HMAC_SECRET", "")):
+    if not _verify_job_signature(_get_canonical_payload(job), job.get("signature", ""), os.environ.get("HMAC_SECRET", "")):
         print("❌ Invalid job signature, rejecting.")
         continue
     if _verify_patch_integrity(job.get("patch", "")) != job.get("patch_hash", ""):
@@ -82,7 +82,7 @@ while True:
                 verdict = parse_strict_json(raw_response)
             except Exception as e:
                 inference_duration = round(time.time() - start_time, 2)
-                verdict = {"approved": False, "reason": f"Inference Error: {str(e)}"}
+                verdict = {"decision": "ERROR", "reason": f"Inference Error: {str(e)}"}
 
             r.lpush('pi_critic_results', json.dumps({
                 "ledger_event_id": job.get("ledger_event_id"),
@@ -108,6 +108,13 @@ def _verify_patch_integrity(patch: str) -> str:
     return hashlib.sha256(patch.encode()).hexdigest()
 
 import hmac
+
+def _get_canonical_payload(job: dict) -> str:
+    """Returns a deterministic, canonical JSON string for HMAC verification."""
+    # Exclude the signature itself from the payload being verified
+    payload = {k: v for k, v in job.items() if k != "signature"}
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
 def _verify_job_signature(payload: str, signature: str, secret: str) -> bool:
     expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
