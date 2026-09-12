@@ -1243,7 +1243,7 @@ def drain_fix_backlog(api_keys, max_fixes=3):
         fpath = ROOT / item["file"]
 
         # --- HARDENING: Source Provenance Check ---
-        current_hash = _compute_file_hash(fpath)
+        current_hash = compute_source_hash(fpath)
         recorded_hash = item.get("source_hash")
 
         if not fpath.exists() or not current_hash or (recorded_hash and recorded_hash != current_hash):
