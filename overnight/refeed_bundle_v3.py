@@ -58,8 +58,8 @@ def build_prompt(v2_text, ground_truth):
         drain_fix_backlog(), apply_auto_fix()
       - llm_client.py: generate(), _call_openrouter(), _call_groq(),
         _call_gemini(), _groq_preempted(), _groq_note_rl(), _pace()
-      - openrouter_quota.py: is_available(), record_attempt(), remaining(),
-        force_lock(), status() — module-level functions, NO class
+      - openrouter_quota.py: check_quota_or_raise(), force_lock(),
+        status() — circuit breaker functions, NO accounting class
 
 YOUR TASK: Produce a v3 documentation package with these rules:
 
@@ -143,7 +143,7 @@ def main():
     real_symbols = [
         "prefill_advisory_queue", "process_advisory_queue", "drain_fix_backlog",
         "apply_auto_fix", "_call_openrouter", "_call_groq", "_call_gemini",
-        "is_available", "record_attempt", "force_lock", "strip_fences",
+        "check_quota_or_raise", "force_lock", "strip_fences",
         "_groq_preempted", "_groq_note_rl",
     ]
     for sym in real_symbols:

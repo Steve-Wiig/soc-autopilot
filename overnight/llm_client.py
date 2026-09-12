@@ -277,10 +277,9 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     if not api_key:
         return ""
 
-    # Hard RPD limit (funded tier: 1000) — skip entirely if exhausted/locked
-    from overnight import openrouter_quota
-    if not openrouter_quota.is_available():
-        print(f"    🔒 OpenRouter locked/exhausted ({openrouter_quota.remaining()} left) — skipping")
+    # Centralized provider budget gate
+    if not _budget_allow("openrouter"):
+        print("    🔒 OpenRouter budget exhausted — skipping")
         return ""
 
     # Ensure fallback list is loaded
@@ -323,14 +322,8 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
         if attempts > max_attempts:
             break
 
-        # Count every attempt against the daily quota
-        from overnight import openrouter_quota
-        if not openrouter_quota.is_available():
-            break
-        openrouter_quota.record_attempt()
-        if not openrouter_quota.is_available():
-            break
-        
+        # Budget admission already checked; successful calls are recorded below
+
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -373,9 +366,11 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
                 print(f"    ❌ OpenRouter auth failure for {try_model}: {resp.status_code}")
                 return ""
             elif resp.status_code == 429:
-                print(f"    ⚠️  {try_model} rate-limited. Locking OpenRouter (duration per openrouter_quota.LOCK_HOURS).")
+                from overnight import openrouter_quota
+                print(f"    ⚠️  {try_model} rate-limited. OpenRouter cooldown triggered.")
                 openrouter_quota.force_lock(f"429 on {try_model}")
-                break  # STOP trying other OpenRouter models, quota is exhausted!
+                break  # STOP retry storm
+
 
             elif resp.status_code == 404:
                 print(f"    ⚠️  {try_model} not available → next")

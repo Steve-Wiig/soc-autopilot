@@ -43,7 +43,7 @@ fiction. Replace ALL overnight-pipeline descriptions with this ground truth:
 | async `phase_a_prefill()` / `phase_b_analyze()` / `phase_c_drain()` | sync `prefill_advisory_queue()` / `process_advisory_queue()` / `drain_fix_backlog()` |
 | `SelfImprover` class doing LoRA fine-tuning + DBSCAN clustering | flat script: advisory analysis -> Gemini validation -> test-gated code fixes |
 | fix_backlog at `/var/lib/soc/`, `/data/self_improver/`, AND `overnight/` (3 paths) | `overnight/fix_backlog.json` (single path) |
-| OpenRouter quota: `$10 USD/day` vs `50 RPD` vs `500K tokens` (3 models) | 1000 RPD (funded tier), 24h lock on exhaustion, UTC rollover |
+| OpenRouter quota: `$10 USD/day` vs `50 RPD` vs `500K tokens` (3 models) | 1000 RPD (funded tier), 1h circuit-breaker lock on exhaustion, UTC rollover; accounting enforced by budget_manager |
 | Schedule: 02:00 UTC vs 03:00 local vs `0 3 * * *` (3 answers) | NO hardcoded schedule — user-configured cron/systemd timer |
 | "Last Updated: 2025-01-15" | Fabricated date — REMOVE |
 | LLMProvider Protocol with claude-3.5-sonnet primary | free Nemotron via OpenRouter -> Groq compound fallback -> Gemini for prefill/critique |
@@ -80,8 +80,8 @@ ground truth in the corrections. Describe the REAL components:
 - overnight/llm_client.py: OpenRouter -> Groq fallback, Gemini for prefill + critique,
   token-aware pacing, cooldown tracking, exponential backoff, rate-limit header
   pre-emption, model curation
-- overnight/openrouter_quota.py: 1000 RPD funded tier, 24h lock, UTC rollover,
-  atomic writes
+- overnight/openrouter_quota.py: 1000 RPD funded tier, 1h circuit-breaker lock,
+  UTC rollover, atomic quota state persistence
 - The apply_auto_fix safety contract (Section C above — preserve verbatim)
 Use exact module names, function names, and file paths from the ground truth.
 Do NOT invent providers, classes, or paths not in the corrections.
