@@ -105,6 +105,25 @@ class ModelRouter:
         self.providers[provider.config.name] = provider
 
     def route_with_provider(self, prompt: str, role: str = "triage", scope: ProviderScope = ProviderScope.LOCAL_SOC, **kwargs) -> Tuple[str, ModelProvider]:
+        mode = get_routing_mode()
+
+        # P0-1: fail_closed enforcement for production SOC inference.
+        if mode == "production":
+            if scope != ProviderScope.LOCAL_SOC:
+                raise LocalInferenceUnavailableError(
+                    f"scope='{scope.value}' rejected in production mode. "
+                    f"Cloud/development inference requires SOC_ROUTING_MODE=development."
+                )
+            if role in PRODUCTION_ROLES:
+                has_local = any(
+                    p.config.scope == ProviderScope.LOCAL_SOC and role in p.config.roles
+                    for p in self.providers.values()
+                )
+                if not has_local:
+                    raise LocalInferenceUnavailableError(
+                        f"No local provider for production role='{role}'. FAIL CLOSED."
+                    )
+
         candidates = [p for p in self.providers.values() if p.config.scope == scope]
         candidates = [p for p in candidates if role in p.config.roles]
         candidates.sort(key=lambda p: p.config.priority)
@@ -155,58 +174,28 @@ def get_default_router() -> ModelRouter:
     return router
 
 # P0-1: Fail-closed enforcement for production inference
+#
+# A fail_closed policy: production SOC inference must not fall back to cloud.
+# The guard is enforced inside ModelRouter.route_with_provider, which is the
+# single choke point for all inference routing in this codebase.
+
 class LocalInferenceUnavailableError(Exception):
-    """Raised when local/edge inference is unavailable for production SOC."""
+    """Raised when local/edge inference is unavailable for a production SOC role.
+
+    This is a fail_closed condition: callers must not fall back to cloud.
+    """
     pass
 
-def _enforce_local_only_for_production(role: str, available_providers: list) -> str:
-    """
-    Enforce that production SOC roles never fall back to cloud.
 
-    Production roles: triage, primary, code_review
-    If local/edge unavailable: FAIL CLOSED (raise exception)
-    """
-    production_roles = {'triage', 'primary', 'code_review'}
+PRODUCTION_ROLES = frozenset({"triage", "primary", "code_review"})
 
-    if role not in production_roles:
-        # Development roles can use cloud
-        return available_providers[0] if available_providers else None
 
-    # Production role - must use local/edge only
-    local_providers = [p for p in available_providers if p.get('type') in ('local', 'edge')]
-
-    if not local_providers:
-        raise LocalInferenceUnavailableError(
-            f"Production role '{role}' requires local/edge inference. "
-            f"Cloud fallback is disabled. FAIL CLOSED."
-        )
-
-    return local_providers[0]
-
-# P0-1: Runtime mode enforcement
 def get_routing_mode() -> str:
-    """
-    Get deterministic routing mode.
+    """Get deterministic routing mode.
+
     Returns: 'production', 'development', or 'test'
     """
-    import os
     mode = os.environ.get('SOC_ROUTING_MODE', 'production').lower()
     if mode not in ('production', 'development', 'test'):
         mode = 'production'
     return mode
-
-def route_inference(role: str, available_providers: list) -> str:
-    """
-    Route inference request with production fail-closed enforcement.
-
-    Production mode: local/edge only, fail closed on outage
-    Development mode: cloud allowed
-    Test mode: mock providers
-    """
-    mode = get_routing_mode()
-
-    if mode == 'production':
-        return _enforce_local_only_for_production(role, available_providers)
-
-    # Development/test can use any provider
-    return available_providers[0] if available_providers else None

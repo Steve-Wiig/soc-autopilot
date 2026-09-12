@@ -2,7 +2,9 @@ from __future__ import annotations
 import time
 import logging
 from dataclasses import dataclass
-from engine.model_registry import ModelRouter, ProviderScope
+from engine.model_registry import (
+    ModelRouter, ProviderScope, LocalInferenceUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,13 @@ class InferenceService:
         provider_scope = ProviderScope.LOCAL_SOC if scope == "soc" else ProviderScope.DEVELOPMENT
         start = time.time()
         try:
-            raw_output, provider = self.router.route_with_provider(prompt=prompt, role=role, scope=provider_scope)
+            raw_output, provider = self.router.route_with_provider(
+                prompt=prompt, role=role, scope=provider_scope,
+            )
+        except LocalInferenceUnavailableError:
+            # P0-1 safety guard — propagate verbatim so callers can distinguish
+            # a policy rejection from a transient provider failure.
+            raise
         except Exception as e:
             raise RuntimeError(f"Inference failed for scope '{scope}': {e}") from e
 
@@ -33,5 +41,5 @@ class InferenceService:
             model_version="v1",
             provider_id=provider.config.name,
             raw_output=raw_output,
-            latency_ms=latency_ms
+            latency_ms=latency_ms,
         )
