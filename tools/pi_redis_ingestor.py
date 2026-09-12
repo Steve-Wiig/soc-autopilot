@@ -10,7 +10,10 @@ LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
 print("Starting pi_redis_ingestor...")
 
 try:
-    r = redis.Redis(password=os.environ.get("REDIS_PASSWORD", "CHANGE_ME"), host="localhost", port=6379, db=0, decode_responses=True)
+    redis_pwd = os.environ.get("REDIS_PASSWORD")
+if not redis_pwd or redis_pwd == "CHANGE_ME":
+    raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
+r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), host="localhost", port=6379, db=0, decode_responses=True)
     print("✅ Connected to Redis")
 
     while True:

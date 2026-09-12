@@ -6,7 +6,10 @@ import time
 import requests
 import re
 
-r = redis.Redis(password=os.environ.get("REDIS_PASSWORD", "CHANGE_ME"), host='localhost', port=6379, db=0, decode_responses=True)
+redis_pwd = os.environ.get("REDIS_PASSWORD")
+if not redis_pwd or redis_pwd == "CHANGE_ME":
+    raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
+r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), host='localhost', port=6379, db=0, decode_responses=True)
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "qwen2.5-coder:3b" # Note: Your code specifies 3b. If you want 1.5b, change this string.
 
@@ -51,6 +54,16 @@ while True:
         if result:
             _, job_json = result
             job = json.loads(job_json)
+
+    # --- ENFORCED SECURITY CHECKS (P0 FIX) ---
+    if not _verify_job_signature(job_data, job.get("signature", ""), os.environ.get("HMAC_SECRET", "")):
+        print("❌ Invalid job signature, rejecting.")
+        continue
+    if _verify_patch_integrity(job.get("patch", "")) != job.get("patch_hash", ""):
+        print("❌ Patch integrity check failed, rejecting.")
+        continue
+    # -----------------------------------------
+
             print(f"🧠 Reviewing: {job.get('file', 'unknown')} (Job ID: {job.get('job_id', 'unknown')})")
 
             prompt = build_neutral_prompt(job)
@@ -63,7 +76,7 @@ while True:
                     "stream": False,
                     "keep_alive": -1,
                     "format": "json"
-                }, timeout=600)
+                }, timeout=(10, 60))
                 inference_duration = round(time.time() - start_time, 2)
                 raw_response = res.json().get('response', '')
                 verdict = parse_strict_json(raw_response)
@@ -72,7 +85,8 @@ while True:
                 verdict = {"approved": False, "reason": f"Inference Error: {str(e)}"}
 
             r.lpush('pi_critic_results', json.dumps({
-                "job_id": job.get('job_id', 'unknown'),
+                "ledger_event_id": job.get("ledger_event_id"),
+    "job_id": job.get('job_id', 'unknown'),
                 "file": job.get('file', 'unknown'),
                 "verdict": verdict,
                 "inference_duration_sec": inference_duration,
