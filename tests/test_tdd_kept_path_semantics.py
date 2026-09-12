@@ -91,7 +91,9 @@ def test_vacuous_test_does_not_satisfy_acceptance(target_file):
          patch.object(si, "_record_ledger") as mock_ledger, \
          patch("tools.shadow_canary.run_canary") as mock_canary:
 
-        result = si.apply_auto_fix(target_file, _fake_issue(), {})
+        issue = _fake_issue()
+        issue["category"] = "correctness"  # Enforce strict TDD path (bypass low-risk exemption)
+        result = si.apply_auto_fix(target_file, issue, {})
 
     assert result is False
     mock_canary.assert_not_called()
@@ -158,7 +160,9 @@ def test_valid_red_test_still_gates_acceptance(target_file):
          patch.object(si, "_record_ledger"), \
          patch("tools.shadow_canary.run_canary") as mock_canary:
 
-        result = si.apply_auto_fix(target_file, _fake_issue(), {})
+        issue = _fake_issue()
+        issue["category"] = "correctness"  # Enforce strict TDD path (bypass low-risk exemption)
+        result = si.apply_auto_fix(target_file, issue, {})
 
     assert result is False
     mock_canary.assert_not_called()
@@ -216,7 +220,9 @@ def test_valid_red_test_allows_success_when_it_actually_passes(target_file):
          patch.object(si, "_store_proven_fix"), \
          patch.object(si, "_record_ledger"):
 
-        result = si.apply_auto_fix(target_file, _fake_issue(), {})
+        issue = _fake_issue()
+        issue["category"] = "correctness"  # Enforce strict TDD path (bypass low-risk exemption)
+        result = si.apply_auto_fix(target_file, issue, {})
 
     assert result is True
     assert not tdd_path.exists()
@@ -260,7 +266,9 @@ def test_exception_during_red_check_leaves_no_orphan(target_file):
          ), \
          patch.object(si, "_record_ledger"):
 
-        result = si.apply_auto_fix(target_file, _fake_issue(), {})
+        issue = _fake_issue()
+        issue["category"] = "correctness"  # Enforce strict TDD path (bypass low-risk exemption)
+        result = si.apply_auto_fix(target_file, issue, {})
 
     assert result is False
     assert not tdd_path.exists()

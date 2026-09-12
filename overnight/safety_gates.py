@@ -9,6 +9,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 def pre_flight_safety_check(proposed_code: str, original_file_path: str = "") -> tuple:
+    if re.search(r'except\s+Exception\s*:\s*\n\s*pass', code):
+        return False, "Silent failure: broad except with pass"
     """
     Fast-fail validation before committing to expensive pytest runs.
     Returns (is_safe: bool, message: str)
