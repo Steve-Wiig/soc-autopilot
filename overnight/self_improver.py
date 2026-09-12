@@ -844,25 +844,25 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         if tdd_test_code:
             # Queue for Async Local LLM Review (Slow Path)
             _queue_tdd_for_async_local_review(issue, tdd_test_code, file_path)
-            
+
             test_path = ROOT / "tests" / f"test_tdd_auto_{file_path.stem}.py"
             try:
                 test_path.write_text(tdd_test_code)
                 tdd_write_path = test_path
                 # RED PHASE VERIFICATION: The test MUST fail before we apply the fix.
-            # If it passes immediately, the test is vacuous and cannot validate the fix.
-            red_check = run_pytest([str(test_path.relative_to(ROOT))])
-            if red_check is None:
-                print(f"       ⚠️ TDD Red Phase FAILED: Test passes immediately. Rejecting vacuous test.")
-                # tdd_kept_path remains None: vacuous tests never satisfy acceptance.
-            else:
-                print(f"       🔴 TDD Red Phase CONFIRMED: Test fails as expected.")
-                tdd_block = f"ACCEPTANCE CRITERIA (Make this test pass):\n```python\n{tdd_test_code}\n```\n\n"
-                tdd_kept_path = test_path
-        except Exception as e:
-            _cleanup_tdd_artifact(tdd_write_path)
-            tdd_write_path = None
-            print(f"       ⚠️ TDD artifact write/red-check failed: {e}")
+                # If it passes immediately, the test is vacuous and cannot validate the fix.
+                red_check = run_pytest([str(test_path.relative_to(ROOT))])
+                if red_check is None:
+                    print(f"       ⚠️ TDD Red Phase FAILED: Test passes immediately. Rejecting vacuous test.")
+                    # tdd_kept_path remains None: vacuous tests never satisfy acceptance.
+                else:
+                    print(f"       🔴 TDD Red Phase CONFIRMED: Test fails as expected.")
+                    tdd_block = f"ACCEPTANCE CRITERIA (Make this test pass):\n```python\n{tdd_test_code}\n```\n\n"
+                    tdd_kept_path = test_path
+            except Exception as e:
+                _cleanup_tdd_artifact(tdd_write_path)
+                tdd_write_path = None
+                print(f"       ⚠️ TDD artifact write/red-check failed: {e}")
 
     # NEW SAFETY GATE: If baseline passed, and we failed to generate/validate a TDD test, drop it.
     if baseline_tb is None and not tdd_kept_path:
