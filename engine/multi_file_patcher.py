@@ -52,8 +52,8 @@ def parse_multi_file_diff(raw_diff: str, root_dir: Path) -> list[FilePatch]:
 
 def apply_multi_file_patches(
     patches: list[FilePatch],
-    repo_root: Path | None = None,
-    authorized_files: set[str | Path] | None = None,
+    repo_root: Path,
+    authorized_files: set[str | Path],
 ) -> dict[Path, str]:
     modified_files = {}
     working_contents = {}
@@ -62,12 +62,14 @@ def apply_multi_file_patches(
         if not patch.file_path.exists():
             raise ValueError(f"File not found: {patch.file_path}")
 
-        if repo_root is not None and authorized_files is not None:
-            validate_mutation_target(
-                repo_root,
-                authorized_files,
-                patch.file_path.relative_to(repo_root),
-            )
+        # P0-2: path authorization is mandatory. No opt-out.
+        try:
+            rel_target = patch.file_path.relative_to(repo_root)
+        except ValueError:
+            raise ValueError(
+                f"Patch path is outside repository root: {patch.file_path}"
+            ) from None
+        validate_mutation_target(repo_root, authorized_files, rel_target)
 
         if patch.file_path not in working_contents:
             working_contents[patch.file_path] = patch.file_path.read_text()
