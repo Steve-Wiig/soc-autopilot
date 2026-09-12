@@ -1399,9 +1399,11 @@ def prefill_advisory_queue(files, api_keys, budget):
 
         if not budget.wait_if_needed("gemini", timeout=120):
             break
+        _empty_streak = locals().get("_empty_streak", 0)
         try:
             advisory = gemini_pre_analysis(f.relative_to(ROOT), f.read_text(), api_keys)
             if advisory:
+                _empty_streak = 0
                 advisory_data = {
                     "file_path": str(f.relative_to(ROOT)),
                     "advisory_notes": advisory,
@@ -1416,6 +1418,11 @@ def prefill_advisory_queue(files, api_keys, budget):
                     ).fingerprint()
                     already_queued_hashes.add(advisory_data["source_hash"])
                 qpath.write_text(json.dumps(advisory_data, indent=2))
+            else:
+                _empty_streak += 1
+                if _empty_streak >= 2:
+                    print(f"       🛑 prefill: {_empty_streak} consecutive empty Gemini responses — deferring remaining files")
+                    break
         except Exception: pass
         time.sleep(1)
 

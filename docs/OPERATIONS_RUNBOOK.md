@@ -100,3 +100,42 @@ repository history.
 
 When a subsystem's authority is uncertain, avoid consequential changes until
 its actual call chain and side effects are established.
+
+## Development autonomy daemon
+
+The overnight development loop is driven by overnight/self_improver.py.
+Three modes are selected by flags.
+
+Full pipeline (recommended):
+    python3 -u overnight/self_improver.py --continuous --loop-interval 60
+
+Process pending advisories only:
+    python3 -u overnight/self_improver.py --process-only --continuous --loop-interval 60
+
+Drain fix backlog only (does NOT prefill or process advisories):
+    python3 -u overnight/self_improver.py --drain-backlog --continuous --loop-interval 15
+
+The --drain-backlog flag skips prefill_advisory_queue and
+process_advisory_queue. Pending advisories are not consumed in this mode.
+It is for clearing an existing fix backlog only.
+
+Launch:
+    cd ~/Documents/soc-autopilot
+    nohup python3 -u overnight/self_improver.py --continuous --loop-interval 60 > overnight/drun_continuous.log 2>&1 &
+    echo $! > overnight/daemon.pid
+
+The -u flag is required. Without it, stdout is block-buffered when redirected
+to a file, and the log appears empty for up to 16 minutes per cycle.
+
+Log and state paths:
+    overnight/drun_continuous.log       cycle output
+    overnight/daemon.pid                last-launched PID
+    overnight/improvement_ledger.jsonl  append-only decision record
+    overnight/advisory_queue/pending/   queued advisories
+    overnight/advisory_queue/failed/    archived advisories
+
+Stop:
+    kill -TERM $(cat overnight/daemon.pid)
+
+SIGTERM runs the daemon finally block, which cleans ephemeral TDD artifacts.
+After SIGKILL, remove leftover tests/test_tdd_auto_*.py manually.

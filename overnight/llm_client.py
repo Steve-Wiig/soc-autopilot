@@ -380,6 +380,12 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
                 print(f"    ❌ {model} quota exhausted → next")
                 continue
 
+            elif resp.status_code == 400:
+                print(f"    ❌ {model} 400 bad request → abort")
+                break
+            elif 500 <= resp.status_code < 600:
+                print(f"    ❌ {model} {resp.status_code} server error → abort")
+                break
             else:
                 print(f"    ❌ {model} returned {resp.status_code} → next")
                 continue
@@ -414,7 +420,7 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
             resp = requests.post(GEMINI_URL, json=payload, headers=headers, timeout=90)
 
             if resp.status_code == 429:
-                wait = 60 * (attempt + 1)
+                wait = min(15 * (2 ** attempt), 60)
                 print(f"    [Gemini] Rate limited. Waiting {wait}s...")
                 time.sleep(wait)
                 continue
@@ -900,8 +906,6 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
         if not budget.wait_if_needed("mistral", timeout=30):
             print("    🔒 Mistral budget wait timeout")
             return ""
-        
-        _enforce_free_tier(model)
         
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         budget.record_call("mistral")

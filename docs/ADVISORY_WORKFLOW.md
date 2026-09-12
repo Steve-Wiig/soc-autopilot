@@ -86,3 +86,51 @@ K -->|Fail| M[Failure Ledger]
 L --> N[Operator Review]
 
 N --> O[Completed Change]a
+
+
+---
+
+# Queue Lifecycle
+
+Advisories and their derived work products live in overnight/advisory_queue/.
+
+## Directories
+
+    advisory_queue/
+      pending/                    queued advisories awaiting review
+      failed/
+        parse_failed/             provider returned unparseable output
+        cooldown_blocked/         death-loop cooldown triggered
+        stale_target_changed/     advisory predates current file content
+      CLEANUP_MANIFEST_*.json     reversal record for archival operations
+
+## Prefill dedup
+
+prefill_advisory_queue scans both pending/ and failed/ recursively before
+paying a cloud provider to analyze a file. If the file current source_hash
+matches any queued or archived advisory, the prefill call is skipped.
+This prevents re-paying for content already analyzed.
+
+## Archive instead of delete
+
+When an advisory cannot proceed (parse failure, cooldown block, stale
+target), it is moved to a failed/ subdirectory with a timestamp suffix
+rather than deleted. The prefill dedup set includes these files, so
+archived advisories are not re-paid on the next cycle.
+
+## Cooldown key
+
+Death-loop detection uses (file, normalized_advisory_text) as the cooldown
+key. The source content hash is deliberately excluded: a repeat of the
+same advisory against a patched file is exactly the loop the cooldown is
+meant to interrupt. Three failed attempts against the same key within
+24 hours blocks further attempts for that advisory.
+
+## Reversal
+
+Archival operations are reversible.
+
+- Restore from failed/<reason>/ back to pending/:
+      mv failed/<reason>/*.json pending/
+- Un-backfill a source hash: remove the source_hash and
+  source_hash_backfilled_at keys from the advisory JSON.
