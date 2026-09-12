@@ -500,6 +500,29 @@ def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
 # ============================================================
 PROVEN_FIXES_PATH = ROOT / "overnight" / "proven_fixes.jsonl"
 
+# ============================================================
+# ASYNC TDD EVALUATION QUEUE (Fast/Slow Path Architecture)
+# Cloud generates the test; Local LLM asynchronously reviews it.
+# ============================================================
+TDD_EVAL_QUEUE = ROOT / "overnight" / "tdd_eval_queue.jsonl"
+
+def _queue_tdd_for_async_local_review(issue, tdd_code, file_path):
+    """Dump the generated TDD test into the queue for the local slow LLM to review later."""
+    try:
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "file": _safe_relative_path(file_path),
+            "category": issue.get("category", "unknown"),
+            "issue_desc": issue.get("description", "")[:300],
+            "tdd_code": tdd_code[:1500],
+            "status": "PENDING_LOCAL_REVIEW"
+        }
+        with open(TDD_EVAL_QUEUE, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass  # Non-blocking
+
+
 def _safe_relative_path(file_path):
     """Get relative path if possible, otherwise absolute path string."""
     try:
@@ -801,11 +824,32 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
     tdd_write_path = None
     tdd_block = ""
     if tdd_test_code:
-        test_path = ROOT / "tests" / f"test_tdd_auto_{file_path.stem}.py"
+        # --- FAST PATH: AST SANITIZATION (Trust Boundary) ---
+        # Cloud generated this. We must ensure it doesn't contain malicious imports.
+        import ast as _ast
         try:
-            test_path.write_text(tdd_test_code)
-            tdd_write_path = test_path
-            # RED PHASE VERIFICATION: The test MUST fail before we apply the fix.
+            _tree = _ast.parse(tdd_test_code)
+            for _node in _ast.walk(_tree):
+                if isinstance(_node, _ast.Import):
+                    for _alias in _node.names:
+                        if _alias.name in ['os', 'subprocess', 'sys', 'shutil']:
+                            raise ValueError(f"Unsafe import in cloud TDD: {_alias.name}")
+                elif isinstance(_node, _ast.ImportFrom):
+                    if _node.module in ['os', 'subprocess', 'sys', 'shutil']:
+                        raise ValueError(f"Unsafe import in cloud TDD: {_node.module}")
+        except ValueError as e:
+            print(f"       🛑 TDD AST GATE REJECTED: {e}")
+            tdd_test_code = None  # Drop it safely
+            
+        if tdd_test_code:
+            # Queue for Async Local LLM Review (Slow Path)
+            _queue_tdd_for_async_local_review(issue, tdd_test_code, file_path)
+            
+            test_path = ROOT / "tests" / f"test_tdd_auto_{file_path.stem}.py"
+            try:
+                test_path.write_text(tdd_test_code)
+                tdd_write_path = test_path
+                # RED PHASE VERIFICATION: The test MUST fail before we apply the fix.
             # If it passes immediately, the test is vacuous and cannot validate the fix.
             red_check = run_pytest([str(test_path.relative_to(ROOT))])
             if red_check is None:
@@ -1498,6 +1542,49 @@ def discover_files():
         if dp.exists(): files += [f for f in dp.rglob("*.py") if f.name != "__init__.py"]
     return sorted(files, key=lambda f: f.stat().st_size)
 
+
+# ============================================================
+# ASYNC LOCAL TDD REVIEWER (Slow Path)
+# Reads the queue and uses the local Ollama model to evaluate test quality.
+# ============================================================
+def _process_async_tdd_queue():
+    if not TDD_EVAL_QUEUE.exists(): return
+    lines = TDD_EVAL_QUEUE.read_text().strip().split("\n")
+    if not lines: return
+    
+    print(f"\n🧠 [ASYNC LOCAL REVIEWER] Processing {len(lines)} pending TDD evaluations...")
+    processed = []
+    
+    for line in lines:
+        if not line.strip(): continue
+        try:
+            entry = json.loads(line)
+            # Call local Ollama model (Port 11434 is default, 11435 is sandbox)
+            import requests
+            prompt = f"Evaluate this pytest test for quality. Is it a valid test? Reply ONLY 'GOOD' or 'BAD'.\n\nIssue: {entry.get('issue_desc')}\nTest:\n{entry.get('tdd_code')}"
+            resp = requests.post("http://127.0.0.1:11434/api/generate", json={"model": "qwen2.5-coder:1.5b", "prompt": prompt, "stream": False}, timeout=30)
+            
+            verdict = "UNKNOWN"
+            if resp.status_code == 200:
+                text = resp.json().get("response", "").upper()
+                if "GOOD" in text: verdict = "GOOD_TEST"
+                elif "BAD" in text: verdict = "BAD_TEST"
+                
+            _record_ledger(
+                ROOT / entry.get("file", "unknown.py"),
+                {"description": entry.get("issue_desc", ""), "category": entry.get("category", "unknown")},
+                "TDD_EVALUATED",
+                f"Local LLM Verdict: {verdict}"
+            )
+            processed.append(line)
+        except Exception as e:
+            print(f"       ⚠️ Async review failed for item: {e}")
+            
+    # Clear processed items
+    remaining = [l for l in lines if l not in processed]
+    TDD_EVAL_QUEUE.write_text("\n".join(remaining) + "\n" if remaining else "")
+    print(f"🧠 [ASYNC LOCAL REVIEWER] Finished. {len(processed)} items evaluated.")
+
 def main():
     for bak in sorted(ROOT.rglob("*.orig_backup")):
         bak.with_suffix("").write_text(bak.read_text()); bak.unlink()
@@ -1533,6 +1620,10 @@ def main():
             except Exception as e:
                 print(f"⚠️ Cycle {cycle} error: {e}")
 
+            # Run the slow local reviewer asynchronously at the end of the cycle
+            try: _process_async_tdd_queue()
+            except Exception: pass
+            
             print(budget.report())
 
             print(f"\n💤 Sleeping {a.loop_interval}s before next cycle...")
