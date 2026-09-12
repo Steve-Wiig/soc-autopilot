@@ -36,6 +36,7 @@ LESSONS_FILE = ROOT / "overnight" / "lessons_learned.json"
 
 SAFE_CATEGORIES = {"maintainability", "blueprint_compliance", "performance"}
 SAFE_SEVERITIES = {"low", "informational", "medium"}
+FUNCTIONAL_CATEGORIES = {"bug", "bugs", "correctness", "logic", "functional"}
 
 # Try to import advanced engines (degrade gracefully if missing)
 try: from engine.defeat_ledger import is_ast_defeated, check_and_record_defeat
@@ -793,26 +794,34 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             )
             return True
 
-        # Ordinary functional findings with a passing baseline are stale.
-        if category in ["bug", "correctness", "style", "documentation", ""]:
+        # Truly non-functional/stale categories.
+        if category in ["style", "documentation", ""]:
             print("       ✅ Baseline tests passed. Stale advisory.")
             _record_ledger(file_path, issue, "STALE", "Baseline passed")
             return True
 
         # High-risk / ambiguous non-functional findings remain gated for review.
-        if route == "REVIEW":
+        # Functional categories are allowed through to TDD generation so a
+        # generated regression test can prove whether the advisory is stale.
+        if route == "REVIEW" and category not in FUNCTIONAL_CATEGORIES:
             reason = f"Routing policy requires review for {category} advisory."
             print(f"       ⚠️ {reason}")
             _escalate_to_manual(file_path, issue, reason)
             _record_ledger(file_path, issue, "ESCALATED", reason)
             return True
 
-        # LOW-RISK LOCAL_TDD findings continue through the existing
-        # red-phase / patch / canary safety pipeline below.
-        print(
-            f"       🧪 Baseline passed; low-risk '{category}' advisory "
-            "eligible for Local TDD validation."
-        )
+        if category in FUNCTIONAL_CATEGORIES:
+            print(
+                f"       🧪 Baseline passed; functional '{category}' advisory "
+                "will be checked by TDD/stale path."
+            )
+        else:
+            # LOW-RISK LOCAL_TDD findings continue through the existing
+            # red-phase / patch / canary safety pipeline below.
+            print(
+                f"       🧪 Baseline passed; low-risk '{category}' advisory "
+                "eligible for Local TDD validation."
+            )
 
     if baseline_tb is not None:
         print(f"       🔴 Baseline failure captured ({len(baseline_tb)} chars)")
@@ -869,12 +878,25 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         _cleanup_tdd_artifact(tdd_write_path)
         tdd_write_path = None
         category = issue.get("category", "").lower()
+
+        # No TDD test was generated at all. For ordinary functional/stale
+        # advisories this is the terminal stale decision.
+        if tdd_test_code is None:
+            if category in FUNCTIONAL_CATEGORIES or category in ['style', 'documentation', '']:
+                print(f"       ✅ Baseline passed; no regression test generated for '{category}'. Marking stale.")
+                _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
+                return True
+            if category in ['maintainability', 'blueprint_compliance', 'performance']:
+                print(f"       ✅ LOW-RISK BYPASS: Applying '{category}' fix without new regression test (baseline passed).")
+                _record_ledger(file_path, issue, "APPLIED", "Low-risk bypass: baseline passed, no regression test required")
+                return False
+
         if category in ['maintainability', 'blueprint_compliance', 'performance']:
             print(f"       ✅ LOW-RISK BYPASS: Applying '{category}' fix without new regression test (baseline passed).")
             _record_ledger(file_path, issue, "APPLIED", "Low-risk bypass: baseline passed, no regression test required")
         else:
-            print(f"       ⚠️ Baseline passed for '{category}', but unable to generate regression test. Dropping.")
-            _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
+            print(f"       ⚠️ Baseline passed for '{category}', but unable to generate/validate regression test. Dropping.")
+            _record_ledger(file_path, issue, "STALE", "Baseline passed, no valid regression test generated")
         return False
 
     try:
@@ -1346,9 +1368,35 @@ def drain_backlog_loop(api_keys, budget, state, fixes_per_pass=4):
 # ============================================================
 def prefill_advisory_queue(files, api_keys, budget):
     QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # W6 FIX: source hashes already present in the pending queue. Prevents
+    # paying Gemini twice for the same content, regardless of queue filename.
+    # W1 FIX: also scan failed/ (recursively) so archived advisories are not
+    # re-paid on the next prefill pass.
+    already_queued_hashes = set()
+    scan_dirs = [QUEUE_DIR, QUEUE_DIR.parent / "failed"]
+    for search_dir in scan_dirs:
+        if not search_dir.exists():
+            continue
+        for qp in search_dir.rglob("*.json"):
+            try:
+                existing = json.loads(qp.read_text())
+            except Exception:
+                continue
+            h = existing.get("source_hash")
+            if h:
+                already_queued_hashes.add(h)
+
     for i, f in enumerate(files, 1):
         qpath = QUEUE_DIR / f"{str(f.relative_to(ROOT)).replace('/', '__').replace('.py', '')}.json"
         if qpath.exists(): continue
+
+        # Compute hash BEFORE the API call so we can skip duplicates for free.
+        current_hash = compute_source_hash(f)
+        if current_hash and current_hash in already_queued_hashes:
+            print(f"       ♻️ prefill skip: {f.relative_to(ROOT)} content already queued")
+            continue
+
         if not budget.wait_if_needed("gemini", timeout=120):
             break
         try:
@@ -1358,7 +1406,7 @@ def prefill_advisory_queue(files, api_keys, budget):
                     "file_path": str(f.relative_to(ROOT)),
                     "advisory_notes": advisory,
                     "created_at": datetime.now().isoformat(),
-                    "source_hash": compute_source_hash(f)
+                    "source_hash": current_hash or compute_source_hash(f),
                 }
                 if advisory_data["source_hash"]:
                     advisory_data["advisory_fingerprint"] = AdvisoryIdentity(
@@ -1366,6 +1414,7 @@ def prefill_advisory_queue(files, api_keys, budget):
                         advisory_data["advisory_notes"],
                         advisory_data["source_hash"],
                     ).fingerprint()
+                    already_queued_hashes.add(advisory_data["source_hash"])
                 qpath.write_text(json.dumps(advisory_data, indent=2))
         except Exception: pass
         time.sleep(1)
@@ -1420,27 +1469,14 @@ def _check_cooldown(file_path: str, advisory_notes: str, source_hash: str | None
                 if entry.get("file") != rel_path:
                     continue
 
-                matches = False
-                if target_fingerprint and entry.get("advisory_fingerprint"):
-                    matches = entry["advisory_fingerprint"] == target_fingerprint
-                elif target_fingerprint:
-                    stored_source_hash = entry.get("source_hash")
-                    if stored_source_hash:
-                        matches = AdvisoryIdentity(
-                            rel_path,
-                            entry.get("advisory", ""),
-                            stored_source_hash,
-                        ).fingerprint() == target_fingerprint
-                    else:
-                        stored_hash = hashlib.sha256(
-                            f"{rel_path}::{norm(entry.get('advisory', ''))}".encode()
-                        ).hexdigest()
-                        matches = stored_hash == target_hash
-                else:
-                    stored_hash = hashlib.sha256(
-                        f"{rel_path}::{norm(entry.get('advisory', ''))}".encode()
-                    ).hexdigest()
-                    matches = stored_hash == target_hash
+                # W5 FIX: cooldown key is (file, advisory text) only.
+                # source_hash is deliberately NOT part of the match: a repeat
+                # of the same advisory against a patched file is exactly the
+                # death loop we are trying to block.
+                stored_hash = hashlib.sha256(
+                    f"{rel_path}::{norm(entry.get('advisory', ''))}".encode()
+                ).hexdigest()
+                matches = stored_hash == target_hash
 
                 if matches:
                     try:
@@ -1485,6 +1521,22 @@ def _call_local_slm_fallback(prompt: str) -> str:
         pass
     return ""
 
+def _archive_advisory(qpath, reason):
+    """W1 FIX: move a queue item out of pending/ instead of unlinking it.
+    Reason subdirectory groups: parse_failed, cooldown_blocked.
+    Reversible: files are moved, never deleted."""
+    try:
+        archive_root = QUEUE_DIR.parent / "failed"
+        dest_dir = archive_root / reason
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        target = dest_dir / f"{qpath.stem}.{stamp}.json"
+        qpath.rename(target)
+        print(f"       \U0001f4e6 archived advisory -> failed/{reason}/{target.name}")
+    except Exception as e:
+        print(f"       \u26a0\ufe0f Could not archive advisory: {e}")
+
+
 def process_advisory_queue(api_keys, budget, state):
     pending = sorted(QUEUE_DIR.glob("*.json")) if QUEUE_DIR.exists() else []
     print(f"======================================================================\nSHADOW CANARY: OPENROUTER PROCESSING ({len(pending)} pending advisories)\n======================================================================")
@@ -1506,7 +1558,7 @@ def process_advisory_queue(api_keys, budget, state):
                 print(f"       ⏸️ {reason}. Skipping to save tokens.")
                 dummy_issue = {"description": data.get("advisory_notes", "")[:200], "category": "maintainability"}
                 _record_ledger(source_file, dummy_issue, "STALE", reason)
-                if hasattr(qpath, 'unlink'): qpath.unlink(missing_ok=True)
+                _archive_advisory(qpath, "cooldown_blocked")
                 continue
             # --------------------------------------
 
@@ -1515,7 +1567,10 @@ def process_advisory_queue(api_keys, budget, state):
             if not primary_response: print("       ⚠️ Primary analysis failed"); continue
 
             improvements = extract_json_from_response(primary_response)
-            if not improvements: print("       ⚠️ Parse failed"); qpath.unlink(); continue
+            if not improvements:
+                print("       ⚠️ Parse failed; archiving to failed/ (prevents re-prefill loop)")
+                _archive_advisory(qpath, "parse_failed")
+                continue
 
             auto_fixable = [imp for imp in improvements if isinstance(imp, dict) and imp.get("category") in SAFE_CATEGORIES]
             print(f"       📥 {len(auto_fixable)} fixable issues queued to backlog")

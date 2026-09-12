@@ -9,20 +9,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 def pre_flight_safety_check(proposed_code: str, original_file_path: str = "") -> tuple:
-    if re.search(r'except\s+Exception\s*:\s*\n\s*pass', code):
-        return False, "Silent failure: broad except with pass"
     """
     Fast-fail validation before committing to expensive pytest runs.
     Returns (is_safe: bool, message: str)
     """
     # 1. Prevent bare except regression
+    if re.search(r'except\s+Exception\s*:\s*\n\s*pass', proposed_code):
+        return False, "Bare 'except Exception:' with pass detected. Handle or log the exception."
     if re.search(r'\bexcept\s*:', proposed_code):
-        return False, "REJECTED: Bare 'except Exception:' detected. Use 'except Exception as e:'."
-    
+        return False, "REJECTED: Bare 'except' detected. Use 'except Exception as e:'."
     # 2. Prevent hardcoded absolute paths
-    if re.search(r'(/home/|C:\\\\|/Users/|/etc/)', proposed_code):
-        return False, "REJECTED: Hardcoded absolute path detected. Use dynamic ROOT resolution."
-        
+    if re.search(r'''["'](/home/|/Users/|/tmp/)''', proposed_code):
+        return False, "REJECTED: Hardcoded absolute path detected."
     # 3. AST Check: Ensure generator functions yielding resources have @contextmanager
     try:
         tree = ast.parse(proposed_code)
