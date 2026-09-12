@@ -905,7 +905,16 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             try:
                 if parse_multi_file_diff:
                     patches = parse_multi_file_diff(raw, ROOT)
-                    modified_files = apply_multi_file_patches(patches)
+
+                    authorized_files = {
+                        file_path.relative_to(ROOT)
+                    }
+
+                    modified_files = apply_multi_file_patches(
+                        patches,
+                        repo_root=ROOT,
+                        authorized_files=authorized_files,
+                    )
                 else:
                     # Fallback to simple single-file replace if engine missing
                     # PATCH_ENGINE_UNAVAILABLE - no-op fallback is a governance bug

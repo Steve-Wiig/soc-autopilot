@@ -49,42 +49,24 @@ def parse_multi_file_diff(raw_diff: str, root_dir: Path) -> list[FilePatch]:
 
     return patches
 
-def _locate_region(original: str, search: str):
-    """Return (start_line, window_size) or (-1, 0)."""
-    orig_lines = original.splitlines(keepends=True)
-    orig_stripped = [l.strip() for l in orig_lines]
-    search_stripped = [l.strip() for l in search.splitlines()]
-    n = len(search_stripped)
-    if n == 0 or all(not s for s in search_stripped):
-        return -1, 0
-
-    # 1. Normalized exact match (same line count, ignore indent/trailing ws)
-    for i in range(len(orig_stripped) - n + 1):
-        if orig_stripped[i:i+n] == search_stripped:
-            return i, n
-
-    # 2. Fuzzy difflib over stripped lines, variable window (tolerates +/-1 line)
-    target = "\n".join(search_stripped)
-    best_score, best_start, best_size = 0.0, -1, n
-    for size in (n-1, n, n+1):
-        if size <= 0:
-            continue
-        for i in range(len(orig_stripped) - size + 1):
-            chunk = "\n".join(orig_stripped[i:i+size])
-            score = difflib.SequenceMatcher(None, chunk, target).ratio()
-            if score > best_score:
-                best_score, best_start, best_size = score, i, size
-    if best_score > 0.80:
-        return best_start, best_size
-    return -1, 0
-
-def apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:
+def apply_multi_file_patches(
+    patches: list[FilePatch],
+    repo_root: Path | None = None,
+    authorized_files: set[str | Path] | None = None,
+) -> dict[Path, str]:
     modified_files = {}
     working_contents = {}
 
     for patch in patches:
         if not patch.file_path.exists():
             raise ValueError(f"File not found: {patch.file_path}")
+
+        if repo_root is not None and authorized_files is not None:
+            validate_mutation_target(
+                repo_root,
+                authorized_files,
+                patch.file_path.relative_to(repo_root),
+            )
 
         if patch.file_path not in working_contents:
             working_contents[patch.file_path] = patch.file_path.read_text()
@@ -95,22 +77,9 @@ def apply_multi_file_patches(patches: list[FilePatch]) -> dict[Path, str]:
         if patch.search in original:
             new_content = original.replace(patch.search, patch.replace, 1)
         else:
-            orig_lines = original.splitlines(keepends=True)
-            start, size = _locate_region(original, patch.search)
-            if start >= 0:
-                replace_text = patch.replace
-                if not replace_text.endswith("\n"):
-                    replace_text += "\n"
-                new_lines = (
-                    orig_lines[:start]
-                    + [replace_text]
-                    + orig_lines[start + size:]
-                )
-                new_content = "".join(new_lines)
-            else:
-                raise ValueError(
-                    f"Search block not found (exact & fuzzy) in {patch.file_path}"
-                )
+            raise ValueError(
+                f"Exact patch match required: {patch.file_path}"
+            )
 
         working_contents[patch.file_path] = new_content
         modified_files[patch.file_path] = new_content
