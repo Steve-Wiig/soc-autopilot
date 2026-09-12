@@ -13,7 +13,10 @@ def get_deterministic_job_id(patch_dict):
 def process_patch(patch_dict, patch_json_str):
     try:
         import redis
-        r = redis.Redis(password=os.environ.get("REDIS_PASSWORD", "CHANGE_ME"), host='192.168.1.31', port=6379, db=0, decode_responses=True)
+        redis_pwd = os.environ.get("REDIS_PASSWORD")
+    if not redis_pwd or redis_pwd == "CHANGE_ME":
+        raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
+    r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), host='192.168.1.31', port=6379, db=0, decode_responses=True)
         job_id = get_deterministic_job_id(patch_dict)
         full_path = ROOT / patch_dict['file']
         original_content = full_path.read_text() if full_path.exists() else ""
