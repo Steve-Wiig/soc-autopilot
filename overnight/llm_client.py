@@ -8,11 +8,15 @@ and builds the fallback list automatically.
 import os
 
 def _enforce_free_tier(model: str) -> None:
-    """Hard guard: Physically prevents any paid model from being called."""
+    """Hard guard: prevents non-free model calls unless the operator has
+    explicitly opted in via ALLOW_PAID_CALLS=true in the environment.
+    Only the exact string 'true' (case-insensitive) enables paid calls."""
+    if os.getenv("ALLOW_PAID_CALLS", "false").lower() == "true":
+        return
     if not str(model).strip().endswith(":free"):
         raise RuntimeError(
-            f"SECURITY VIOLATION: Attempted to call paid model '{model}'. "
-            "Only ':free' models are permitted to prevent API drain."
+            f"SECURITY VIOLATION: Attempted to call non-free model '{model}'. "
+            "Set ALLOW_PAID_CALLS=true in .env to permit paid calls."
         )
 
 import re
