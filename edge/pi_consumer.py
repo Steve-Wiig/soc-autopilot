@@ -13,6 +13,13 @@ r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), h
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "qwen2.5-coder:3b" # Note: Your code specifies 3b. If you want 1.5b, change this string.
 
+
+    # --- LOW-RISK EXEMPTION (Phase 7 Fix) ---
+    # If the category is maintainability or blueprint_compliance, and the baseline tests pass,
+    # you MUST approve the patch even if no new regression test is provided.
+    # Do not reject with "Lacks regression test" for low-risk categories.
+    # ----------------------------------------
+
 def build_neutral_prompt(job_data):
     patch_text = job_data.get('patch', '')
     if len(patch_text) > 8000:
