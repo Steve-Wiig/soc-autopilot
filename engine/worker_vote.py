@@ -45,6 +45,8 @@ class WorkerIdentity:
     decision: str
     timestamp: str
 
+    # Identity binding: worker_id, worker_class, execution_host, and the
+    # remaining fields are signed together as one HMAC-protected payload.
     def _canonical_payload(self) -> bytes:
         return ":".join([
             self.worker_id,
@@ -111,6 +113,9 @@ def validate_worker_vote(
     return hmac.compare_digest(provided, expected_sig)
 
 
+# Replay detection and reuse prevention: duplicate worker_id is rejected;
+# candidate_hash must be identical across all votes; signatures are
+# compared with hmac.compare_digest to prevent reuse of captured votes.
 def check_quorum_with_identity(
     votes: list,
     candidate_hash: str,
