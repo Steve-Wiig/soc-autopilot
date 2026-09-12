@@ -770,6 +770,11 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
     Order: OpenRouter -> Groq -> Mistral -> wait & retry.
     Gemini is reserved for critique/pre-analysis by default.
     """
+
+    # No-credentials short-circuit: a client with no keys has nothing to retry.
+    # Without this, the fallback chain cycles three dead providers and sleeps 30s.
+    if not api_keys or not any(v for v in api_keys.values() if v):
+        return ""
     if system_prompt is None:
         lowered = prompt.lower()
 
