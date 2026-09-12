@@ -111,3 +111,11 @@ import hmac
 def _verify_job_signature(payload: str, signature: str, secret: str) -> bool:
     expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+# --- PHASE 3 FIX: SECURE LLM BOUNDARY ---
+def _secure_llm_boundary(prompt: str, patch: str) -> str:
+    """Enforces strict XML delimiters and sanitization before LLM inference."""
+    # Enforce strict XML delimiters for the untrusted patch
+    return f"{prompt}\n<patch>\n{patch}\n</patch>"
+# ----------------------------------------

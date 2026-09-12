@@ -91,3 +91,25 @@ class CanonicalTelemetryEvent:
     def __post_init__(self):
         if not self.ledger_event_id:
             raise ValueError("ledger_event_id is required for canonical truth.")
+
+
+# --- PHASE 3 FIX: ENFORCED STATE MACHINE ---
+ALLOWED_TRANSITIONS = {
+    "OBSERVED": ["PROPOSED"],
+    "PROPOSED": ["VALIDATING"],
+    "VALIDATING": ["SHADOW_RUNNING"],
+    "SHADOW_RUNNING": ["TESTING"],
+    "TESTING": ["AWAITING_APPROVAL"],
+    "AWAITING_APPROVAL": ["MERGED", "REJECTED"],
+    "MERGED": ["APPLIED"],
+    "REJECTED": ["ARCHIVED"],
+    "APPLIED": [],
+    "ARCHIVED": []
+}
+
+def transition_state(current_state: str, target_state: str) -> str:
+    """Strictly enforces ALLOWED_TRANSITIONS. Raises ValueError on invalid transitions."""
+    if target_state not in ALLOWED_TRANSITIONS.get(current_state, []):
+        raise ValueError(f"Invalid state transition: {current_state} -> {target_state}")
+    return target_state
+# ----------------------------------------
