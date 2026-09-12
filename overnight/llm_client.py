@@ -317,7 +317,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     attempts = 0
     max_attempts = 1 if not allow_fallback else 3
 
-    for try_model in models_to_try:
+    for model in models_to_try:
         attempts += 1
         if attempts > max_attempts:
             break
@@ -336,7 +336,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
         messages.append({"role": "user", "content": prompt})
 
         payload = {
-            "model": try_model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -344,7 +344,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
 
         try:
             check_quota_or_raise()
-            _enforce_free_tier(try_model)
+            _enforce_free_tier(model)
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
@@ -353,12 +353,12 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
                     continue
                 content = data["choices"][0]["message"]["content"]
 
-                if try_model != _current_model:
-                    if fallback_list and try_model == fallback_list[0]:
+                if model != _current_model:
+                    if fallback_list and model == fallback_list[0]:
                         print(f"    ✅ Primary recovered: {model}")
                     else:
                         print(f"    🔄 Using fallback: {model}")
-                _current_model = try_model
+                _current_model = model
                 _budget_record("openrouter")
                 return content
 
@@ -618,12 +618,12 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
         _last_groq_call = time.time()
 
     for pass_num in range(2):  # pass 1: try ready models; pass 2: after cooldown wait
-        for try_model in models:
-            if _groq_preempted(try_model):
+        for model in models:
+            if _groq_preempted(model):
                 continue  # server says remaining=0; don't probe until reset
-            if _in_cooldown(try_model):
+            if _in_cooldown(model):
                 continue  # don't waste a request probing a cooled-down model
-            if not _budget_allow("groq", try_model):
+            if not _budget_allow("groq", model):
                 continue  # budget manager says no
 
 
@@ -631,7 +631,7 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
             body = prompt[:9000]
             max_out = min(max_tokens, 4096)
             needed = _est_tokens(body) + max_out
-            if not _groq_headroom(try_model, needed):
+            if not _groq_headroom(model, needed):
                 continue
 
             for attempt in range(2):
@@ -639,12 +639,12 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                 if system_prompt:
                     messages.append({"role": "system", "content": system_prompt})
                 messages.append({"role": "user", "content": body})
-                payload = {"model": try_model, "messages": messages,
+                payload = {"model": model, "messages": messages,
                            "temperature": temperature, "max_tokens": max_out}
                 try:
                     _pace()
                     resp = requests.post(GROQ_URL, json=payload, headers=headers, timeout=90)
-                    _groq_note_rl(try_model, resp.headers)
+                    _groq_note_rl(model, resp.headers)
                 except Exception as e:
                     print(f"    ❌ Groq model error: {e} → next")
                     break
@@ -655,9 +655,9 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                         usage = data.get("usage", {})
                         tokens = (usage.get("prompt_tokens", 0)
                                   + usage.get("completion_tokens", 0)) or needed
-                        _groq_record(try_model, tokens)
+                        _groq_record(model, tokens)
                         content = data["choices"][0]["message"]["content"]
-                        _groq_429_count[try_model] = 0  # success resets backoff
+                        _groq_429_count[model] = 0  # success resets backoff
                         _budget_record("groq")
                         print(f"    ✅ Groq ({model}) responded ({len(content)} chars)")
                         return content
@@ -669,11 +669,11 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                     except ValueError:
                         base = 5
                     # Exponential backoff when the same model keeps rejecting us
-                    n = _groq_429_count.get(try_model, 0) + 1
-                    _groq_429_count[try_model] = n
+                    n = _groq_429_count.get(model, 0) + 1
+                    _groq_429_count[model] = n
                     wait = min(base * (2 ** (n - 1)), 90)
-                    _groq_cooldown[try_model] = time.time() + wait
-                    _groq_record(try_model, needed)
+                    _groq_cooldown[model] = time.time() + wait
+                    _groq_record(model, needed)
                     print(f"    ⚠️  Groq {model} rate-limited (hit x{n}) → backoff {wait}s")
                     break
 
@@ -901,7 +901,7 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
             print("    🔒 Mistral budget wait timeout")
             return ""
         
-        _enforce_free_tier(try_model)
+        _enforce_free_tier(model)
         
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         budget.record_call("mistral")
