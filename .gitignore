@@ -48,3 +48,9 @@ engine/inference_ledger.jsonl
 
 # Local safety backups created during surgical refactors
 *.backup*
+overnight/daemon.pid
+overnight/*.log
+overnight/*.log.pre-*
+crontab_backup_*.txt
+apply_pytest_fix.py
+triage_edge_node.sh
