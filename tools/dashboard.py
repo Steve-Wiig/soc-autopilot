@@ -216,9 +216,9 @@ def main():
         try:
             import redis
             redis_pwd = os.environ.get("REDIS_PASSWORD")
-if not redis_pwd or redis_pwd == "CHANGE_ME":
-    raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
-r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), host="192.168.1.31", port=6379, db=0, socket_connect_timeout=2)
+            if not redis_pwd or redis_pwd == "CHANGE_ME":
+                raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
+            r = redis.Redis(password=redis_pwd, host="192.168.1.31", port=6379, db=0, socket_connect_timeout=2)
             q_len = r.llen("pi_critic_queue")
             res_len = r.llen("pi_critic_results")
             print(f"   🟢 Critic:    Active (Queue: {q_len} pending, Results: {res_len})")

@@ -355,37 +355,37 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
 
                 if try_model != _current_model:
                     if fallback_list and try_model == fallback_list[0]:
-                        print(f"    ✅ Primary recovered: {try_model}")
+                        print(f"    ✅ Primary recovered: {model}")
                     else:
-                        print(f"    🔄 Using fallback: {try_model}")
+                        print(f"    🔄 Using fallback: {model}")
                 _current_model = try_model
                 _budget_record("openrouter")
                 return content
 
             elif resp.status_code in (401, 403):
-                print(f"    ❌ OpenRouter auth failure for {try_model}: {resp.status_code}")
+                print(f"    ❌ OpenRouter auth failure for {model}: {resp.status_code}")
                 return ""
             elif resp.status_code == 429:
                 from overnight import openrouter_quota
-                print(f"    ⚠️  {try_model} rate-limited. OpenRouter cooldown triggered.")
-                openrouter_quota.force_lock(f"429 on {try_model}")
+                print(f"    ⚠️  {model} rate-limited. OpenRouter cooldown triggered.")
+                openrouter_quota.force_lock(f"429 on {model}")
                 break  # STOP retry storm
 
 
             elif resp.status_code == 404:
-                print(f"    ⚠️  {try_model} not available → next")
+                print(f"    ⚠️  {model} not available → next")
                 continue
 
             elif resp.status_code == 402:
-                print(f"    ❌ {try_model} quota exhausted → next")
+                print(f"    ❌ {model} quota exhausted → next")
                 continue
 
             else:
-                print(f"    ❌ {try_model} returned {resp.status_code} → next")
+                print(f"    ❌ {model} returned {resp.status_code} → next")
                 continue
 
         except Exception as e:
-            print(f"    ❌ {try_model} error: {e} → next")
+            print(f"    ❌ {model} error: {e} → next")
             continue
 
     # All OpenRouter models saturated — return empty immediately
@@ -646,7 +646,7 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                     resp = requests.post(GROQ_URL, json=payload, headers=headers, timeout=90)
                     _groq_note_rl(try_model, resp.headers)
                 except Exception as e:
-                    print(f"    ❌ Groq {try_model} error: {e} → next")
+                    print(f"    ❌ Groq model error: {e} → next")
                     break
 
                 if resp.status_code == 200:
@@ -659,7 +659,7 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                         content = data["choices"][0]["message"]["content"]
                         _groq_429_count[try_model] = 0  # success resets backoff
                         _budget_record("groq")
-                        print(f"    ✅ Groq ({try_model}) responded ({len(content)} chars)")
+                        print(f"    ✅ Groq ({model}) responded ({len(content)} chars)")
                         return content
 
                 elif resp.status_code == 429:
@@ -674,7 +674,7 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                     wait = min(base * (2 ** (n - 1)), 90)
                     _groq_cooldown[try_model] = time.time() + wait
                     _groq_record(try_model, needed)
-                    print(f"    ⚠️  Groq {try_model} rate-limited (hit x{n}) → backoff {wait}s")
+                    print(f"    ⚠️  Groq {model} rate-limited (hit x{n}) → backoff {wait}s")
                     break
 
                 elif resp.status_code == 413:

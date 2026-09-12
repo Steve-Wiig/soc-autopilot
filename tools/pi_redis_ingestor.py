@@ -13,7 +13,7 @@ try:
     redis_pwd = os.environ.get("REDIS_PASSWORD")
 if not redis_pwd or redis_pwd == "CHANGE_ME":
     raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
-r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), host="localhost", port=6379, db=0, decode_responses=True)
+r = redis.Redis(password=redis_pwd, host="localhost", port=6379, db=0, decode_responses=True)
     print("✅ Connected to Redis")
 
     while True:
@@ -27,10 +27,12 @@ r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), h
             
             job_id = data.get("job_id", "unknown")
             verdict = data.get("verdict", {})
+            status = "PI_APPROVED" if verdict.get("approved") else "PI_REJECTED"
             duration = data.get("inference_duration_sec", 0)
             
             # Extract approval status and reason from the nested verdict dict
             is_approved = verdict.get("approved", False)
+            status = "PI_APPROVED" if is_approved else "PI_REJECTED"
             reason = verdict.get("reason", "No reason provided")
             
             status = "PI_APPROVED" if is_approved else "PI_REJECTED"
