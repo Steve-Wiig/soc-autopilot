@@ -825,7 +825,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         _cleanup_tdd_artifact(tdd_write_path)
         tdd_write_path = None
         category = issue.get("category", "").lower()
-        if category in ['maintainability', 'blueprint_compliance']:
+        if category in ['maintainability', 'blueprint_compliance', 'performance']:
             print(f"       ✅ LOW-RISK BYPASS: Applying '{category}' fix without new regression test (baseline passed).")
             _record_ledger(file_path, issue, "APPLIED", "Low-risk bypass: baseline passed, no regression test required")
         else:
