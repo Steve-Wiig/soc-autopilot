@@ -2,8 +2,8 @@
 """
 OpenRouter quota tracker for the 50 RPD free-tier hard limit.
 
-- Tracks every attempt (success AND 429 — both count against quota)
-- Locks OpenRouter for 24h once exhausted
+- Tracks provider usage state and cooldowns
+- Locks OpenRouter for configured cooldown period once exhausted
 - Auto-resets on calendar day rollover
 - Persists to disk so it survives restarts
 """
@@ -73,7 +73,7 @@ def record_attempt():
     data["last_attempt"] = datetime.now(timezone.utc).isoformat()
     if data["used_today"] >= DAILY_LIMIT and not data.get("locked_until"):
         data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
-        print(f"    🔒 OpenRouter quota exhausted ({data['used_today']}/{DAILY_LIMIT}). Locked 24h.")
+        print(f"    🔒 OpenRouter quota exhausted ({data['used_today']}/{DAILY_LIMIT}). Locked cooldown period.")
     _save(data)
     return data
 
@@ -89,14 +89,13 @@ def status():
 
 
 def force_lock(reason="429 received"):
-    """Instantly lock OpenRouter for 24h (used when we hit a 429)."""
+    """Instantly lock OpenRouter for configured cooldown period (used when we hit a 429)."""
     data = _refresh(_load())
     data["locked_until"] = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
     data["lock_reason"] = reason
-    # Mark as fully used so it stays locked even if time resets
-    data["used_today"] = DAILY_LIMIT 
+    # Preserve usage accounting; lock state controls cooldown behavior
     _save(data)
-    print(f"    🔒 OpenRouter force-locked for 24h ({reason})")
+    print(f"    🔒 OpenRouter force-locked for {LOCK_HOURS}h ({reason})")
 
 
 
@@ -124,13 +123,13 @@ def check_quota_or_raise():
         if locked_until:
             lock_time = datetime.fromisoformat(locked_until.replace('Z', '+00:00'))
             if datetime.now(timezone.utc) < lock_time:
-                raise RuntimeError(f"OpenRouter quota locked until {locked_until}. Used: {used}/50")
+                raise RuntimeError(f"OpenRouter quota locked until {locked_until}. Used: {used}/{DAILY_LIMIT}")
         
-        if used >= 50:
-            lock_until = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+        if used >= DAILY_LIMIT:
+            lock_until = (datetime.now(timezone.utc) + timedelta(hours=LOCK_HOURS)).isoformat()
             data["locked_until"] = lock_until
             quota_file.write_text(json.dumps(data, indent=2))
-            raise RuntimeError(f"OpenRouter quota exceeded ({used}/50). Locked until {lock_until}")
+            raise RuntimeError(f"OpenRouter quota exceeded ({used}/{DAILY_LIMIT}). Locked until {lock_until}")
     except Exception as e:
         if "quota" in str(e).lower(): raise
         print(f"Warning: Could not check quota: {e}")
