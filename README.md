@@ -16,6 +16,11 @@ The engineering workflow favors:
 
 `invariant -> regression test -> smallest safe change -> targeted verification -> full regression suite -> promotion / human review where required`
 
+
+## Architecture Overview
+
+Architecture visual available in docs/assets/architecture.mmd
+
 ## What this project is
 
 SOC-Autopilot explores two separate autonomy domains that share verification discipline but have different authorities:
