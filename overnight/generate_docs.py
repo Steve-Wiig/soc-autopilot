@@ -51,7 +51,7 @@ def validate_output(content, file_type):
         try:
             import yaml
             yaml.safe_load(content)
-        except:
+        except Exception:
             return False, "Invalid YAML"
     elif file_type == "sql":
         # Must have SQL keywords

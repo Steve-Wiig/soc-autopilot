@@ -21,7 +21,7 @@ def extract_json(text: str) -> dict:
     if match:
         try:
             return json.loads(match.group(0))
-        except:
+        except Exception:
             pass
 
     # 2. Fallback: Find any { ... } block
@@ -29,7 +29,7 @@ def extract_json(text: str) -> dict:
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
         try: return json.loads(text[start:end+1])
-        except: pass
+        except Exception: pass
 
     return {"approve": False, "reason": "Failed to parse JSON (Model leaked Chain of Thought)"}
 

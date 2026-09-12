@@ -20,7 +20,7 @@ def verify_python_syntax(filepath):
 def verify_no_hallucinated_imports(filepath):
     try:
         with open(filepath, 'r') as f: tree = ast.parse(f.read())
-    except: return True, "skipped"
+    except Exception: return True, "skipped"
     from pathlib import Path
     p = Path(filepath)
     own_pkg = ""
@@ -40,7 +40,7 @@ def verify_no_hallucinated_imports(filepath):
 def verify_exit_codes(filepath):
     try:
         with open(filepath, 'r') as f: text = f.read()
-    except: return False, "file not found"
+    except Exception: return False, "file not found"
     has_exit = "exit" in text.lower() or "if __name__" in text or "def main" in text
     has_0 = "0" in text
     has_1 = "1" in text

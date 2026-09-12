@@ -25,7 +25,7 @@ def main():
             print(f"✅ Engine is RUNNING (PIDs: {', '.join(pids)})")
         else:
             print("⚠️ Engine is STOPPED.")
-    except:
+    except Exception:
         print("⚠️ Engine is STOPPED.")
 
     # 2. Git State
@@ -52,12 +52,12 @@ def main():
     try:
         b_count = len(json.loads(backlog.read_text())) if backlog.exists() else 0
         print(f"Fix Backlog: {b_count} items")
-    except: print("Fix Backlog: Error reading")
+    except Exception: print("Fix Backlog: Error reading")
         
     try:
         d_count = len(json.loads(deferred.read_text())) if deferred.exists() else 0
         print(f"Deferred (Poison Pills): {d_count} items")
-    except: print("Deferred: Error reading")
+    except Exception: print("Deferred: Error reading")
 
     p_count = len(list(pending.glob("*.json"))) if pending.exists() else 0
     print(f"Pending Advisories (Gemini Queue): {p_count} items")
@@ -106,7 +106,7 @@ def main():
             print(f"NAS Archive (/dev/sdc): {n_count} events")
         else:
             print("NAS Archive: Offline or unmounted.")
-    except:
+    except Exception:
         print("NAS Archive: Offline or unmounted.")
 
     # 7. Recent Logs

@@ -1,5 +1,8 @@
 # SOC-Autopilot
 
+> **Positioning:** SOC-Autopilot is a **safety-gated**, **AI-assisted** SOC **copilot**. It integrates **human-in-the-loop** approval boundaries to automate investigation workflows while maintaining strict trust and safety controls.
+
+
 Local-first, evidence-driven security orchestration and autonomous software maintenance.
 
 > **LLMs propose → safety gates validate → tests verify → independent verification audits → Git records → humans decide where required.**

@@ -8,10 +8,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from overnight.safety_gates import pre_flight_safety_check
 
 def test_bare_except_rejection():
-    bad_code = "try:\n    x = 1\nexcept:\n    pass"
+    bad_code = "try:\n    x = 1\nexcept Exception:\n    pass"
     is_safe, msg = pre_flight_safety_check(bad_code, "dummy.py")
     assert not is_safe
-    assert "Bare 'except:'" in msg
+    assert "Bare 'except Exception:'" in msg
 
 def test_hardcoded_path_rejection():
     bad_code = "path = '/home/swiig/data'"

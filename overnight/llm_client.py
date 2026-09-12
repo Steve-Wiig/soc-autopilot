@@ -486,7 +486,7 @@ def get_groq_models(api_key):
             cache = json.loads(GROQ_CACHE_FILE.read_text())
             if time.time() - cache.get("timestamp", 0) < CACHE_TTL:
                 return cache["models"]
-        except:
+        except Exception:
             pass
 
     models = discover_groq_models(api_key)

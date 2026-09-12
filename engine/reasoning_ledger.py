@@ -75,3 +75,19 @@ def record_interaction(stage: str, prompt: str, raw_response: str, model: str = 
                 f.write(json.dumps(event) + "\n")
     except Exception:
         pass # Fail-open: NAS is asleep/unmounted, data is safe in local buffer
+
+
+# --- Telemetry Truth Model ---
+from dataclasses import dataclass
+
+@dataclass
+class CanonicalTelemetryEvent:
+    """Single source of truth for all telemetry. Everything references this."""
+    ledger_event_id: str
+    event_type: str
+    timestamp: str
+    payload: dict
+
+    def __post_init__(self):
+        if not self.ledger_event_id:
+            raise ValueError("ledger_event_id is required for canonical truth.")

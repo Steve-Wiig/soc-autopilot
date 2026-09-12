@@ -36,7 +36,7 @@ def check_static_and_import_safety(file_path: str) -> bool:
             capture_output=True, timeout=10
         )
         return res.returncode == 0
-    except:
+    except Exception:
         return False
 
 def run_canary(modified_files: list) -> bool:

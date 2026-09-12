@@ -26,7 +26,7 @@ def load_attempted():
         if isinstance(data, list):
             return {item: 1 for item in data}
         return data
-    except:
+    except Exception:
         return {}
 
 def mark_attempted(key):
@@ -50,7 +50,7 @@ def get_generated():
             try:
                 entry = json.loads(line)
                 generated.add((entry['file'], entry['issue']['description']))
-            except:
+            except Exception:
                 pass
     return generated
 

@@ -59,6 +59,6 @@ def sync():
         except Exception as e: log(f"rsync execution failed: {e}")
     finally:
         try: os.close(lock_fd)
-        except: pass
+        except Exception: pass
 
 if __name__ == "__main__": sync()

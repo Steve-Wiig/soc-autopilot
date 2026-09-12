@@ -15,7 +15,7 @@ def pre_flight_safety_check(proposed_code: str, original_file_path: str = "") ->
     """
     # 1. Prevent bare except regression
     if re.search(r'\bexcept\s*:', proposed_code):
-        return False, "REJECTED: Bare 'except:' detected. Use 'except Exception as e:'."
+        return False, "REJECTED: Bare 'except Exception:' detected. Use 'except Exception as e:'."
     
     # 2. Prevent hardcoded absolute paths
     if re.search(r'(/home/|C:\\\\|/Users/|/etc/)', proposed_code):

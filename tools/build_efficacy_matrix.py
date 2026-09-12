@@ -29,7 +29,7 @@ def gather_events():
                 for line in f.read_text().splitlines():
                     if line.strip():
                         try: events.append(json.loads(line))
-                        except: pass
+                        except Exception: pass
     return deduplicate_events(events)
 
 def calculate_metrics(events):

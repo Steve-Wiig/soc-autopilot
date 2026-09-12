@@ -215,7 +215,7 @@ def main():
 
         try:
             import redis
-            r = redis.Redis(host="192.168.1.31", port=6379, db=0, socket_connect_timeout=2)
+            r = redis.Redis(password=os.environ.get("REDIS_PASSWORD", "CHANGE_ME"), host="192.168.1.31", port=6379, db=0, socket_connect_timeout=2)
             q_len = r.llen("pi_critic_queue")
             res_len = r.llen("pi_critic_results")
             print(f"   🟢 Critic:    Active (Queue: {q_len} pending, Results: {res_len})")

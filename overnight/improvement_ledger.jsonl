@@ -471,3 +471,6 @@
 {"timestamp": "2026-09-11T04:28:23.339394", "file": "engine/intake_wazuh.py", "category": "maintainability", "status": "DEFERRED", "reason": "Routed to Local SLM (Validation Phase)"}
 {"timestamp": "2026-09-11T04:28:24.220414", "file": "engine/intake_wazuh.py", "category": "blueprint_compliance", "status": "ESCALATED", "reason": "Routing policy requires review for blueprint_compliance advisory."}
 {"timestamp": "2026-09-11T18:22:05.820870", "file": "engine/defeat_ledger.py", "job_id": "01e5bdd820da4d2c", "status": "PI_REJECTED", "reason": "Inference Error: HTTPConnectionPool(host='localhost', port=11434): Read timed out. (read timeout=180)", "source": "pi_critic"}
+{"timestamp": "2026-09-12T14:55:20.894217", "file": "test.py", "job_id": "manual_test_001", "status": "UNKNOWN", "reason": "No reason provided", "inference_duration_sec": 0, "source": "pi_critic"}
+{"timestamp": "2026-09-12T15:03:15.933843", "file": "test.py", "job_id": "test_002", "status": "UNKNOWN", "reason": "No reason provided", "inference_duration_sec": 0, "source": "pi_critic"}
+{"timestamp": "2026-09-12T15:12:42.320314", "file": "test.py", "job_id": "test_003", "status": "PI_REJECTED", "reason": "The proposed patch does not actually implement the intended fix for the issue.", "inference_duration_sec": 59.2, "source": "pi_critic"}
