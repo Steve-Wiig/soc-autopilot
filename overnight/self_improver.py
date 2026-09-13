@@ -413,7 +413,53 @@ def triage_backlog():
     if root_items and len(root_items) < len(backlog): _save_json(FIX_BACKLOG, root_items + leaf_items)
 
 
-def _generate_tdd_test(issue_desc: str, target_file: str, api_keys: dict) -> str:
+def _build_tdd_prompt(issue_desc: str, target_file: str, sig_context: str, route: str) -> str:
+    """Build the TDD generation prompt for the given routing decision.
+
+    LOCAL_TDD items are low-risk structural changes (docstring additions,
+    constant extractions, type annotations). The default "write a failing
+    test" prompt cannot be satisfied for a docstring addition - there is
+    no behavior to fail. The invariant-focused prompt asks for a test
+    that asserts the fix's invariant, which does fail on current code
+    and pass after the fix. The RED-phase gate is unchanged; this only
+    affects what the model is asked to produce.
+    """
+    common = (
+        f"ISSUE: {issue_desc}\nTARGET FILE: {target_file}\n"
+        f"PROJECT STRUCTURE: Files live in subdirectories (tools/, engine/, memory/).\n"
+        f"IMPORT RULE: Use package-relative imports. pytest runs from the repo\n"
+        f"root, so engine/, tools/, overnight/ are importable as packages.\n"
+        f"Example: from engine.file_name import function_name\n"
+        f"Do NOT import sys, os, subprocess, or shutil.\n\n"
+        f"{sig_context}\n"
+        "Output ONLY the python code for the test function. No markdown.\n"
+    )
+
+    if route == "LOCAL_TDD":
+        return (
+            "You are a senior QA engineer. Write a pytest test that asserts "
+            "the invariant this fix establishes.\n\n"
+            "The fix is a low-risk structural change. It may not change "
+            "runtime behavior. It is one of:\n"
+            "  * Add a missing docstring.\n"
+            "  * Extract a hardcoded value into a module-level constant.\n"
+            "  * Add a missing type annotation.\n"
+            "  * Remove redundant data or an unused field.\n\n"
+            "Write a test that asserts the invariant directly. Examples:\n"
+            "  * For a docstring: assert inspect.getdoc(fn) is not None\n"
+            "  * For a constant: assert module.CONSTANT_NAME == expected_value\n"
+            "  * For a type annotation: assert typing.get_type_hints(fn)['return'] is int\n\n"
+            "The test MUST fail on the current code and pass after the fix.\n\n"
+            + common
+        )
+
+    return (
+        "You are a senior QA engineer. Write a minimal failing pytest test for:\n"
+        + common
+    )
+
+
+def _generate_tdd_test(issue_desc: str, target_file: str, api_keys: dict, route: str = "REVIEW") -> str:
     # AST_SIGNATURE_FIX_V1
     sig_context = ""
     try:
@@ -427,26 +473,15 @@ def _generate_tdd_test(issue_desc: str, target_file: str, api_keys: dict) -> str
                 sigs.append(f"def {d.name}({', '.join(args)})")
             sig_context = f"REAL FUNCTION SIGNATURES IN THIS FILE (DO NOT INVENT NEW ARGUMENTS):\n{chr(10).join(sigs)}\n"
     except Exception as e:
-        print(f"       ⚠️ TDD AST sig read failed: {e}")
+        print(f"       \u26a0\ufe0f TDD AST sig read failed: {e}")
         sig_context = ""
 
-    prompt = (
-        f"You are a senior QA engineer. Write a minimal failing pytest test for:\n"
-        f"ISSUE: {issue_desc}\nTARGET FILE: {target_file}\n"
-        f"PROJECT STRUCTURE: Files live in subdirectories (tools/, engine/, memory/).\n"
-        f"IMPORT RULE: Use package-relative imports. pytest runs from the repo\n"
-        f"root, so engine/, tools/, overnight/ are importable as packages.\n"
-        f"Example: from engine.file_name import function_name\n"
-        f"Do NOT import sys, os, subprocess, or shutil.\n\n"
-        f"{sig_context}\n"
-        "Output ONLY the python code for the test function. No markdown.\n"
-    )
+    prompt = _build_tdd_prompt(issue_desc, target_file, sig_context, route)
     raw = generate(prompt, api_keys, temperature=0.1, model_type="code")
     if not raw: return None
     code = strip_fences(raw)
     try: ast.parse(code); return code
     except SyntaxError: return None
-
 
 
 def _failed_test_ids(tb):
