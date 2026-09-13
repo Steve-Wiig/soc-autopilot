@@ -23,6 +23,10 @@ from collections import Counter
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from engine.advisory_provenance import compute_source_hash, validate_advisory_provenance
 from engine.advisory_identity import AdvisoryIdentity
+from overnight.advisory_budget import (
+    AdvisoryAttemptState, BudgetPolicy, CandidateFailure,
+    should_continue, begin_model_attempt, record_failure,
+)
 from contracts.promotion_state import PromotionState
 from overnight.llm_client import generate, load_api_keys, strip_fences, gemini_pre_analysis, _call_gemini
 from overnight.budget_manager import APIBudgetManager
@@ -297,20 +301,19 @@ def _check_for_ghost_names(source_code: str):
     # Only check for hallucinated external imports.
     # Checking ast.Name nodes for local variables causes too many false positives.
     hallucinated = []
-    known_stdlib = {'os', 'sys', 'json', 're', 'math', 'time', 'datetime', 'logging',
-                    'sqlite3', 'hashlib', 'uuid', 'pathlib', 'typing', 'collections',
-                    'contextlib', 'subprocess', 'argparse', 'tempfile', 'io'}
+    # Python 3.10+ provides perfect stdlib detection, eliminating false positives
+    known_stdlib = sys.stdlib_module_names | {'engine', 'overnight', 'tools', 'orchestrator', 'memory'}
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 root_mod = alias.name.split('.')[0]
-                if root_mod not in known_stdlib and not root_mod.startswith(('engine', 'overnight', 'tools', 'orchestrator', 'memory')):
+                if root_mod not in known_stdlib:
                     hallucinated.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 root_mod = node.module.split('.')[0]
-                if root_mod not in known_stdlib and not root_mod.startswith(('engine', 'overnight', 'tools', 'orchestrator', 'memory')):
+                if root_mod not in known_stdlib:
                     hallucinated.append(node.module)
 
     return list(set(hallucinated))
@@ -751,6 +754,13 @@ def _cleanup_tdd_artifact(tdd_path):
 
 
 def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
+    _budget_state = AdvisoryAttemptState(
+        advisory_id=str(file_path),
+        advisory_fingerprint=advisory_fingerprint or "",
+        source_fingerprint="",
+    )
+    _budget_policy = BudgetPolicy()
+
     try: original = file_path.read_text()
     except Exception: return False
 
@@ -887,8 +897,10 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         # applied. The loop records APPLIED/REJECTED. Previously this recorded
         # APPLIED + returned False, causing drain to retry forever and burn
         # one TDD generation call per retry.
-        if category in ['maintainability', 'blueprint_compliance', 'performance']:
-            print(f"       ✅ LOW-RISK BYPASS: Proceeding without regression test (baseline passed).")
+        # P0 HARDENING: Baseline pass alone does not authorize behavior-changing bypasses.
+        # Only strictly non-functional categories may bypass TDD.
+        if category in ['documentation', 'style']:
+            print(f"       ✅ LOW-RISK BYPASS: Proceeding without regression test (baseline passed, non-functional category).")
             # fall through
         elif tdd_test_code is None:
             if category in FUNCTIONAL_CATEGORIES or category in ['style', 'documentation', '']:
@@ -899,9 +911,11 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
             return True
         else:
-            print(f"       ⚠️ Baseline passed for '{category}', but unable to generate/validate regression test. Dropping.")
-            _record_ledger(file_path, issue, "STALE", "Baseline passed, no valid regression test generated")
-            return False
+            # P0 HARDENING: tdd_test_code existed but was vacuous (not kept).
+            # Non-documentation/style categories cannot bypass without a valid test.
+            print(f"       ⚠️ Behavior-changing category '{category}' has vacuous TDD. Dropping as stale.")
+            _record_ledger(file_path, issue, "STALE", "Baseline passed, vacuous TDD test rejected for behavior-changing category")
+            return True
 
     try:
         # 3. GENERATION LOOP
@@ -931,7 +945,10 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         else:
             print(f"       🔬 Forensic analysis unavailable (falling back to direct generation)")
 
-        for attempt in range(2):
+        attempt = 0
+        while should_continue(_budget_state, _budget_policy):
+            attempt += 1
+            begin_model_attempt(_budget_state)
             if attempt == 0:
                 pre_flight_rejection_msg = ""
 
@@ -971,9 +988,17 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             if not is_safe:
                 print(f"       🛑 PRE-FLIGHT REJECTED: {safety_msg}")
                 pre_flight_rejection_msg = safety_msg
+                if "syntax" in safety_msg.lower() or "invalid python" in safety_msg.lower():
+                    record_failure(_budget_state, _budget_policy, CandidateFailure.INVALID_PYTHON)
+                else:
+                    record_failure(_budget_state, _budget_policy, CandidateFailure.POLICY_REJECTION)
+                if 'candidate_fp' in locals():
+                    _budget_state.failed_candidate_fingerprints.add(candidate_fp)
                 continue
 
-            if not raw: return False
+            if not raw:
+                record_failure(_budget_state, _budget_policy, CandidateFailure.EMPTY_RESPONSE)
+                continue
 
             # NEW: Strip LLM prose, extract ONLY the Aider diff blocks
             import re
@@ -982,6 +1007,15 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                 raw = "\n".join(diff_blocks)
 
             raw = strip_fences(raw)
+
+            # P0 HARDENING: Candidate fingerprinting and duplicate detection
+            import hashlib
+            candidate_fp = hashlib.sha256(raw.encode('utf-8')).hexdigest()
+            if candidate_fp in _budget_state.failed_candidate_fingerprints:
+                print(f"       🛑 REJECTED REPEATED PATCH: {candidate_fp[:12]}")
+                record_failure(_budget_state, _budget_policy, CandidateFailure.REPEATED_PATCH)
+                continue
+            _budget_state.last_candidate_fingerprint = candidate_fp
 
             # Parse & Apply Patches
             modified_files = {}
@@ -1333,7 +1367,7 @@ def drain_fix_backlog(api_keys, max_fixes=3):
         if _classify_and_route_local(issue_desc):
             print(f"       🔀 Intercepted stylistic fix. Routing to Local SLM (Port 11435). Bypassing cloud budget.")
             _record_ledger(fpath, item.get('issue', {}), "DEFERRED", "Routed to Local SLM (Validation Phase)")
-            if item in remaining: remaining.remove(item)
+            deferred.append(item)  # GATED FIX: Prevent silent deletion from backlog
             continue
         # ----------------------------------------------------------------
         # --- HARDENING: Source Provenance Validation ---
@@ -1641,7 +1675,26 @@ def _process_async_tdd_queue():
     kept = []
     resolved = 0
 
-    for line in lines:
+    # CIRCUIT BREAKER: Check if Ollama is alive before processing hundreds of items
+    try:
+        import requests
+        health = requests.get("http://127.0.0.1:11434/api/tags", timeout=5)
+        if health.status_code != 200:
+            raise Exception("Ollama health check failed")
+    except Exception as e:
+        print(f"       ⚠️ Ollama unreachable or dead ({e}). Deferring all {len(lines)} items to avoid timeout loop.")
+        try:
+            tmp = TDD_EVAL_QUEUE.with_suffix(".jsonl.tmp")
+            tmp.write_text("\n".join(lines) + "\n" if lines else "")
+            tmp.replace(TDD_EVAL_QUEUE)
+        except Exception: pass
+        print(f"\U0001f9e0 [ASYNC LOCAL REVIEWER] Aborted due to dead Ollama.")
+        return
+
+    consecutive_failures = 0
+    MAX_CONSECUTIVE_FAILURES = 3
+
+    for idx, line in enumerate(lines):
         if not line.strip(): continue
         try:
             entry = json.loads(line)
@@ -1660,7 +1713,8 @@ def _process_async_tdd_queue():
         try:
             import requests
             prompt = f"Evaluate this pytest test for quality. Is it a valid test? Reply ONLY 'GOOD' or 'BAD'.\n\nIssue: {entry.get('issue_desc')}\nTest:\n{entry.get('tdd_code')}"
-            resp = requests.post("http://127.0.0.1:11434/api/generate", json={"model": "qwen2.5-coder:1.5b", "prompt": prompt, "stream": False}, timeout=30)
+            resp = requests.post("http://127.0.0.1:11434/api/generate", json={"model": "qwen2.5-coder:1.5b", "prompt": prompt, "stream": False}, timeout=300)
+            consecutive_failures = 0  # Reset on successful connection
 
             verdict = "UNKNOWN"
             if resp.status_code == 200:
@@ -1676,17 +1730,55 @@ def _process_async_tdd_queue():
             )
             resolved += 1
         except Exception as e:
-            print(f"       \u26a0\ufe0f Async review failed for item (attempt {entry['attempts']}): {e}")
-            if entry["attempts"] >= _max_attempts:
-                try:
-                    _deadletter.parent.mkdir(parents=True, exist_ok=True)
-                    with open(_deadletter, "a") as df:
-                        df.write(json.dumps({"reason": "max_attempts", "entry": entry}) + "\n")
-                except Exception:
-                    pass
+            print(f"       ⚠️ Local Ollama review failed: {e}. Falling back to cloud evaluation...")
+            try:
+                # CLOUD FALLBACK: Ensure progress even if local 1-core VM is choked
+                from overnight.llm_client import generate, load_api_keys
+                keys = load_api_keys()
+                fallback_prompt = f"Evaluate this pytest test for quality. Is it a valid test? Reply ONLY 'GOOD' or 'BAD'.\n\nIssue: {entry.get('issue_desc')}\nTest:\n{entry.get('tdd_code')}"
+                
+                cloud_resp = generate(fallback_prompt, keys, temperature=0.1, max_tokens=50, model_type="code")
+                text_v = (cloud_resp or "").upper()
+                
+                if "GOOD" in text_v:
+                    verdict = "GOOD_TEST (Cloud Fallback)"
+                elif "BAD" in text_v:
+                    verdict = "BAD_TEST (Cloud Fallback)"
+                else:
+                    verdict = "UNKNOWN (Cloud Fallback)"
+                    
+                _record_ledger(
+                    ROOT / entry.get("file", "unknown.py"),
+                    {"description": entry.get("issue_desc", ""), "category": entry.get("category", "unknown")},
+                    "TDD_EVALUATED_CLOUD_FALLBACK",
+                    f"Cloud LLM Verdict: {verdict}"
+                )
                 resolved += 1
-            else:
-                kept.append(json.dumps(entry))
+                # SUCCESS! Reset consecutive failures so local can keep trying next items
+                consecutive_failures = 0
+                print(f"       ✅ Cloud fallback succeeded. Verdict: {verdict}")
+                
+            except Exception as cloud_e:
+                print(f"       ❌ Cloud fallback also failed: {cloud_e}")
+                consecutive_failures += 1
+                
+                if entry["attempts"] >= _max_attempts:
+                    try:
+                        _deadletter.parent.mkdir(parents=True, exist_ok=True)
+                        with open(_deadletter, "a") as df:
+                            df.write(json.dumps({"reason": "max_attempts_both_local_and_cloud", "entry": entry}) + "\n")
+                    except Exception: pass
+                    resolved += 1
+                else:
+                    kept.append(json.dumps(entry))
+                
+                # Circuit breaker only triggers if BOTH local and cloud fail repeatedly
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    print(f"       🛑 CIRCUIT BREAKER: {MAX_CONSECUTIVE_FAILURES} consecutive total failures (Local + Cloud). Stopping queue processing.")
+                    if entry["attempts"] < _max_attempts:
+                        kept.append(json.dumps(entry))
+                    kept.extend(lines[idx+1:])
+                    break
 
     try:
         tmp = TDD_EVAL_QUEUE.with_suffix(".jsonl.tmp")

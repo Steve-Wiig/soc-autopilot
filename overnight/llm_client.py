@@ -932,20 +932,27 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
         return ""
 
 
-def strip_fences(text):
-    """Remove markdown code fences."""
+def strip_fences(text: str) -> str:
+    """Robustly extract Python code from LLM response, handling unclosed fences and conversational text."""
     if not text:
         return ""
+
     text = text.strip()
 
-    m = re.search(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?(.*?)\n?```[ \t]*$", text, re.DOTALL)
+    # 1. Try to find a complete markdown block (python or generic)
+    # Handles: ```python\ncode\n```
+    m = re.search(r'```(?:python)?\s*\n(.*?)\n\s*```', text, re.DOTALL | re.IGNORECASE)
     if m:
         return m.group(1).strip()
 
-    text = re.sub(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?", "", text)
-    text = re.sub(r"\n?```[ \t]*$", "", text)
-    return text.strip()
+    # 2. Try to find an unclosed markdown block (LLM got cut off)
+    # Handles: ```python\ncode
+    m = re.search(r'```(?:python)?\s*\n(.*)', text, re.DOTALL | re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
 
+    # 3. Fallback: If no fences at all, just return the stripped text
+    return text
 
 
 
