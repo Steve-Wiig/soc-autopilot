@@ -64,6 +64,13 @@ def _print_scorecard(label, scorecard, category=False):
 
     print(f"   Total decisions: {scorecard.get('total_decisions', 0)}")
     print(f"   Success rate:    {scorecard.get('success_rate', 0)}%")
+    # The scorecard rate counts only actionable decisions
+    # (APPLIED + REJECTED + ESCALATED). The raw rate counts all
+    # terminal decisions including STALE. Both are shown so the
+    # operational picture is not hidden by the choice of denominator.
+    _terminal = applied + rejected + escalated + stale
+    _raw = (applied / _terminal * 100) if _terminal else 0.0
+    print(f"   Raw success:     {_raw:.1f}% (applied / all terminal)")
     print(f"   Proven patterns: {scorecard.get('proven_fix_count', 0)} stored")
     print(f"   Trend:           {scorecard.get('trend', 'N/A')}")
 
@@ -239,8 +246,25 @@ def main():
         deferred = json.loads(deferred_path.read_text()) if deferred_path.exists() else []
     except Exception:
         deferred = []
+    try:
+        _nrm_path = ROOT / "overnight/needs_manual_review.json"
+        _nrm = json.loads(_nrm_path.read_text()) if _nrm_path.exists() else []
+    except Exception:
+        _nrm = []
+    try:
+        _dlog_path = ROOT / "overnight/manual_review_decisions.jsonl"
+        _dlog = [l for l in _dlog_path.read_text().splitlines() if l.strip()] if _dlog_path.exists() else []
+    except Exception:
+        _dlog = []
+    try:
+        _tdd_path = ROOT / "overnight/tdd_eval_queue.jsonl"
+        _tdd = [l for l in _tdd_path.read_text().splitlines() if l.strip()] if _tdd_path.exists() else []
+    except Exception:
+        _tdd = []
     print(f"   Active    : {len(backlog)}")
     print(f"   Deferred  : {len(deferred)}")
+    print(f"   Pending review: {len(_nrm)} ({len(_dlog)} decided)")
+    print(f"   TDD eval queue: {len(_tdd)}")
 
     # ── 4. LIVE ACTIVITY ──
     h1("📈 LIVE ACTIVITY (Last 10 lines)")
