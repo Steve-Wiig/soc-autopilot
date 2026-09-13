@@ -33,7 +33,11 @@ class TelemetryWriter:
         if now - self._warnings.get(err_type, 0) > 300:
             self._warnings[err_type] = now
             try: print(f"[TELEMETRY WARNING] {msg}", file=sys.stderr)
-            except Exception: pass
+            except Exception as e:
+                # HARDENED: Fail closed with telemetry
+                import logging
+                logging.error(f'CONTROL-PLANE FAILURE in telemetry.py: {e}')
+                raise
 
     def _get_total_size(self):
         total = 0

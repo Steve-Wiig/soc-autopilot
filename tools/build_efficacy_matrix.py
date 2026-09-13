@@ -29,7 +29,11 @@ def gather_events():
                 for line in f.read_text().splitlines():
                     if line.strip():
                         try: events.append(json.loads(line))
-                        except Exception: pass
+                        except Exception as e:
+                            # HARDENED: Fail closed with telemetry
+                            import logging
+                            logging.error(f'CONTROL-PLANE FAILURE in build_efficacy_matrix.py: {e}')
+                            raise
     return deduplicate_events(events)
 
 def calculate_metrics(events):

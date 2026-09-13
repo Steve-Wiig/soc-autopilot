@@ -54,8 +54,11 @@ def _release_lock(cur: Optional[psycopg2.extensions.cursor], lock_id: int) -> No
     if cur:
         try:
             cur.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in hash_chain_sealer.py: {e}')
+            raise
 
 
 def get_last_chain_state(cur: psycopg2.extensions.cursor) -> Tuple[int, str]:
@@ -198,16 +201,22 @@ def _close_cursor_safely(cur: Optional[psycopg2.extensions.cursor]) -> None:
     if cur:
         try:
             cur.close()
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in hash_chain_sealer.py: {e}')
+            raise
 
 
 def _close_connection_safely(conn: Optional[psycopg2.extensions.connection]) -> None:
     if conn:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in hash_chain_sealer.py: {e}')
+            raise
 
 
 def seal_audit_chain_with_connection(

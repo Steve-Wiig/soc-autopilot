@@ -1,6 +1,6 @@
 #!/bin/bash
 # Ensures exactly one self_improver instance is running
-cd /home/swiig/Documents/soc-autopilot
+cd "$(dirname "$0")/.."
 
 if pgrep -f "self_improver.py" > /dev/null; then
     echo "⚠️  Already running: $(pgrep -fa self_improver.py)"

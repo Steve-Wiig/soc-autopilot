@@ -21,8 +21,11 @@ def _load():
     if QUOTA_FILE.exists():
         try:
             return json.loads(QUOTA_FILE.read_text())
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in openrouter_quota.py: {e}')
+            raise
     return {"used_today": 0, "day": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "locked_until": None}
 
 

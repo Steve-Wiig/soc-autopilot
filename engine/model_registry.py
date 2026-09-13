@@ -168,8 +168,8 @@ def get_default_router() -> ModelRouter:
         base_url=os.environ.get("SOC_MOCK_LLM_URL", "http://localhost:11434"), priority=20, timeout=60
     )))
     router.register(OpenAICompatibleProvider(ProviderConfig(
-        name="openrouter", scope=ProviderScope.DEVELOPMENT, roles=("primary", "code_review", "dev_triage"),
-        base_url="https://openrouter.ai/api", priority=30, timeout=120, api_key_env="OPENROUTER_API_KEY"
+# HARDENED: Neutralized cloud fallback ->         name="openrouter", scope=ProviderScope.DEVELOPMENT, roles=("primary", "code_review", "dev_triage"),
+# HARDENED: Neutralized cloud fallback ->         base_url="https://openrouter.ai/api", priority=30, timeout=120, api_key_env="OPENROUTER_API_KEY"
     )))
     return router
 

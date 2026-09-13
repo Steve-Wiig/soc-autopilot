@@ -94,8 +94,11 @@ def _budget_record(provider):
     try:
         from overnight.budget_manager import APIBudgetManager
         APIBudgetManager().record_call(provider)
-    except Exception:
-        pass
+    except Exception as e:
+        # HARDENED: Fail closed with telemetry
+        import logging
+        logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
+        raise
 
 
 def _budget_allow(provider, model=None):
@@ -496,8 +499,11 @@ def get_groq_models(api_key):
             cache = json.loads(GROQ_CACHE_FILE.read_text())
             if time.time() - cache.get("timestamp", 0) < CACHE_TTL:
                 return cache["models"]
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
+            raise
 
     models = discover_groq_models(api_key)
     if models:
@@ -582,8 +588,11 @@ def _groq_note_rl(model, headers):
         st = headers.get("x-ratelimit-reset-tokens")
         if sr: e["req_reset"] = now + _parse_dur(sr)
         if st: e["tok_reset"] = now + _parse_dur(st)
-    except Exception:
-        pass
+    except Exception as e:
+        # HARDENED: Fail closed with telemetry
+        import logging
+        logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
+        raise
 
 
 def _groq_preempted(model):
@@ -808,8 +817,11 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         try:
             from engine.reasoning_ledger import record_interaction
             record_interaction("heavy_generation", prompt, result, provider)
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
+            raise
         return result
 
     result = _call_openrouter(

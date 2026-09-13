@@ -60,8 +60,11 @@ def record_interaction(stage: str, prompt: str, raw_response: str, model: str = 
     try:
         with open(local_file, "a") as f:
             f.write(json.dumps(event) + "\n")
-    except Exception:
-        pass
+    except Exception as e:
+        # HARDENED: Fail closed with telemetry
+        import logging
+        logging.error(f'CONTROL-PLANE FAILURE in reasoning_ledger.py: {e}')
+        raise
 
     # 2. NAS Guardrail: Check st_dev to ensure NAS is actually mounted
     try:
@@ -73,8 +76,11 @@ def record_interaction(stage: str, prompt: str, raw_response: str, model: str = 
             nas_file = NAS_DIR / "reasoning.jsonl"
             with open(nas_file, "a") as f:
                 f.write(json.dumps(event) + "\n")
-    except Exception:
-        pass # Fail-open: NAS is asleep/unmounted, data is safe in local buffer
+    except Exception as e:
+        # HARDENED: Fail closed with telemetry
+        import logging
+        logging.error(f'CONTROL-PLANE FAILURE in reasoning_ledger.py: {e}')
+        raise # Fail-open: NAS is asleep/unmounted, data is safe in local buffer
 
 
 # --- Telemetry Truth Model ---

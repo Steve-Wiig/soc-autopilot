@@ -59,6 +59,10 @@ def sync():
         except Exception as e: log(f"rsync execution failed: {e}")
     finally:
         try: os.close(lock_fd)
-        except Exception: pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in sync_telemetry.py: {e}')
+            raise
 
 if __name__ == "__main__": sync()

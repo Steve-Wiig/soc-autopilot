@@ -120,6 +120,18 @@ def main():
         parser.error("--days must be >= 0")
 
     print("=== 📊 UNIFIED SYSTEM DASHBOARD ===")
+    
+    # Heartbeat Status Check
+    hb_file = ROOT / "overnight" / ".heartbeat"
+    if hb_file.exists():
+        try:
+            hb_data = hb_file.read_text().strip()
+            print(f"🟢 SYSTEM STATUS: ACTIVE ({hb_data})")
+        except Exception:
+            print("🟡 SYSTEM STATUS: Running (Heartbeat unreadable)")
+    else:
+        print("🔴 SYSTEM STATUS: No heartbeat found (Process may be stopped)")
+    print("-" * 60)
 
     # ── 1. ORACLE SWARM ──
     h1("🧠 ORACLE SWARM CONSENSUS GATE")

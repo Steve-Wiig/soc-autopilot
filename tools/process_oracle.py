@@ -31,8 +31,11 @@ def evacuate_if_needed():
                     shutil.move(str(f), str(NAS_PENDING / f.name))
                     count += 1
                 print(f"🚚 EVACUATED {count} Oracle files ({total_size // (1024*1024)}MB) to NAS.")
-        except Exception:
-            pass # Fail-open: NAS offline, data stays local
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in process_oracle.py: {e}')
+            raise # Fail-open: NAS offline, data stays local
 
 def main():
     LOCAL_PENDING.mkdir(parents=True, exist_ok=True)

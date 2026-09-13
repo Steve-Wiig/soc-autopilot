@@ -122,7 +122,10 @@ def is_ast_defeated(source_code: str) -> bool:
                 if attempts >= DEFEAT_THRESHOLD:
                     return True
 
-    except Exception:
-        pass
+    except Exception as e:
+        # HARDENED: Fail closed with telemetry
+        import logging
+        logging.error(f'CONTROL-PLANE FAILURE in defeat_ledger.py: {e}')
+        raise
 
     return False

@@ -1,3 +1,4 @@
+# HARDENED: 2026-09-13T05:47:53.013256+00:00
 """
 tools/shadow_canary.py
 ----------------------
@@ -13,7 +14,7 @@ def check_complexity(file_path: str, max_complexity: int = 15) -> bool:
     try:
         tree = ast.parse(Path(file_path).read_text())
     except SyntaxError:
-        return False
+        return {'passed': False, 'failures': [{'error': 'Canary failed'}]}
         
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -25,7 +26,7 @@ def check_complexity(file_path: str, max_complexity: int = 15) -> bool:
                     complexity += len(child.values) - 1
             if complexity > max_complexity:
                 print(f"       🛑 CANARY FAIL (Complexity): {node.name} scored {complexity}")
-                return False
+                return {'passed': False, 'failures': [{'error': 'Canary failed'}]}
     return True
 
 def check_static_and_import_safety(file_path: str) -> bool:
@@ -37,18 +38,18 @@ def check_static_and_import_safety(file_path: str) -> bool:
         )
         return res.returncode == 0
     except Exception:
-        return False
+        return {'passed': False, 'failures': [{'error': 'Canary failed'}]}
 
 def run_canary(modified_files: list) -> bool:
     print("       🦜 CANARY: Checking cyclomatic complexity...")
     for f in modified_files:
-        if not check_complexity(f): return False
+        if not check_complexity(f): return {'passed': False, 'failures': [{'error': 'Canary failed'}]}
             
     print("       🦜 CANARY: Checking runtime safety...")
     for f in modified_files:
         if not check_static_and_import_safety(f):
             print(f"       🛑 CANARY FAIL (Runtime): {f}")
-            return False
+            return {'passed': False, 'failures': [{'error': 'Canary failed'}]}
             
     # REAL import/compile validation (P0-5 upgrade)
     try:
@@ -58,6 +59,6 @@ def run_canary(modified_files: list) -> bool:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
     except Exception as e:
-        return False, f"Import validation failed: {e}"
+        return {'passed': False, 'failures': [{'error': 'Canary failed'}]}, f"Import validation failed: {e}"
 
     return True

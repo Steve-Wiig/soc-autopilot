@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Overnight loop: budget-gated single drain (internal loop handles passes), morning report.
-cd /home/swiig/Documents/soc-autopilot
+cd "$(dirname "$0")/.."
 
 LOG="overnight/run_$(date +%Y%m%d_%H%M%S).log"
 REPORT="overnight/morning_report.md"

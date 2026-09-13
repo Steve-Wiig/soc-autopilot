@@ -51,8 +51,11 @@ def check_docs_current() -> bool:
             for term in FORBIDDEN_TERMS:
                 if term in content:
                     issues.append(f"  {md_file.name}: '{term}'")
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in verify_truth_sync.py: {e}')
+            raise
 
     if issues:
         print(f"❌ Documentation contains deprecated terms:")
@@ -112,8 +115,11 @@ def check_source_no_deprecated() -> bool:
                 for term in FORBIDDEN_TERMS:
                     if term in content:
                         issues.append(f"  {py_file.relative_to(ROOT)}: '{term}'")
-            except Exception:
-                pass
+            except Exception as e:
+                # HARDENED: Fail closed with telemetry
+                import logging
+                logging.error(f'CONTROL-PLANE FAILURE in verify_truth_sync.py: {e}')
+                raise
 
     if issues:
         print(f"❌ Source code contains deprecated terms:")

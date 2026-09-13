@@ -17,8 +17,11 @@ def get_ledger_path():
     try:
         if NAS_FILE.exists() and os.stat("/mnt/backup-nas").st_dev != os.stat("/").st_dev:
             return NAS_FILE
-    except Exception:
-        pass
+    except Exception as e:
+        # HARDENED: Fail closed with telemetry
+        import logging
+        logging.error(f'CONTROL-PLANE FAILURE in audit.py: {e}')
+        raise
     return LOCAL_FILE
 
 def main():

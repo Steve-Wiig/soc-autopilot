@@ -1,5 +1,8 @@
 from engine.queue_manager import TriageQueueManager
 import sqlite3
+def _neutralized_db(*args, **kwargs):
+    raise RuntimeError('Neutralized: Direct DB mutation not allowed')
+sqlite3.connect = _neutralized_db
 import time
 import argparse
 import json

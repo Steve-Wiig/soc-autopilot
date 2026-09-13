@@ -1,3 +1,6 @@
+# TRUST BOUNDARY NOTICE: development-only. Called by overnight/self_improver.py.
+# Bypasses ModelRouter and SOC_ROUTING_MODE. Do not import from production code.
+# See docs/p0-1-routing-authority.md.
 import os
 import json
 import urllib.request

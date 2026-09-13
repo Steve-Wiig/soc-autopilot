@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-cd /home/swiig/Documents/soc-autopilot
+cd "$(dirname "$0")/.."
 
 set -a
 source .env

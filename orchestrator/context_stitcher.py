@@ -75,8 +75,11 @@ def _put_pg_conn(conn: psycopg2.extensions.connection, pool: Optional[psycopg2.p
         except Exception:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                # HARDENED: Fail closed with telemetry
+                import logging
+                logging.error(f'CONTROL-PLANE FAILURE in context_stitcher.py: {e}')
+                raise
 
 
 class DatabaseError(Exception):
@@ -223,8 +226,11 @@ def stitch_memory_context(
         elif not use_pool and conn is not None:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                # HARDENED: Fail closed with telemetry
+                import logging
+                logging.error(f'CONTROL-PLANE FAILURE in context_stitcher.py: {e}')
+                raise
 def _execute_similarity_query(cursor: psycopg2.extensions.cursor, embedding: list[float], cutoff: datetime, limit: int) -> tuple[list[tuple], list[str]]:
     query = """
         SELECT case_id, summary, cosine_distance(embedding, %s::vector) as dist
@@ -266,8 +272,11 @@ def reset_default_pool() -> None:
         if pool is not None:
             try:
                 pool.closeall()
-            except Exception:
-                pass
+            except Exception as e:
+                # HARDENED: Fail closed with telemetry
+                import logging
+                logging.error(f'CONTROL-PLANE FAILURE in context_stitcher.py: {e}')
+                raise
             _DEFAULT_POOL = None
         if _DEFAULT_POOL_FACTORY is not None:
             _DEFAULT_POOL_FACTORY = None

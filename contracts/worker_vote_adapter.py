@@ -24,8 +24,11 @@ def _timestamp(value):
                     value.replace("Z", "+00:00")
                 ).timestamp()
             )
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in worker_vote_adapter.py: {e}')
+            raise
 
     return int(datetime.now(timezone.utc).timestamp())
 

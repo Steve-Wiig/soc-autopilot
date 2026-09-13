@@ -50,8 +50,11 @@ def get_generated():
             try:
                 entry = json.loads(line)
                 generated.add((entry['file'], entry['issue']['description']))
-            except Exception:
-                pass
+            except Exception as e:
+                # HARDENED: Fail closed with telemetry
+                import logging
+                logging.error(f'CONTROL-PLANE FAILURE in pi_generator.py: {e}')
+                raise
     return generated
 
 def generate_patch(file_path, issue):

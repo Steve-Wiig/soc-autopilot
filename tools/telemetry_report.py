@@ -49,8 +49,11 @@ def load_events():
                         seen_events.add(identity)
                         events.append(event)
 
-            except Exception:
-                pass
+            except Exception as e:
+                # HARDENED: Fail closed with telemetry
+                import logging
+                logging.error(f'CONTROL-PLANE FAILURE in telemetry_report.py: {e}')
+                raise
 
     return events
 

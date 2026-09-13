@@ -64,7 +64,10 @@ def main():
                 for line in f:
                     if line.strip():
                         try: patches.append((json.loads(line), line))
-                        except Exception: pass
+                        except Exception as e:
+                        import logging
+                        logging.error(f'CONTROL-PLANE FAILURE in pi_idle_reviewer: {e}')
+                        raise
             finally:
                 fcntl.flock(f, fcntl.LOCK_UN)
         if patches:

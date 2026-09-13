@@ -21,15 +21,22 @@ def extract_json(text: str) -> dict:
     if match:
         try:
             return json.loads(match.group(0))
-        except Exception:
-            pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in consensus_gate.py: {e}')
+            raise
 
     # 2. Fallback: Find any { ... } block
     start = text.find('{')
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
         try: return json.loads(text[start:end+1])
-        except Exception: pass
+        except Exception as e:
+            # HARDENED: Fail closed with telemetry
+            import logging
+            logging.error(f'CONTROL-PLANE FAILURE in consensus_gate.py: {e}')
+            raise
 
     return {"approve": False, "reason": "Failed to parse JSON (Model leaked Chain of Thought)"}
 
