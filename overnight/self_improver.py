@@ -877,7 +877,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         except ValueError as e:
             print(f"       🛑 TDD AST GATE REJECTED: {e}")
             tdd_test_code = None  # Drop it safely
-            
+
         if tdd_test_code:
             # Queue for Async Local LLM Review (Slow Path)
             _queue_tdd_for_async_local_review(issue, tdd_test_code, file_path)
@@ -1783,17 +1783,17 @@ def _process_async_tdd_queue():
                 from overnight.llm_client import generate, load_api_keys
                 keys = load_api_keys()
                 fallback_prompt = f"Evaluate this pytest test for quality. Is it a valid test? Reply ONLY 'GOOD' or 'BAD'.\n\nIssue: {entry.get('issue_desc')}\nTest:\n{entry.get('tdd_code')}"
-                
+
                 cloud_resp = generate(fallback_prompt, keys, temperature=0.1, max_tokens=50, model_type="code")
                 text_v = (cloud_resp or "").upper()
-                
+
                 if "GOOD" in text_v:
                     verdict = "GOOD_TEST (Cloud Fallback)"
                 elif "BAD" in text_v:
                     verdict = "BAD_TEST (Cloud Fallback)"
                 else:
                     verdict = "UNKNOWN (Cloud Fallback)"
-                    
+
                 _record_ledger(
                     ROOT / entry.get("file", "unknown.py"),
                     {"description": entry.get("issue_desc", ""), "category": entry.get("category", "unknown")},
@@ -1804,11 +1804,11 @@ def _process_async_tdd_queue():
                 # SUCCESS! Reset consecutive failures so local can keep trying next items
                 consecutive_failures = 0
                 print(f"       ✅ Cloud fallback succeeded. Verdict: {verdict}")
-                
+
             except Exception as cloud_e:
                 print(f"       ❌ Cloud fallback also failed: {cloud_e}")
                 consecutive_failures += 1
-                
+
                 if entry["attempts"] >= _max_attempts:
                     try:
                         _deadletter.parent.mkdir(parents=True, exist_ok=True)
@@ -1822,7 +1822,7 @@ def _process_async_tdd_queue():
                     resolved += 1
                 else:
                     kept.append(json.dumps(entry))
-                
+
                 # Circuit breaker only triggers if BOTH local and cloud fail repeatedly
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     print(f"       🛑 CIRCUIT BREAKER: {MAX_CONSECUTIVE_FAILURES} consecutive total failures (Local + Cloud). Stopping queue processing.")
@@ -1899,7 +1899,7 @@ def main():
                 import logging
                 logging.error(f'CONTROL-PLANE FAILURE in self_improver.py: {e}')
                 raise
-            
+
             print(budget.report())
 
             try:
@@ -1913,7 +1913,7 @@ def main():
             # Heartbeat: Update status file for dashboard visibility
             heartbeat_file = ROOT / "overnight" / ".heartbeat"
             heartbeat_file.write_text(f"Cycle: {cycle} | TDD Queue: {_t} | Backlog: {_b} | Last Active: {datetime.now().strftime('%H:%M:%S')}")
-            
+
             print(f"\n💤 Sleeping {_cur_iv}s (base={_base_iv}s, idle_max={_IDLE_MAX}s)...")
             time.sleep(_cur_iv)
             cycle += 1

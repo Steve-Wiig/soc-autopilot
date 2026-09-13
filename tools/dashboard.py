@@ -120,7 +120,7 @@ def main():
         parser.error("--days must be >= 0")
 
     print("=== 📊 UNIFIED SYSTEM DASHBOARD ===")
-    
+
     # Heartbeat Status Check
     hb_file = ROOT / "overnight" / ".heartbeat"
     if hb_file.exists():
