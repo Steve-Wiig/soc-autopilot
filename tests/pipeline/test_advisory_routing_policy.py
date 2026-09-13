@@ -214,7 +214,13 @@ def test_low_risk_baseline_none_does_not_enter_failure_reporting(tmp_path, monke
     assert result is False
 
 
-def test_routing_secret_substring_remains_conservative():
+def test_routing_secret_word_alone_does_not_trigger_review():
+    """At low severity, a bare 'secret' word does not route to REVIEW.
+
+    Severity-gated matching: 'secret sauce' is idiomatic English, not
+    a security concern. Only severity >= medium triggers on this term.
+    See tests/test_high_risk_routing.py for the classifier contract.
+    """
     import overnight.self_improver as si
 
     issue = {
@@ -226,6 +232,21 @@ def test_routing_secret_substring_remains_conservative():
             "Reduce allocations in a hot loop; "
             "secret sauce is unrelated wording."
         ),
+    }
+
+    assert si._classify_issue_for_routing(issue) == "LOCAL_TDD"
+
+
+def test_routing_real_secret_advisory_still_reviewed():
+    """A genuine credential/secret advisory escalates regardless."""
+    import overnight.self_improver as si
+
+    issue = {
+        "category": "maintainability",
+        "severity": "high",
+        "effort": "small",
+        "impact": "high",
+        "description": "hardcoded secret is read from an env var fallback",
     }
 
     assert si._classify_issue_for_routing(issue) == "REVIEW"

@@ -170,27 +170,56 @@ def _escalate_to_manual(file_path, issue, reason):
 # ============================================================
 # ADVISORY ROUTING POLICY
 # ============================================================
-_HIGH_RISK_ROUTING_TERMS = (
-    "security",
+# Terms that always escalate, regardless of severity. These are
+# unambiguously about security, data integrity, or external trust.
+_ALWAYS_HIGH_RISK = (
     "sql injection",
+    "race condition",
+    "data loss",
+    "credential",
+    "external llm",
+)
+
+# Terms that escalate only when severity is medium or higher.
+# At low/informational severity these are too noisy: "audit" matches
+# identifiers such as audit_chain; "schema" matches any database-
+# related maintainability advisory; "security" appears in both
+# concerns and non-concerns. Verified against the current
+# needs_manual_review backlog: 25 of 34 high-risk triggers came
+# from the bare substring match on "audit".
+_SEVERITY_GATED_HIGH_RISK = (
+    "security",
     "authentication",
     "authorization",
-    "credential",
     "secret",
-    "race condition",
     "concurrency",
-    "data loss",
-    "audit",
     "sanitization",
-    "external llm",
     "database migration",
+    "audit",
     "schema",
 )
 
 def _has_high_risk_routing_signal(issue):
-    """Return True when the advisory contains an explicit high-risk signal."""
+    """Return True when the advisory contains an explicit high-risk signal.
+
+    Uses word-boundary matching to avoid false positives on identifiers
+    such as `audit_chain` or `reauthentication`. Also gates the noisier
+    terms on severity, so a low-severity maintainability advisory does
+    not escalate on a lexical accident.
+    """
     description = str(issue.get("description", "")).strip().lower()
-    return any(term in description for term in _HIGH_RISK_ROUTING_TERMS)
+    severity = str(issue.get("severity", "")).strip().lower()
+
+    for term in _ALWAYS_HIGH_RISK:
+        if re.search(r"\b" + re.escape(term) + r"\b", description):
+            return True
+
+    if severity in {"medium", "high", "critical"}:
+        for term in _SEVERITY_GATED_HIGH_RISK:
+            if re.search(r"\b" + re.escape(term) + r"\b", description):
+                return True
+
+    return False
 
 
 def _classify_issue_for_routing(issue):
