@@ -26,10 +26,17 @@ def enforce_quorum(candidate: DevelopmentCandidate, votes: List[WorkerVote]) -> 
     if len(set(worker_ids)) != 3:
         raise QuorumViolation(f"Workers not independent. IDs: {worker_ids}")
 
-    # 3. Normalize and apply hardened identity validation
+    # 3. Bind the legacy vote to the current candidate BEFORE
+    # normalization. This prevents malformed legacy metadata from
+    # masking candidate-tampering evidence.
     validator = VoteValidator()
 
     for v in votes:
+        if not v.is_valid_for_candidate(candidate.diff_sha256):
+            raise QuorumViolation(
+                f"Vote {v.worker_id} does not match candidate hash"
+            )
+
         try:
             normalized = normalize_worker_vote(v)
 
@@ -50,7 +57,11 @@ def enforce_quorum(candidate: DevelopmentCandidate, votes: List[WorkerVote]) -> 
             )
 
     # 4. Check Approval Threshold (2 of 3)
-    approvals = sum(1 for v in votes if v.decision == "approve")
+    approvals = sum(
+        1
+        for v in votes
+        if str(v.decision).lower() == "approve"
+    )
     if approvals < 2:
         raise QuorumViolation(f"Insufficient approvals: {approvals}/3")
 

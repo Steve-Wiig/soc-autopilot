@@ -11,27 +11,15 @@ def isolated_processor(tmp_path):
     pending = tmp_path / "pending"
     approved = tmp_path / "approved"
     rejected = tmp_path / "rejected"
-    nas = tmp_path / "nas"
     backlog = tmp_path / "backlog.json"
 
-    for directory in (
-        pending,
-        approved,
-        rejected,
-        nas / "pending",
-        nas / "approved",
-        nas / "rejected",
-    ):
+    for directory in (pending, approved, rejected):
         directory.mkdir(parents=True)
 
     module.LOCAL_PENDING = pending
     module.LOCAL_APPROVED = approved
     module.LOCAL_REJECTED = rejected
-    module.NAS_PENDING = nas / "pending"
-    module.NAS_APPROVED = nas / "approved"
-    module.NAS_REJECTED = nas / "rejected"
     module.BACKLOG = backlog
-    module.evacuate_if_needed = lambda: None
     module.load_api_keys = lambda: {"test": "key"}
 
     return module, pending, approved, rejected, backlog

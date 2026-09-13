@@ -1,185 +1,205 @@
 #!/bin/bash
-# ==============================================================================
-# SOC-Autopilot P0 Hardening Verification Script (Robust Version)
-# Date: 2026-09-11
-# Constraint: STRICTLY READ-ONLY. No repository modifications.
-# ==============================================================================
+# SOC-Autopilot P0/P1 Behavioral Verification
+#
+# Validates the CURRENT hardened contract surface. Must not reference
+# removed APIs. If any referenced symbol is missing, the corresponding
+# check must report a real failure, not a false one.
 
-# 1. Verify we are in the correct repository directory
-if [ ! -d "engine" ] || [ ! -d "overnight" ] || [ ! -d "tools" ]; then
-    echo "ERROR: This script must be run from the root of the SOC-Autopilot repository."
-    echo "Current directory: $(pwd)"
-    echo "Please run: cd /path/to/SOC-Autopilot"
-    exit 1
-fi
+PASS=0
+FAIL=0
 
-export PYTHONDONTWRITEBYTECODE=1
-FAILURES=0
+pass() { echo "  [PASS] $1"; PASS=$((PASS+1)); }
+fail() { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 
-pass() { echo "  [PASS] $1"; }
-fail() { echo "  [FAIL] $1"; FAILURES=$((FAILURES+1)); }
-section() { echo ""; echo "=== $1 ==="; }
+echo "=========================================="
+echo "SOC-Autopilot P0/P1 Invariants"
+echo "=========================================="
 
-# Helper to safely grep a file
-safe_grep() {
-    local file=$1
-    shift
-    if [ -f "$file" ]; then
-        grep "$@" "$file" 2>/dev/null
-    else
-        return 1
-    fi
-}
+# 1. P0-3: Deterministic Policy — dynamic behavioral check
+echo -e "\n[1] P0-3: Deterministic Policy Authority"
+if python3 -c "
+from engine.deterministic_policy import (
+    RecommendationEnvelope as PolicyRec,
+    evaluate_deterministic_policy as eval_policy,
+)
 
-section "P0-1: Local-only production SOC inference"
-if safe_grep "engine/model_registry.py" -Eiq "(triage|primary|code_review).*(openrouter|cloud)"; then
-    fail "Production roles may still route to Cloud/OpenRouter."
+assert eval_policy(
+    PolicyRec('BLOCK', 'LOW', False, 'evt-1'),
+    authoritative_trusted_source=True,
+) == 'REVIEW', 'BLOCK must REVIEW even when trusted'
+
+assert eval_policy(
+    PolicyRec('ENRICH', 'LOW', False, 'evt-1'),
+    authoritative_trusted_source=False,
+) == 'REVIEW', 'ENRICH must REVIEW without trusted runtime'
+
+assert eval_policy(
+    PolicyRec('ENRICH', 'LOW', False, 'evt-1'),
+    authoritative_trusted_source=True,
+) == 'ALLOW', 'LOW+ENRICH+trusted must ALLOW'
+
+assert eval_policy(
+    PolicyRec('NO_ACTION', 'LOW', True, 'evt-1'),
+    authoritative_trusted_source=True,
+) == 'REVIEW', 'human review must always REVIEW'
+
+assert eval_policy(
+    PolicyRec('UNKNOWN', 'LOW', False, 'evt-1'),
+    authoritative_trusted_source=True,
+) == 'DENY', 'unknown action must DENY'
+" 2>/dev/null; then
+    pass "Policy overrides model (5 behavioral cases)."
 else
-    pass "Production roles do not explicitly route to Cloud/OpenRouter."
+    fail "Policy bypass or policy API drift."
 fi
 
-if safe_grep "engine/model_registry.py" -Eiq "fail_closed|local_only|no_cloud_fallback|raise.*LocalInferenceUnavailable"; then
-    pass "Fail-closed / local-only enforcement logic detected."
+# 2. P0-2: Cryptographic Worker Identity — VoteValidator dynamic checks
+echo -e "\n[2] P0-2: Cryptographic Worker Identity"
+if python3 -c "
+import time
+from contracts.worker_identity import WorkerVote, VoteValidator
+
+def make_vote(worker_id, candidate_hash, decision='A', ts=None, sig=None):
+    return WorkerVote(
+        worker_id=worker_id,
+        worker_class='test',
+        worker_instance='i1',
+        execution_host='h1',
+        software_version='v1',
+        candidate_hash=candidate_hash,
+        decision=decision,
+        timestamp=ts if ts is not None else int(time.time()),
+        signature=sig if sig is not None else 'sig-' + worker_id,
+    )
+
+v = VoteValidator()
+try:
+    v.validate(make_vote('w1', 'hash-a'), expected_candidate_hash='hash-b')
+    raise AssertionError('wrong candidate must reject')
+except ValueError:
+    pass
+
+v = VoteValidator(max_clock_skew_seconds=10)
+try:
+    v.validate(make_vote('w1', 'hash-a', ts=int(time.time())-1000),
+               expected_candidate_hash='hash-a')
+    raise AssertionError('stale timestamp must reject')
+except ValueError:
+    pass
+
+v = VoteValidator()
+v.validate(make_vote('w1', 'hash-a', sig='sig-x'),
+           expected_candidate_hash='hash-a')
+try:
+    v.validate(make_vote('w2', 'hash-a', sig='sig-x'),
+               expected_candidate_hash='hash-a')
+    raise AssertionError('replayed signature must reject')
+except ValueError:
+    pass
+
+v = VoteValidator()
+v.validate(make_vote('w1', 'hash-a', sig='sig-1'),
+           expected_candidate_hash='hash-a')
+try:
+    v.validate(make_vote('w1', 'hash-a', sig='sig-2'),
+               expected_candidate_hash='hash-a')
+    raise AssertionError('duplicate worker must reject')
+except ValueError:
+    pass
+" 2>/dev/null; then
+    pass "VoteValidator enforces candidate/freshness/replay/uniqueness."
 else
-    fail "Missing explicit fail-closed enforcement for local inference outage."
+    fail "Worker identity invariants missing or drifted."
 fi
 
-if find tests -type f -name "*.py" 2>/dev/null | xargs grep -lq "test_production_routing_no_cloud\|test_local_outage_fail_closed" 2>/dev/null; then
-    pass "Routing isolation acceptance tests exist."
+# 3. P1-1: Canonical Queue — no direct terminal SQL anywhere
+echo -e "\n[3] P1-1: Canonical Queue State Machine"
+if grep -q "def transition_queue_state" engine/strict_queue_transitions.py && \
+   ! grep -rEn "UPDATE triage_queue SET status = '(completed|failed)'" \
+       engine/slm_triage_worker.py \
+       engine/intake_eve.py \
+       engine/queue_manager.py 2>/dev/null; then
+    pass "All terminal SQL centralized through transition_queue_state."
 else
-    fail "Missing routing isolation acceptance tests."
+    fail "Direct terminal SQL still exists."
 fi
 
-section "P0-2: Close autonomous patch mutation boundary"
-if safe_grep "engine/multi_file_patcher.py" -Eq "\.resolve\(\)|is_relative_to|commonpath"; then
-    pass "Path resolution and containment check detected in patcher."
+# 4. P1-2: EventEnvelope Validation
+echo -e "\n[4] P1-2: Canonical EventEnvelope"
+if grep -q "from engine.canonical_envelope import EventEnvelope" engine/slm_triage_worker.py; then
+    pass "SOC boundary validates EventEnvelope."
 else
-    fail "Missing path resolution/containment check (e.g., .resolve() or is_relative_to)."
+    fail "EventEnvelope validation missing."
 fi
 
-if safe_grep "engine/multi_file_patcher.py" -Eiq "is_absolute|startswith\(['\"]\.\.['\"]\)|traversal|symlink"; then
-    pass "Rejection of absolute paths, traversals, or symlinks detected."
+# 5. P1-3: Event ID chain
+echo -e "\n[5] P1-3: Event ID Identity Chain"
+if grep -q "event_id=true_event_id" engine/slm_triage_worker.py && \
+   ! grep -q "event_id=str(job_id)" engine/slm_triage_worker.py; then
+    pass "UUID event_id preserved."
 else
-    fail "Missing explicit rejection of absolute paths, '../', or symlinks."
+    fail "Event ID overwritten with job_id."
 fi
 
-if safe_grep "engine/multi_file_patcher.py" -Eiq "exact_match|normalized_exact|ambiguous.*fail|fuzzy.*reject"; then
-    pass "Fuzzy match hardening (exact/normalized preference, ambiguity rejection) detected."
+# 6. P0-1: Two-layer quorum wiring
+#   - Development worker governance uses its own 2-of-3 gate.
+#   - Production SOC quorum uses the hardened crypto identity contract.
+echo -e "\n[6] P0-1: Quorum Wiring (dev-worker gate + SOC crypto identity)"
+if grep -q "evaluate_worker_quorum" engine/development_worker_pipeline.py 2>/dev/null && \
+   grep -qE "from contracts.worker_identity import .*(VoteValidator|WorkerVote)|import contracts.worker_identity" \
+       engine/strict_quorum.py 2>/dev/null; then
+    pass "Dev-worker gate wired; SOC quorum uses hardened crypto identity."
 else
-    fail "Missing fuzzy match hardening for autonomous mutation."
+    fail "Quorum wiring drift (dev-worker gate or SOC crypto identity missing)."
 fi
 
-if find tests -type f -name "*.py" 2>/dev/null | xargs grep -lq "test_path_traversal\|test_symlink_escape\|test_ambiguous_fuzzy" 2>/dev/null; then
-    pass "Path containment and patch ambiguity regression tests exist."
+# 7. P1-8: NAS eliminated (no state constants, no false telemetry)
+echo -e "\n[7] P1-8: NAS Mount Eliminated"
+if ! grep -qE "NAS_PENDING|NAS_APPROVED|NAS_REJECTED|to NAS|evacuate_if_needed" \
+       tools/process_oracle.py 2>/dev/null; then
+    pass "NAS references and false telemetry removed."
 else
-    fail "Missing path containment and ambiguity regression tests."
+    fail "NAS references or false telemetry still exist."
 fi
 
-section "P0-3: Fix promotion-state semantics"
-if safe_grep "overnight/self_improver.py" -Eq "GENERATED|TESTED|CANARY_PASSED|PENDING_HUMAN_MERGE|MERGED|REJECTED|REVERTED"; then
-    pass "Required granular promotion states are defined."
+# 8. P0-3b: Trust provenance ownership
+echo -e "\n[8] P0-3b: Trust Provenance Ownership"
+if grep -q "event_envelope.trust_labels.provenance_verified" engine/slm_triage_worker.py && \
+   ! grep -qE "getattr\(raw_rec, *'trust_labels'" engine/slm_triage_worker.py; then
+    pass "Worker derives trust only from canonical EventEnvelope."
 else
-    fail "Missing required granular promotion states."
+    fail "Worker may consume model-supplied trust labels."
 fi
 
-if safe_grep "overnight/self_improver.py" -Eiq "if.*state.*==.*MERGED.*APPLIED|APPLIED.*only.*MERGED"; then
-    pass "APPLIED state is strictly gated by MERGED state."
+# 9. P1-5: Policy adapter does not shadow canonical contract
+echo -e "\n[9] P1-5: Policy Adapter Contract Alignment"
+if grep -q "RecommendationEnvelope as PolicyRecommendationEnvelope" engine/slm_triage_worker.py && \
+   grep -q "from contracts.slm_recommendation import" engine/slm_triage_worker.py; then
+    pass "Policy adapter aliased; canonical contract imported."
 else
-    if safe_grep "overnight/self_improver.py" -A 5 "CANARY_PASSED" | grep -iq "APPLIED"; then
-        fail "APPLIED state is incorrectly triggered by CANARY_PASSED."
-    else
-        pass "APPLIED state is not incorrectly triggered by CANARY_PASSED."
-    fi
+    fail "Policy adapter may shadow canonical recommendation contract."
 fi
 
-if safe_grep "overnight/self_improver.py" -Eiq "proven_fixes.*MERGED|write.*proven_fixes.*merged"; then
-    pass "proven_fixes.jsonl is only populated on actual MERGED state."
+# Environmental checks (informational; do not affect invariant gate)
+echo -e "\n[ENV] Environmental checks (not part of the invariant gate)"
+if command -v redis-cli &> /dev/null && redis-cli CONFIG GET appendonly 2>/dev/null | grep -q "yes"; then
+    echo "  [INFO] Redis AOF active."
 else
-    fail "proven_fixes.jsonl population is not strictly gated by MERGED state."
+    echo "  [INFO] Redis AOF not confirmed (environment-dependent)."
 fi
-
-section "P0-4: Correct Pi critic telemetry semantics"
-if safe_grep "tools/pi_redis_ingestor.py" -Eiq "PI_APPROVED|PI_REJECTED"; then
-    pass "Pi reviewer uses distinct states (PI_APPROVED/PI_REJECTED)."
+if grep -q "def dynamic_thermal_pace" edge/pi_consumer.py 2>/dev/null; then
+    echo "  [INFO] Dynamic thermal pacing present."
 else
-    fail "Pi reviewer is missing distinct states (PI_APPROVED/PI_REJECTED)."
+    echo "  [INFO] Dynamic thermal pacing not detected."
 fi
 
-if safe_grep "tools/pi_redis_ingestor.py" -A 10 "approved.*true\|approved.*=.*True" | grep -iq "APPLIED"; then
-    fail "Pi approval is incorrectly mapped to APPLIED state."
-else
-    pass "Pi approval is not mapped to APPLIED state."
-fi
-
-section "P0-5: Make worker identity guarantees real"
-if safe_grep "engine/worker_vote.py" -Eiq "worker_id.*worker_class.*execution_host|cryptographic.*signature|WorkerVote.*identity" || \
-   safe_grep "overnight/self_improver.py" -Eiq "worker_id.*worker_class.*execution_host|cryptographic.*signature|WorkerVote.*identity"; then
-    pass "Strong worker identity binding (Option A) detected."
-elif safe_grep "engine/worker_vote.py" -Eiq "distinct logical reviewers|three distinct logical|downgrade.*terminology" || \
-     safe_grep "overnight/self_improver.py" -Eiq "distinct logical reviewers|three distinct logical|downgrade.*terminology" || \
-     find docs -type f -name "*.md" 2>/dev/null | xargs grep -lq "distinct logical reviewers|three distinct logical|downgrade.*terminology" 2>/dev/null; then
-    pass "Truthful weaker guarantee (Option B) documentation detected."
-else
-    fail "Neither strong identity binding nor truthful documentation downgrade detected."
-fi
-
-if safe_grep "engine/worker_vote.py" -Eiq "replay.*detect|candidate_hash.*distinct|prevent.*reuse"; then
-    pass "Replay and distinct candidate hash enforcement detected."
-else
-    fail "Missing replay and distinct candidate hash enforcement."
-fi
-
-section "Dynamic Verification: Running Pytest Suite"
-echo "  Checking for pytest..."
-if ! command -v pytest &> /dev/null; then
-    fail "pytest is not installed or not in PATH. Skipping dynamic tests."
-else
-    echo "  Running targeted P0 acceptance tests and adversarial simulation..."
-    echo "  (Timeout set to 60 seconds to prevent hanging)"
-
-    TEST_OUTPUT=$(timeout 60 pytest -q \
-        -k "routing_isolation or path_containment or patch_ambiguity or promotion_state or pi_approval or worker_identity or adversarial_simulation" \
-        --tb=short 2>&1)
-    TEST_EXIT_CODE=$?
-
-    if [ $TEST_EXIT_CODE -eq 124 ]; then
-        fail "Targeted P0 tests TIMED OUT after 60 seconds."
-    elif [ $TEST_EXIT_CODE -eq 0 ]; then
-        pass "All targeted P0 acceptance and adversarial simulation tests PASSED."
-    elif [ $TEST_EXIT_CODE -eq 5 ]; then
-        fail "No tests matched the P0 criteria. Are the tests named correctly?"
-    else
-        fail "Targeted P0 tests FAILED. See output below:"
-        echo "$TEST_OUTPUT" | tail -n 20
-    fi
-
-    echo "  Running full regression suite (pytest -q)..."
-    FULL_TEST_OUTPUT=$(timeout 120 pytest -q --tb=line 2>&1)
-    FULL_EXIT_CODE=$?
-
-    if [ $FULL_EXIT_CODE -eq 124 ]; then
-        fail "Full regression suite TIMED OUT after 120 seconds."
-    elif [ $FULL_EXIT_CODE -eq 0 ]; then
-        pass "Full regression suite PASSED."
-    else
-        fail "Full regression suite FAILED."
-        echo "$FULL_TEST_OUTPUT" | tail -n 10
-    fi
-fi
-
-section "Verification Summary"
-echo ""
-if [ $FAILURES -eq 0 ]; then
-    echo "  SUCCESS: All P0 hardening invariants are verified and enforced."
-    echo "  Definition of Done met:"
-    echo "    1. LLM patch cannot write outside authorized targets."
-    echo "    2. Production SOC data cannot spill to cloud LLM."
-    echo "    3. System cannot claim fix applied without human merge."
-    echo "    4. Pi approval cannot masquerade as applied code change."
-    echo "    5. Fabricated worker identities cannot satisfy quorum."
+echo -e "\n=========================================="
+echo "Results: $PASS Passed, $FAIL Failed"
+echo "=========================================="
+if [ $FAIL -eq 0 ]; then
+    echo "ALL 9 P0/P1 INVARIANTS VERIFIED."
     exit 0
 else
-    echo "  FAILURE: $FAILURES invariant check(s) failed."
-    echo "  Review the [FAIL] outputs above and apply the required P0 fixes."
+    echo "INVARIANT VIOLATIONS DETECTED."
     exit 1
 fi

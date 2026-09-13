@@ -705,10 +705,14 @@ def _store_failed_fix(file_path, issue, diff_text, constraint, advisory_fingerpr
         with open(FAILED_FIXES_PATH, "a") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception as e:
-        # HARDENED: Fail closed with telemetry
+        # Failed-fix memory is advisory state. Persistence failure must
+        # never block or fail the autonomous control path.
         import logging
-        logging.error(f'CONTROL-PLANE FAILURE in self_improver.py: {e}')
-        raise  # Non-blocking
+        logging.error(
+            "Non-blocking failed-fix memory persistence failure: %s",
+            e,
+        )
+        return None
 
 def _retrieve_failed_patterns(issue, max_examples=2):
     """Retrieve similar past failures to inject as AVOID warnings."""
@@ -899,7 +903,15 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             except Exception as e:
                 _cleanup_tdd_artifact(tdd_write_path)
                 tdd_write_path = None
+                tdd_test_code = None
                 print(f"       ⚠️ TDD artifact write/red-check failed: {e}")
+                _record_ledger(
+                    file_path,
+                    issue,
+                    "STALE",
+                    f"TDD red-phase validation failed: {e}",
+                )
+                return False
 
     # NEW SAFETY GATE: If baseline passed, and we failed to generate/validate a TDD test, drop it.
     if baseline_tb is None and not tdd_kept_path:
@@ -929,8 +941,13 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             # P0 HARDENING: tdd_test_code existed but was vacuous (not kept).
             # Non-documentation/style categories cannot bypass without a valid test.
             print(f"       ⚠️ Behavior-changing category '{category}' has vacuous TDD. Dropping as stale.")
-            _record_ledger(file_path, issue, "STALE", "Baseline passed, vacuous TDD test rejected for behavior-changing category")
-            return True
+            _record_ledger(
+                file_path,
+                issue,
+                "STALE",
+                "Baseline passed, regression test was vacuous and rejected for behavior-changing category",
+            )
+            return False
 
     try:
         # 3. GENERATION LOOP
@@ -961,11 +978,10 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             print(f"       🔬 Forensic analysis unavailable (falling back to direct generation)")
 
         attempt = 0
+        pre_flight_rejection_msg = ""
         while should_continue(_budget_state, _budget_policy):
             attempt += 1
             begin_model_attempt(_budget_state)
-            if attempt == 0:
-                pre_flight_rejection_msg = ""
 
             pruned = _choose_context(original, issue.get('description', ''))
 

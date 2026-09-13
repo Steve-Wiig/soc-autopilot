@@ -41,3 +41,79 @@ def authorize_transition(current_state: str, target_state: str, job_record: dict
             )
             
     return True
+
+
+def transition_queue_state(conn, job_id: int, new_status: str, failure_reason: str = None):
+    """P1-1: Single authoritative queue transition mechanism.
+
+    Authority chain (each step must succeed; anything else fails closed):
+
+        read current DB state
+            -> read DB-backed approval
+            -> authorize_transition(current, target, authoritative_record)
+            -> UPDATE ... WHERE id = ? AND status = ?
+            -> require rowcount == 1
+            -> return
+
+    Never trusts caller-supplied current state or approval.
+    Raises StateTransitionViolation on any failure.
+    """
+    target = str(new_status).lower()
+
+    row = conn.execute(
+        "SELECT status, severity FROM triage_queue WHERE id = ?",
+        (job_id,),
+    ).fetchone()
+    if row is None:
+        raise StateTransitionViolation(
+            f"Cannot transition unknown job {job_id} to {target!r}"
+        )
+
+    current = str(row[0]).lower()
+    severity = str(row[1]).lower() if row[1] is not None else "normal"
+
+    approved = conn.execute(
+        "SELECT 1 FROM triage_queue_approvals "
+        "WHERE job_id = ? AND target_status = ?",
+        (job_id, target),
+    ).fetchone() is not None
+
+    authorize_transition(
+        current,
+        target,
+        {"priority": severity, "approval": {"approved": approved}},
+    )
+
+    if target == "completed":
+        cur = conn.execute(
+            "UPDATE triage_queue SET status = 'completed' "
+            "WHERE id = ? AND status = ?",
+            (job_id, current),
+        )
+    elif target == "failed":
+        cur = conn.execute(
+            "UPDATE triage_queue SET status = 'failed', failure_reason = ? "
+            "WHERE id = ? AND status = ?",
+            (failure_reason or "UNKNOWN", job_id, current),
+        )
+    elif target == "pending":
+        # Retry reset: only valid from processing; clears lease state.
+        cur = conn.execute(
+            "UPDATE triage_queue SET status = 'pending', "
+            "started_at = NULL, lease_expires_at = NULL, "
+            "last_heartbeat_at = NULL "
+            "WHERE id = ? AND status = ?",
+            (job_id, current),
+        )
+    else:
+        raise StateTransitionViolation(
+            f"Unsupported target {target!r}"
+        )
+
+    if cur.rowcount != 1:
+        raise StateTransitionViolation(
+            f"Transition {current}->{target} for job {job_id} "
+            f"affected {cur.rowcount} rows; failing closed"
+        )
+
+    return cur.rowcount

@@ -1,27 +1,33 @@
-from engine.queue_manager import TriageQueueManager
-import sqlite3
-def _neutralized_db(*args, **kwargs):
-    raise RuntimeError('Neutralized: Direct DB mutation not allowed')
-sqlite3.connect = _neutralized_db
-import time
 import argparse
+import hashlib
 import json
 import logging
-import hashlib
 import re
-from datetime import datetime, timedelta, timezone
+import sqlite3
+import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
-from engine.queue_priority import priority_case_sql
-from engine.queue_manager import ensure_queue_schema
-from engine.telemetry import log_attempt
-from engine.model_registry import get_default_router
+from contracts.slm_recommendation import (
+    EXPECTED_SCHEMA_VERSION,
+    RecommendationEnvelope,
+    SLMRawRecommendation,
+)
+from engine.deterministic_policy import (
+    RecommendationEnvelope as PolicyRecommendationEnvelope,
+    evaluate_deterministic_policy,
+)
 from engine.inference_service import InferenceService
+from engine.model_registry import get_default_router, log_attempt
+from engine.queue_manager import TriageQueueManager, ensure_queue_schema
+from engine.strict_queue_transitions import (
+    StateTransitionViolation,
+    transition_queue_state,
+)
 from engine.trust_boundary import fence_payload_for_llm, scan_for_injection
-from contracts.slm_recommendation import SLMRawRecommendation, RecommendationEnvelope, EXPECTED_SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
-DEFAULT_PRIORITY = 5
+
 
 @dataclass
 class WorkerConfig:
@@ -98,7 +104,19 @@ def run_worker(config: WorkerConfig) -> None:
         job_id, payload = row['id'], row['payload_ref']
 
         try:
-            payload_dict = json.loads(payload) if isinstance(payload, str) else payload
+
+            # P1-2: Validate canonical EventEnvelope at SOC boundary
+            from engine.canonical_envelope import EventEnvelope
+            try:
+                raw_dict = json.loads(payload) if isinstance(payload, str) else payload
+                event_envelope = EventEnvelope(**raw_dict)
+                payload_dict = getattr(event_envelope, 'payload', raw_dict)
+                true_event_id = getattr(event_envelope, 'event_id', str(job_id))
+            except Exception as env_err:
+                logger.error(f"Invalid EventEnvelope for job {job_id}: {env_err}")
+                transition_queue_state(conn, job_id, "failed", "INVALID_ENVELOPE")
+                continue
+
 
             # P0: Prompt Injection Defense
             if scan_for_injection(payload):
@@ -106,7 +124,7 @@ def run_worker(config: WorkerConfig) -> None:
                 forced_verdict = {"recommendation_id": f"REC-{job_id}-INJECTION", "decision_id": f"DEC-{job_id}-INJECTION", "outcome": "REVIEW", "reason": "Prompt injection pattern detected"}
                 conn.execute("INSERT INTO verdicts (job_id, result, processed_at) VALUES (?, ?, ?)",
                     (job_id, json.dumps(forced_verdict), datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')))
-                conn.execute("UPDATE triage_queue SET status = 'completed' WHERE id = ?", (job_id,))
+                transition_queue_state(conn, job_id, "completed")
                 conn.commit()
                 continue
 
@@ -122,33 +140,61 @@ def run_worker(config: WorkerConfig) -> None:
                 raw_rec = SLMRawRecommendation.model_validate_json(cleaned_output)
             except Exception as e:
                 logger.error(f"Contract violation for job {job_id}. Hash: {raw_output_hash}. Details: {e}")
-                conn.execute("UPDATE triage_queue SET status = 'failed', failure_reason = 'CONTRACT_VIOLATION' WHERE id = ?", (job_id,))
+                transition_queue_state(conn, job_id, "failed", "CONTRACT_VIOLATION")
                 conn.commit()
                 continue
 
             recommendation_id = f"REC-{job_id}-{inference_result.provider_id}-{raw_output_hash[:8]}"
-            envelope = RecommendationEnvelope(
-                recommendation_id=recommendation_id, event_id=str(job_id), envelope_schema_version="1.0",
+            recommendation_envelope = RecommendationEnvelope(
+                recommendation_id=recommendation_id, event_id=true_event_id, envelope_schema_version="1.0",
                 recommendation_schema_version=EXPECTED_SCHEMA_VERSION, model_id=inference_result.model_id,
                 model_version=inference_result.model_version, raw_output_hash=raw_output_hash, recommendation=raw_rec
             )
 
-            decision_outcome = "REVIEW" if raw_rec.requires_human_review else "ALLOW"
+            # P0-3: Model output cannot authorize itself. Route through deterministic policy.
+            # Trust provenance comes ONLY from the canonical runtime EventEnvelope.
+            authoritative_trusted_source = (
+                event_envelope.trust_labels.provenance_verified
+                and event_envelope.trust_labels.sanitized
+                and not event_envelope.trust_labels.untrusted_content
+            )
+
+            policy_rec = PolicyRecommendationEnvelope(
+                recommended_action=raw_rec.recommended_action.value,
+                severity=raw_rec.severity.value,
+                requires_human_review=raw_rec.requires_human_review,
+                event_id=true_event_id,
+            )
+            decision_outcome = evaluate_deterministic_policy(
+                policy_rec,
+                authoritative_trusted_source=authoritative_trusted_source,
+            )
             decision_id = f"DEC-{job_id}-{int(time.time())}"
 
             conn.execute("INSERT INTO verdicts (job_id, result, processed_at) VALUES (?, ?, ?)",
-                (job_id, json.dumps({"recommendation_id": recommendation_id, "decision_id": decision_id, "outcome": decision_outcome, "envelope": envelope.model_dump(mode='json')}), datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')))
-            conn.execute("UPDATE triage_queue SET status = 'completed' WHERE id = ?", (job_id,))
+                (job_id, json.dumps({"recommendation_id": recommendation_id, "decision_id": decision_id, "outcome": decision_outcome, "envelope": recommendation_envelope.model_dump(mode='json')}), datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')))
+            transition_queue_state(conn, job_id, "completed")
             conn.commit()
 
+        except StateTransitionViolation as e:
+            logger.error(f"Queue transition violation for job {job_id}: {e}")
+            conn.rollback()
         except RuntimeError as e:
             logger.error(f"All local models failed for job {job_id}: {e}")
-            conn.execute("UPDATE triage_queue SET status = 'failed', failure_reason = 'LOCAL_MODEL_UNAVAILABLE' WHERE id = ?", (job_id,))
-            conn.commit()
+            try:
+                transition_queue_state(conn, job_id, "failed", "LOCAL_MODEL_UNAVAILABLE")
+                conn.commit()
+            except StateTransitionViolation as se:
+                logger.error(f"Cannot fail job {job_id}: {se}")
+                conn.rollback()
         except Exception as e:
             logger.error(f"Non-retryable error processing job {job_id}: {e}")
-            conn.execute("UPDATE triage_queue SET status = 'failed', failure_reason = ? WHERE id = ?", (str(e), job_id))
-            conn.commit()
+            try:
+                transition_queue_state(conn, job_id, "failed", str(e))
+                conn.commit()
+            except StateTransitionViolation as se:
+                logger.error(f"Cannot fail job {job_id}: {se}")
+                conn.rollback()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

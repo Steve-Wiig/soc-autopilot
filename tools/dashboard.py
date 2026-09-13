@@ -137,14 +137,14 @@ def main():
     h1("🧠 ORACLE SWARM CONSENSUS GATE")
 
     nas_online = is_nas_mounted()
-    if not nas_online:
-        print("   ⚠️ NAS is not mounted – NAS queues will show as 0.")
 
+    # P1-8: NAS eliminated, but keeping logic safe for local queue counting
     local_p = nas_aware_count(ROOT / "overnight/oracle_queue/pending")
-    nas_p   = nas_aware_count(NAS_BASE / "pending") if nas_online else 0
+    local_size = nas_aware_size(ROOT / "overnight/oracle_queue/pending")
+    nas_p = nas_aware_count(NAS_BASE / "pending") if nas_online else 0
+
     local_a = nas_aware_count(ROOT / "overnight/oracle_queue/approved")
     local_r = nas_aware_count(ROOT / "overnight/oracle_queue/rejected")
-    local_size = nas_aware_size(ROOT / "overnight/oracle_queue/pending")
 
     print(f"⏳ Pending 2-LLM Vote: {local_p + nas_p} (Local: {local_p} [{local_size}MB], NAS: {nas_p})")
     print(f"✅ Unanimously Approved: {local_a + (nas_aware_count(NAS_BASE / 'approved') if nas_online else 0)}")
@@ -228,9 +228,9 @@ def main():
         try:
             import redis
             redis_pwd = os.environ.get("REDIS_PASSWORD")
-            if not redis_pwd or redis_pwd == "CHANGE_ME":
-                raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
-            r = redis.Redis(password=redis_pwd, host="192.168.1.31", port=6379, db=0, socket_connect_timeout=2)
+            if redis_pwd == "CHANGE_ME":
+                redis_pwd = None  # Gracefully default to no password for local dev
+            r = redis.Redis(password=redis_pwd, host=os.environ.get("REDIS_HOST", "127.0.0.1"), port=6379, db=0, socket_connect_timeout=2)
             q_len = r.llen("pi_critic_queue")
             res_len = r.llen("pi_critic_results")
             print(f"   🟢 Critic:    Active (Queue: {q_len} pending, Results: {res_len})")

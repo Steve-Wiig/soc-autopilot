@@ -347,38 +347,12 @@ def get_pending_events(conn: sqlite3.Connection, limit: int = 100) -> List[Dict[
     return [dict(row) for row in rows]
 
 
-@execute_in_transaction
-def lease_event(cursor: sqlite3.Cursor, event_id: int, ttl_seconds: int = 300) -> bool:
-    """Attempts to lease a pending event for processing.
-
-    Args:
-        event_id: The ID of the event to lease.
-        ttl_seconds: Time-to-live for the lease in seconds.
-
-    Returns:
-        True if the lease was acquired, False otherwise.
-    """
-    cursor.execute(
-        "UPDATE triage_queue SET status = 'leased', lease_expires_at = datetime('now', '+' || ? || 'seconds') WHERE id = ? AND status = 'pending'",
-        (ttl_seconds, event_id),
-    )
-    return cursor.rowcount > 0
-
-
-@execute_in_transaction
-def complete_event(cursor: sqlite3.Cursor, event_id: int) -> bool:
-    """Marks an event as completed.
-
-    Args:
-        event_id: The ID of the event to complete.
-
-    Returns:
-        True if the event was updated, False otherwise.
-    """
-    cursor.execute(
-        "UPDATE triage_queue SET status = 'completed' WHERE id = ? AND status = 'leased'",
-        (event_id,),
-    )
-    if cursor.rowcount > 0:
-        _log_audit(cursor, event_id, "leased", "completed", "worker")
-    return cursor.rowcount > 0
+# lease_event and complete_event were removed during the P1-1 hardening pass.
+#
+# They mutated triage_queue.status directly, bypassed the canonical
+# transition_queue_state primitive, and used a 'leased' status that is not
+# part of the canonical status vocabulary (pending/processing/completed/
+# failed/shed). Nothing in the repository called them.
+#
+# If a caller ever needs a queue transition, route it through
+# engine.strict_queue_transitions.transition_queue_state.

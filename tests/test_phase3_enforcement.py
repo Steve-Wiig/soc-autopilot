@@ -1,3 +1,4 @@
+import time
 """
 Tests for Phase 3 Enforcement and Isolation.
 """
@@ -43,8 +44,8 @@ def test_enforcer_accepts_valid_quorum():
     """Prove a valid quorum passes."""
     cand = DevelopmentCandidate.from_diff("c1", "base", "diff", ["f.py"])
     votes = [
-        WorkerVote("p1", cand.diff_sha256, "w1", "c", "i", "t", "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "w2", "c", "i", "t", "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "w3", "c", "i", "t", "reject", "r", "e"), # 2/3 is enough
+        WorkerVote("p1", cand.diff_sha256, "w1", "c", "i", int(time.time()), "approve", "r", "e"),
+        WorkerVote("p1", cand.diff_sha256, "w2", "c", "i", int(time.time()), "approve", "r", "e"),
+        WorkerVote("p1", cand.diff_sha256, "w3", "c", "i", int(time.time()), "reject", "r", "e"), # 2/3 is enough
     ]
     assert enforce_quorum(cand, votes) is True

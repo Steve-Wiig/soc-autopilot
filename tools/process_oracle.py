@@ -11,49 +11,44 @@ LOCAL_APPROVED = ROOT / "overnight/oracle_queue/approved"
 LOCAL_REJECTED = ROOT / "overnight/oracle_queue/rejected"
 BACKLOG = ROOT / "overnight/fix_backlog.json"
 
-NAS_BASE = Path("/mnt/backup-nas/soc-slm-telemetry/oracle_queue")
-NAS_PENDING = NAS_BASE / "pending"
-NAS_APPROVED = NAS_BASE / "approved"
-NAS_REJECTED = NAS_BASE / "rejected"
-
-def evacuate_if_needed():
-    """Moves Oracle data to NAS if local pending exceeds 50MB."""
-    if not LOCAL_PENDING.exists(): return
-    total_size = sum(f.stat().st_size for f in LOCAL_PENDING.rglob("*") if f.is_file())
-    
-    if total_size > 50 * 1024 * 1024: # 50MB Threshold
-        try:
-            # NAS Guardrail
-            if os.stat("/mnt/backup-nas").st_dev != os.stat("/").st_dev:
-                NAS_PENDING.mkdir(parents=True, exist_ok=True)
-                count = 0
-                for f in LOCAL_PENDING.glob("*.json"):
-                    shutil.move(str(f), str(NAS_PENDING / f.name))
-                    count += 1
-                print(f"🚚 EVACUATED {count} Oracle files ({total_size // (1024*1024)}MB) to NAS.")
-        except Exception as e:
-            # HARDENED: Fail closed with telemetry
-            import logging
-            logging.error(f'CONTROL-PLANE FAILURE in process_oracle.py: {e}')
-            raise # Fail-open: NAS offline, data stays local
-
 def main():
     LOCAL_PENDING.mkdir(parents=True, exist_ok=True)
     LOCAL_APPROVED.mkdir(exist_ok=True)
     LOCAL_REJECTED.mkdir(exist_ok=True)
     
-    evacuate_if_needed()
     
     proposals = list(LOCAL_PENDING.glob("*.json"))
-    if NAS_PENDING.exists():
-        proposals.extend(list(NAS_PENDING.glob("*.json")))
+    if LOCAL_PENDING.exists():
+        proposals.extend(list(LOCAL_PENDING.glob("*.json")))
         
     if not proposals: return
         
     api_keys = load_api_keys()
     
+    seen_paths = set()
+
     for p_file in proposals:
-        data = json.loads(p_file.read_text())
+        # Queue enumeration can observe the same path more than once,
+        # or a file may disappear between enumeration and processing.
+        # Treat that as an idempotent/stale queue observation.
+        try:
+            path_key = p_file.resolve()
+        except OSError:
+            path_key = p_file.absolute()
+
+        if path_key in seen_paths:
+            continue
+
+        seen_paths.add(path_key)
+
+        if not p_file.is_file():
+            continue
+
+        try:
+            data = json.loads(p_file.read_text())
+        except FileNotFoundError:
+            # Another queue transition won the race.
+            continue
         proposal_text = data.get("proposal", "")
         print(f"⚖️  Voting on: {p_file.name[:40]}...")
         
@@ -61,11 +56,11 @@ def main():
         data["votes"] = {"judge1": v1, "judge2": v2}
         p_file.write_text(json.dumps(data, indent=2))
         
-        if NAS_PENDING in p_file.parents:
-            dest_approved = NAS_APPROVED / p_file.name
-            dest_rejected = NAS_REJECTED / p_file.name
-            NAS_APPROVED.mkdir(parents=True, exist_ok=True)
-            NAS_REJECTED.mkdir(exist_ok=True)
+        if LOCAL_PENDING in p_file.parents:
+            dest_approved = LOCAL_APPROVED / p_file.name
+            dest_rejected = LOCAL_REJECTED / p_file.name
+            LOCAL_APPROVED.mkdir(parents=True, exist_ok=True)
+            LOCAL_REJECTED.mkdir(exist_ok=True)
         else:
             dest_approved = LOCAL_APPROVED / p_file.name
             dest_rejected = LOCAL_REJECTED / p_file.name
