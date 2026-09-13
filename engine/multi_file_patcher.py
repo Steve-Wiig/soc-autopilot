@@ -11,6 +11,8 @@ import difflib
 from pathlib import Path
 from dataclasses import dataclass
 
+from engine.protected_kernel import assert_not_protected
+
 @dataclass
 class FilePatch:
     file_path: Path
@@ -113,6 +115,11 @@ def validate_mutation_target(
         resolved.relative_to(repo_root)
     except ValueError:
         raise ValueError(f"Path escapes repository: {candidate_path}")
+
+    # PROTECTED KERNEL: refuse to mutate safety-critical files even
+    # when the caller has authorized them. This gate sits below the
+    # authorization boundary so a future caller cannot bypass it.
+    assert_not_protected(resolved.relative_to(repo_root))
 
     # Check authorization
     auth_resolved = {(repo_root / Path(f)).resolve() for f in authorized_files}

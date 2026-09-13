@@ -24,6 +24,10 @@ from collections import Counter
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from engine.advisory_provenance import compute_source_hash, validate_advisory_provenance
 from engine.advisory_identity import AdvisoryIdentity
+from engine.protected_kernel import (
+    ProtectedKernelViolation,
+    is_protected,
+)
 from overnight.advisory_budget import (
     AdvisoryAttemptState, BudgetPolicy, CandidateFailure,
     should_continue, begin_model_attempt, record_failure,
@@ -822,6 +826,31 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         print(f"❌ git branch check failed: {e}")
         return False
 
+    # PROTECTED KERNEL: refuse early rather than burn a TDD generation
+    # call, forensic analysis, and cloud API quota on a target the
+    # autonomous path cannot mutate. Enforcement is authoritative in
+    # engine.multi_file_patcher.validate_mutation_target.
+    try:
+        _rel_target = file_path.relative_to(ROOT)
+    except ValueError:
+        print("❌ File path is outside repository root, aborting")
+        return False
+
+    if is_protected(_rel_target):
+        print(f"       🛡️ PROTECTED KERNEL: {_rel_target} is not writable by the autonomous path.")
+        _escalate_to_manual(
+            file_path,
+            issue,
+            f"Protected kernel: {_rel_target}",
+        )
+        _record_ledger(
+            file_path,
+            issue,
+            "ESCALATED",
+            f"Protected kernel: {_rel_target}",
+        )
+        return True
+
     if is_ast_defeated(original): return False
     if issue.get('category', '').lower() in ['style', 'documentation']: return False
 
@@ -1098,6 +1127,11 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                     print('       ❌ PATCH_ENGINE_UNAVAILABLE: Cannot generate valid patch')
                     _record_ledger(file_path, issue, 'FAILED', 'Patch engine unavailable')
                     return False
+            except ProtectedKernelViolation as e:
+                print(f"       🛡️ PROTECTED KERNEL: {e}")
+                _escalate_to_manual(file_path, issue, f"Protected kernel: {e}")
+                _record_ledger(file_path, issue, "ESCALATED", f"Protected kernel: {e}")
+                return True
             except Exception as e:
                 if attempt == 0:
                     failed_attempt_1_raw = raw
