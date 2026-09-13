@@ -95,19 +95,8 @@ def main():
     # 6. Reasoning Ledger (Black Box)
     h1("REASONING LEDGER (Black Box)")
     local_ledger = ROOT / "overnight/.reasoning_buffer/current.jsonl"
-    nas_ledger = Path("/mnt/backup-nas/soc-slm-telemetry/reasoning/reasoning.jsonl")
-    
     l_count = len(local_ledger.read_text().splitlines()) if local_ledger.exists() else 0
     print(f"Local Buffer: {l_count} events")
-    
-    try:
-        if nas_ledger.exists() and os.stat("/mnt/backup-nas").st_dev != os.stat("/").st_dev:
-            n_count = len(nas_ledger.read_text().splitlines())
-            print(f"NAS Archive (/dev/sdc): {n_count} events")
-        else:
-            print("NAS Archive: Offline or unmounted.")
-    except Exception:
-        print("NAS Archive: Offline or unmounted.")
 
     # 7. Recent Logs
     h1("RECENT LOGS (Last 15 lines)")

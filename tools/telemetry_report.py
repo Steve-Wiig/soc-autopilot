@@ -11,7 +11,6 @@ from engine.telemetry_identity import event_identity
 
 ROOT = Path(__file__).resolve().parent.parent
 
-NAS_DIR = Path("/mnt/backup-nas/soc-slm-telemetry")
 LOCAL_DIR = ROOT / "overnight/.telemetry_buffer"
 
 def load_events():
@@ -21,7 +20,8 @@ def load_events():
 
     # LOCAL_DIR already recursively includes outbox.
     # Do not scan LOCAL_DIR/outbox separately.
-    sources = [NAS_DIR, LOCAL_DIR]
+    # NAS was intentionally removed in P1-4; local-only.
+    sources = [LOCAL_DIR]
 
     for d in sources:
         if not d.exists():

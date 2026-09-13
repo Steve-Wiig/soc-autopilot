@@ -153,11 +153,19 @@ else
     fail "Quorum wiring drift (dev-worker gate or SOC crypto identity missing)."
 fi
 
-# 7. P1-8: NAS eliminated (no state constants, no false telemetry)
-echo -e "\n[7] P1-8: NAS Mount Eliminated"
-if ! grep -qE "NAS_PENDING|NAS_APPROVED|NAS_REJECTED|to NAS|evacuate_if_needed" \
-       tools/process_oracle.py 2>/dev/null; then
-    pass "NAS references and false telemetry removed."
+# 7. P1-8: NAS eliminated tree-wide (no constants, no mount paths,
+# no false telemetry) across production code. Diagnostic scripts
+# (audit_*, analyze_*) are excluded: they contain the patterns
+# as design intent, not as runtime references.
+echo -e "\n[7] P1-8: NAS Mount Eliminated (tree-wide)"
+if ! grep -rqE "NAS_PENDING|NAS_APPROVED|NAS_REJECTED|NAS_BASE|NAS_DIR|NAS_DEST|NAS_FILE|/mnt/backup-nas|to NAS|evacuate_if_needed" \
+       engine/ tools/ contracts/ overnight/ \
+       --include='*.py' --include='*.sh' \
+       --exclude='audit_*.py' \
+       --exclude='analyze_*.py' \
+       --exclude='p1_4_completion_gated_patch.py' \
+       2>/dev/null; then
+    pass "NAS references and false telemetry removed tree-wide."
 else
     fail "NAS references or false telemetry still exist."
 fi

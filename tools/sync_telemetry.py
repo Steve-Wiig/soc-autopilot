@@ -5,25 +5,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = ROOT
 LOCAL_OUTBOX = PROJECT_ROOT / "overnight" / ".telemetry_buffer" / "outbox"
-NAS_DEST = Path("/mnt/backup-nas/soc-slm-telemetry")
+ARCHIVE_DEST = PROJECT_ROOT / "overnight" / "archive" / "telemetry"
 LOCK_FILE = Path("/tmp/soc-slm-telemetry-sync.lock")
 
 def log(msg): print(f"[TELEMETRY SYNC] {msg}", flush=True)
 
-def verify_nas_mount():
-    try:
-        # FIX: Check the actual drive mount point, not the specific sub-directory
-        mount_point = Path("/mnt/backup-nas")
-        if not mount_point.exists(): return False
-        nas_dev = os.stat(str(mount_point)).st_dev
-        root_dev = os.stat("/").st_dev
-        if nas_dev == root_dev:
-            log("CRITICAL: NAS mount lost (st_dev matches root). Aborting.")
-            return False
-        return True
-    except OSError as e:
-        log(f"NAS mount verification failed: {e}")
+def verify_archive_destination():
+    """Ensure the archive destination is safe to sync into.
+
+    Refuses if the destination is equal to or nested inside the outbox.
+    Local-only after NAS removal (P1-4).
+    """
+    archive_str = str(ARCHIVE_DEST.absolute())
+    outbox_str = str(LOCAL_OUTBOX.absolute())
+    if archive_str == outbox_str:
+        log("CRITICAL: Archive destination equals outbox. Aborting.")
         return False
+    if archive_str.startswith(outbox_str + "/"):
+        log("CRITICAL: Archive destination is inside outbox. Aborting.")
+        return False
+    return True
 
 def sync():
     try:
@@ -40,15 +41,15 @@ def sync():
         if not LOCAL_OUTBOX.exists() or not any(LOCAL_OUTBOX.iterdir()):
             log("Outbox empty. Nothing to do.")
             return
-        if not verify_nas_mount():
-            log("NAS unavailable or unmounted. Exiting safely.")
+        if not verify_archive_destination():
+            log("Archive destination is unsafe. Exiting safely.")
             return
-        try: NAS_DEST.mkdir(parents=True, exist_ok=True)
+        try: ARCHIVE_DEST.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            log(f"Failed to create NAS destination dir: {e}. Exiting.")
+            log(f"Failed to create archive destination dir: {e}. Exiting.")
             return
 
-        cmd = ["rsync", "-a", "--timeout=30", "--remove-source-files", "--no-inc-recursive", f"{LOCAL_OUTBOX}/", f"{NAS_DEST}/"]
+        cmd = ["rsync", "-a", "--timeout=30", "--remove-source-files", "--no-inc-recursive", f"{LOCAL_OUTBOX}/", f"{ARCHIVE_DEST}/"]
         log(f"Executing: {' '.join(cmd)}")
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)

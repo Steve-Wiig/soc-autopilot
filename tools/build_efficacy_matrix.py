@@ -16,14 +16,13 @@ from engine.telemetry_identity import deduplicate_events
 
 ROOT = Path(__file__).parent.parent
 
-NAS_DIR = Path("/mnt/backup-nas/soc-slm-telemetry")
 BUFFER_DIR = ROOT / "overnight" / ".telemetry_buffer"
 OUTBOX_DIR = BUFFER_DIR / "outbox"
 PRIORITY_FILE = ROOT / "engine" / "model_priority.json"
 
 def gather_events():
     events = []
-    for p in [NAS_DIR, BUFFER_DIR]:
+    for p in [BUFFER_DIR]:
         if p.exists():
             for f in p.rglob("*.jsonl"):
                 for line in f.read_text().splitlines():

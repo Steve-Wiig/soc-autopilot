@@ -26,8 +26,7 @@ def test_inference_events_do_not_collide_during_dedup(tmp_path):
         "\n".join(json.dumps(x) for x in events)
     )
 
-    with patch.object(report, "NAS_DIR", tmp_path), \
-         patch.object(report, "LOCAL_DIR", tmp_path):
+    with patch.object(report, "LOCAL_DIR", tmp_path):
 
         loaded = report.load_events()
 

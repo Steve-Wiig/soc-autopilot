@@ -6,7 +6,6 @@ from collections import Counter
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
-NAS_BASE = Path("/mnt/backup-nas/soc-slm-telemetry/oracle_queue")
 
 # ──────────────────────────────────────────────
 # HELPERS
@@ -24,27 +23,15 @@ def run(cmd, timeout=10):
     except Exception as e:
         return f"(error: {e})"
 
-def is_nas_mounted():
-    """Check /proc/mounts to see if NAS is actually mounted. Never blocks."""
-    try:
-        with open("/proc/mounts", "r") as f:
-            return "/mnt/backup-nas" in f.read()
-    except Exception:
-        return False
-
-def nas_aware_count(path):
-    """Count .json files, but skip NAS if it's not mounted."""
-    if "backup-nas" in str(path) and not is_nas_mounted():
-        return 0
+def _count_json(path):
+    """Count .json files in a directory. Returns 0 on any error."""
     try:
         return len(list(path.glob("*.json"))) if path.exists() else 0
     except OSError:
         return 0
 
-def nas_aware_size(path):
-    """Get directory size in MB, but skip NAS if it's not mounted."""
-    if "backup-nas" in str(path) and not is_nas_mounted():
-        return 0
+def _size_mb(path):
+    """Directory size in MB. Returns 0 on any error."""
     try:
         return sum(
             f.stat().st_size for f in path.rglob("*") if f.is_file()
@@ -136,21 +123,16 @@ def main():
     # ── 1. ORACLE SWARM ──
     h1("🧠 ORACLE SWARM CONSENSUS GATE")
 
-    nas_online = is_nas_mounted()
+    local_p = _count_json(ROOT / "overnight/oracle_queue/pending")
+    local_size = _size_mb(ROOT / "overnight/oracle_queue/pending")
+    local_a = _count_json(ROOT / "overnight/oracle_queue/approved")
+    local_r = _count_json(ROOT / "overnight/oracle_queue/rejected")
 
-    # P1-8: NAS eliminated, but keeping logic safe for local queue counting
-    local_p = nas_aware_count(ROOT / "overnight/oracle_queue/pending")
-    local_size = nas_aware_size(ROOT / "overnight/oracle_queue/pending")
-    nas_p = nas_aware_count(NAS_BASE / "pending") if nas_online else 0
+    print(f"⏳ Pending 2-LLM Vote: {local_p} (Local: {local_p} [{local_size}MB])")
+    print(f"✅ Unanimously Approved: {local_a}")
+    print(f"❌ Rejected by Supreme Court: {local_r}")
 
-    local_a = nas_aware_count(ROOT / "overnight/oracle_queue/approved")
-    local_r = nas_aware_count(ROOT / "overnight/oracle_queue/rejected")
-
-    print(f"⏳ Pending 2-LLM Vote: {local_p + nas_p} (Local: {local_p} [{local_size}MB], NAS: {nas_p})")
-    print(f"✅ Unanimously Approved: {local_a + (nas_aware_count(NAS_BASE / 'approved') if nas_online else 0)}")
-    print(f"❌ Rejected by Supreme Court: {local_r + (nas_aware_count(NAS_BASE / 'rejected') if nas_online else 0)}")
-
-    if (local_p + nas_p) > 0:
+    if local_p > 0:
         print("\n⚖️  Running Consensus Gate (60s timeout)...")
         try:
             subprocess.run(
@@ -267,11 +249,7 @@ def main():
 
     # ── 5. DISK HEALTH ──
     h1("💾 DISK HEALTH")
-    if is_nas_mounted():
-        print(run("df -h / /mnt/docker-data /mnt/backup-nas 2>/dev/null | grep -v tmpfs"))
-    else:
-        print(run("df -h / /mnt/docker-data 2>/dev/null | grep -v tmpfs"))
-        print("   ⚠️ /mnt/backup-nas is not mounted.")
+    print(run("df -h / /mnt/docker-data 2>/dev/null | grep -v tmpfs"))
 
     # ── 6. RECENT FIXES ──
     h1("🛠️ RECENT FIXES")

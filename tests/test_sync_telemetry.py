@@ -14,8 +14,8 @@ def sync_env(tmp_path):
     """Setup temporary directories and patch module constants."""
     outbox = tmp_path / "outbox"
     outbox.mkdir()
-    nas = tmp_path / "nas"
-    nas.mkdir()
+    archive = tmp_path / "archive"
+    archive.mkdir()
     lock = tmp_path / "sync.lock"
 
     # Create a dummy file in outbox
@@ -23,41 +23,36 @@ def sync_env(tmp_path):
 
     # Patch the module constants
     syncer.LOCAL_OUTBOX = outbox
-    syncer.NAS_DEST = nas
+    syncer.ARCHIVE_DEST = archive
     syncer.LOCK_FILE = lock
 
-    yield syncer, outbox, nas, lock
+    yield syncer, outbox, archive, lock
 
 def test_empty_outbox(sync_env, capsys):
-    syncer_mod, outbox, nas, lock = sync_env
+    syncer_mod, outbox, archive, lock = sync_env
     for f in outbox.iterdir(): f.unlink()
 
     syncer_mod.sync()
     assert "Outbox empty" in capsys.readouterr().out
 
-def test_nas_unmounted_st_dev_trap(sync_env, capsys):
-    syncer_mod, outbox, nas, lock = sync_env
+def test_archive_inside_outbox_trap(sync_env, capsys):
+    """verify_archive_destination must reject destinations inside the outbox."""
+    syncer_mod, outbox, archive, lock = sync_env
 
-    mock_stat = MagicMock()
-    mock_stat.st_dev = 2050 # Root st_dev for BOTH
+    # Point the archive destination INSIDE the outbox
+    syncer_mod.ARCHIVE_DEST = outbox / "archive"
 
-    # We DO want to test the internal logic of verify_nas_mount here.
-    # Because verify_nas_mount returns False immediately, NAS_DEST.mkdir() 
-    # is never reached, so the global os.stat mock doesn't break pathlib.
-    with patch('tools.sync_telemetry.os.stat', return_value=mock_stat), \
-         patch('tools.sync_telemetry.subprocess.run') as mock_run:
+    with patch('tools.sync_telemetry.subprocess.run') as mock_run:
         syncer_mod.sync()
 
     out = capsys.readouterr().out
-    assert "CRITICAL: NAS mount lost" in out
+    assert "inside outbox" in out
     mock_run.assert_not_called()
 
 def test_normal_sync(sync_env, capsys):
-    syncer_mod, outbox, nas, lock = sync_env
+    syncer_mod, outbox, archive, lock = sync_env
 
-    # FIX: Instead of globally mocking os.stat and breaking pathlib, 
-    # we just mock the verify_nas_mount function to return True.
-    with patch('tools.sync_telemetry.verify_nas_mount', return_value=True), \
+    with patch('tools.sync_telemetry.verify_archive_destination', return_value=True), \
          patch('tools.sync_telemetry.subprocess.run') as mock_run:
 
         mock_run.return_value = MagicMock(returncode=0)
@@ -69,10 +64,9 @@ def test_normal_sync(sync_env, capsys):
     assert "--remove-source-files" in args
 
 def test_rsync_vanished_files(sync_env, capsys):
-    syncer_mod, outbox, nas, lock = sync_env
+    syncer_mod, outbox, archive, lock = sync_env
 
-    # FIX: Mock verify_nas_mount directly to bypass the st_dev check
-    with patch('tools.sync_telemetry.verify_nas_mount', return_value=True), \
+    with patch('tools.sync_telemetry.verify_archive_destination', return_value=True), \
          patch('tools.sync_telemetry.subprocess.run') as mock_run:
 
         mock_run.return_value = MagicMock(returncode=24, stderr="vanished")
@@ -81,7 +75,7 @@ def test_rsync_vanished_files(sync_env, capsys):
     assert "vanished source files" in capsys.readouterr().out
 
 def test_concurrent_syncers(sync_env, capsys):
-    syncer_mod, outbox, nas, lock = sync_env
+    syncer_mod, outbox, archive, lock = sync_env
 
     fd = os.open(str(lock), os.O_CREAT | os.O_RDWR, 0o600)
     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)

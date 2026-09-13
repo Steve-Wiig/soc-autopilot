@@ -15,23 +15,18 @@ def test_load_events_deduplicates_locations(tmp_path):
         "attempt_num": 1
     }
 
-    nas = tmp_path / "nas"
     local = tmp_path / "local"
 
-    nas.mkdir()
     local.mkdir()
     (local / "outbox").mkdir()
 
     for path in [
-        nas / "flush.jsonl",
-        nas / "overnight.jsonl",
         local / "current.jsonl",
         local / "outbox" / "pending.jsonl",
     ]:
         path.write_text(json.dumps(event)+"\n")
 
-    with patch.object(report, "NAS_DIR", nas), \
-         patch.object(report, "LOCAL_DIR", local):
+    with patch.object(report, "LOCAL_DIR", local):
 
         events = report.load_events()
 

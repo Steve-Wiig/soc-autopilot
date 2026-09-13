@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CLI tool to query the LLM Reasoning Ledger (Black Box).
-Reads from the NAS for full historical data, falls back to local buffer.
+Reads from the local buffer. NAS was intentionally removed in P1-4.
 """
 import json
 import argparse
@@ -9,19 +9,10 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-NAS_FILE = Path("/mnt/backup-nas/soc-slm-telemetry/reasoning/reasoning.jsonl")
 LOCAL_FILE = ROOT / "overnight" / ".reasoning_buffer" / "current.jsonl"
 
 def get_ledger_path():
-    # Check NAS first
-    try:
-        if NAS_FILE.exists() and os.stat("/mnt/backup-nas").st_dev != os.stat("/").st_dev:
-            return NAS_FILE
-    except Exception as e:
-        # HARDENED: Fail closed with telemetry
-        import logging
-        logging.error(f'CONTROL-PLANE FAILURE in audit.py: {e}')
-        raise
+    # Local-only after NAS removal (P1-4).
     return LOCAL_FILE
 
 def main():
