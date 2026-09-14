@@ -948,6 +948,10 @@ def _materialize_aider_diff_as_search_replace(
     )
 
 
+class AiderWorkerTerminalError(RuntimeError):
+    """Aider rejected the request at a terminal worker/safety boundary."""
+
+
 def _generate_aider_candidate_patch(
     *,
     file_path: Path,
@@ -1019,7 +1023,7 @@ IMPLEMENTATION RULES:
     result = dispatch_development_worker(request)
 
     if not result.accepted_for_review or not result.worker_result:
-        raise RuntimeError(
+        raise AiderWorkerTerminalError(
             "Aider worker rejected: " + result.reason
         )
 
@@ -1332,6 +1336,20 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                         max_tokens=current_max,
                         model_type="patch",
                     )
+            except AiderWorkerTerminalError as exc:
+                print(f"       🛡️ Aider terminal worker boundary: {exc}")
+                _escalate_to_manual(
+                    file_path,
+                    issue,
+                    f"Aider terminal worker boundary: {exc}",
+                )
+                _record_ledger(
+                    file_path,
+                    issue,
+                    "ESCALATED",
+                    f"Aider terminal worker boundary: {exc}",
+                )
+                return True
             except Exception as exc:
                 print(f"       ⚠️ Aider/legacy generation failed: {exc}")
                 if attempt == 1:

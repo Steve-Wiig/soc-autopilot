@@ -30,6 +30,10 @@ def _tdd_path_for(file_path):
 
 @pytest.fixture
 def target_file(tmp_path, monkeypatch):
+    # These tests exercise TDD acceptance semantics, not Aider integration.
+    # Keep them deterministic regardless of the caller's shell environment.
+    monkeypatch.setenv("SOC_AUTOPILOT_DEVELOPMENT_WORKER", "legacy")
+
     fake_root = tmp_path
     (fake_root / "tests").mkdir()
     (fake_root / "overnight").mkdir()
