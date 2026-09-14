@@ -16,6 +16,7 @@ soc-autopilot: Autonomous Engineering System
 A Staff-Level, Self-Healing, Test-Driven, Causal-Triage Autonomous Engineering System.
 """
 import sys, json, subprocess, time, argparse, ast, re, os, hashlib, uuid
+import tempfile
 from pathlib import Path
 from engine.memory_store import load_records, append_unique
 from datetime import datetime, timedelta
@@ -36,6 +37,11 @@ from contracts.promotion_state import PromotionState
 from overnight.llm_client import generate, load_api_keys, strip_fences, gemini_pre_analysis, _call_gemini
 from overnight.budget_manager import APIBudgetManager
 from overnight.code_reviewer import review_file, extract_json_from_response, build_review_prompt, get_file_context
+from engine.development_worker_dispatch import (
+    AIDER_BACKEND,
+    DevelopmentWorkerRequest,
+    dispatch_development_worker,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 QUEUE_DIR = ROOT / "overnight" / "advisory_queue" / "pending"
@@ -840,6 +846,204 @@ def _cleanup_tdd_artifact(tdd_path):
         print(f"       ⚠️ TDD artifact cleanup failed: {exc}")
 
 
+def _aider_mode_enabled() -> bool:
+    return (
+        os.getenv("SOC_AUTOPILOT_DEVELOPMENT_WORKER", "legacy")
+        .strip()
+        .lower()
+        == "aider"
+    )
+
+
+def _materialize_aider_diff_as_search_replace(
+    diff_text: str,
+    *,
+    file_path: Path,
+    original: str,
+) -> str:
+    """
+    Convert the Aider worker's unified Git diff into the exact
+    SEARCH/REPLACE format consumed by the existing deterministic
+    patch engine.
+
+    The canonical repository is never touched during conversion.
+    """
+    rel_target = file_path.relative_to(ROOT)
+    rel_target_str = str(rel_target)
+
+    if not diff_text.strip():
+        raise ValueError("Aider returned an empty diff.")
+
+    with tempfile.TemporaryDirectory(prefix="soc-autopilot-aider-") as tmp:
+        tmp_root = Path(tmp)
+        temp_target = tmp_root / rel_target
+        temp_target.parent.mkdir(parents=True, exist_ok=True)
+        temp_target.write_text(original)
+
+        subprocess.run(
+            ["git", "init", "-q"],
+            cwd=tmp_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        subprocess.run(
+            ["git", "add", "--", rel_target_str],
+            cwd=tmp_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        check = subprocess.run(
+            ["git", "apply", "--check", "--whitespace=nowarn", "-"],
+            cwd=tmp_root,
+            input=diff_text,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if check.returncode != 0:
+            raise ValueError(
+                "Aider diff failed deterministic patch validation: "
+                + (check.stderr or check.stdout or "unknown git-apply error")
+            )
+
+        applied = subprocess.run(
+            ["git", "apply", "--whitespace=nowarn", "-"],
+            cwd=tmp_root,
+            input=diff_text,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if applied.returncode != 0:
+            raise ValueError(
+                "Aider diff could not be materialized: "
+                + (applied.stderr or applied.stdout or "unknown git-apply error")
+            )
+
+        new_content = temp_target.read_text()
+
+    if new_content == original:
+        raise ValueError("Aider diff materialized to no content change.")
+
+    # The existing patch engine remains authoritative. We hand it an
+    # exact full-file SEARCH/REPLACE block generated from verified content.
+    search = original
+    replace = new_content
+
+    if not search.endswith("\n"):
+        search += "\n"
+    if not replace.endswith("\n"):
+        replace += "\n"
+
+    return (
+        f"<<<<<<< {rel_target_str}\n"
+        f"{search}"
+        f"=======\n"
+        f"{replace}"
+        f">>>>>>> REPLACE\n"
+    )
+
+
+def _generate_aider_candidate_patch(
+    *,
+    file_path: Path,
+    issue: dict,
+    original: str,
+    tdd_block: str,
+    forensic_context: str,
+    failed_attempt_1_raw: str,
+    pre_flight_rejection_msg: str,
+) -> str:
+    rel_target = str(file_path.relative_to(ROOT))
+
+    timeout = int(
+        os.getenv("SOC_AUTOPILOT_AIDER_TIMEOUT", "600")
+    )
+
+    prompt = f"""
+You are the bounded implementation worker for SOC-AUTOPILOT.
+
+YOU MUST EDIT THE FILE.
+Do not merely explain the change.
+Do not return a prose-only answer.
+
+You may modify ONLY:
+{rel_target}
+
+Implement the issue below.
+
+ISSUE:
+{issue.get("description", "")}
+
+{tdd_block}
+
+FORENSIC CONTEXT:
+{forensic_context[:12000]}
+
+IMPLEMENTATION RULES:
+1. Modify ONLY the authorized file.
+2. Preserve existing behavior outside the required fix.
+3. Do not modify production policy, trust boundaries, provider routing,
+   queue authority, or autonomy controls unless the issue explicitly
+   requires it and deterministic gates authorize it.
+4. Do not modify Git history.
+5. Run the relevant focused tests when practical.
+6. The caller will independently validate the resulting diff, scope,
+   safety, regression behavior, and promotion.
+
+"""
+
+    if failed_attempt_1_raw:
+        prompt += (
+            "\nPREVIOUS FAILED ATTEMPT — DO NOT REPEAT:\n"
+            + failed_attempt_1_raw[:5000]
+        )
+
+    if pre_flight_rejection_msg:
+        prompt += (
+            "\nPRE-FLIGHT REJECTION TO CORRECT:\n"
+            + pre_flight_rejection_msg[:2000]
+        )
+
+    request = DevelopmentWorkerRequest(
+        prompt=prompt,
+        files=(rel_target,),
+        backend=AIDER_BACKEND,
+        timeout=timeout,
+    )
+
+    result = dispatch_development_worker(request)
+
+    if not result.accepted_for_review or not result.worker_result:
+        raise RuntimeError(
+            "Aider worker rejected: " + result.reason
+        )
+
+    worker_result = result.worker_result
+
+    changed = {
+        str(Path(path))
+        for path in worker_result.changed_files
+    }
+
+    if changed != {rel_target}:
+        raise RuntimeError(
+            "Aider modified unauthorized files: "
+            + ", ".join(sorted(changed))
+        )
+
+    return _materialize_aider_diff_as_search_replace(
+        worker_result.diff,
+        file_path=file_path,
+        original=original,
+    )
+
+
+
 def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
     _budget_state = AdvisoryAttemptState(
         advisory_id=str(file_path),
@@ -1104,7 +1308,41 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                 prompt += f"\n\n<<<<<<< YOUR PREVIOUS FAILED ATTEMPT (DO NOT REPEAT THIS)\n{failed_attempt_1_raw[:3000]}\n>>>>>>> END FAILED ATTEMPT\n"
             if attempt == 1 and pre_flight_rejection_msg:
                 prompt += f"\n\n🛑 CRITICAL CORRECTION FROM PRE-FLIGHT GATE: Your previous attempt was rejected because: {pre_flight_rejection_msg}. DO NOT repeat this mistake.\n"
-            raw = generate(prompt, api_keys, temperature=current_temp, max_tokens=current_max, model_type="patch")
+            try:
+                if _aider_mode_enabled():
+                    print(
+                        "       🤖 Aider implementation worker selected "
+                        f"(attempt {attempt})"
+                    )
+                    raw = _generate_aider_candidate_patch(
+                        file_path=file_path,
+                        issue=issue,
+                        original=original,
+                        tdd_block=tdd_block,
+                        forensic_context=forensic_context,
+                        failed_attempt_1_raw=failed_attempt_1_raw,
+                        pre_flight_rejection_msg=pre_flight_rejection_msg,
+                    )
+                    print("       🤖 Aider produced bounded candidate diff")
+                else:
+                    raw = generate(
+                        prompt,
+                        api_keys,
+                        temperature=current_temp,
+                        max_tokens=current_max,
+                        model_type="patch",
+                    )
+            except Exception as exc:
+                print(f"       ⚠️ Aider/legacy generation failed: {exc}")
+                if attempt == 1:
+                    failed_attempt_1_raw = str(exc)
+                    record_failure(
+                        _budget_state,
+                        _budget_policy,
+                        CandidateFailure.EMPTY_RESPONSE,
+                    )
+                    continue
+                return False
             # PRE-FLIGHT SAFETY GATE: Catch regressions before patch application
             clean_code = strip_fences(raw)
             from overnight.safety_gates import pre_flight_safety_check
