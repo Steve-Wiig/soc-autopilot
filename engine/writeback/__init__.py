@@ -26,18 +26,17 @@ class WritebackEngine:
         self.config = config
 
     def execute(self, data: Dict[str, Any], target: str) -> bool:
-        """
-        Executes a writeback operation to a specified target.
 
-        Args:
-            data (Dict[str, Any]): The data to be written back.
-            target (str): The destination identifier for the writeback.
+        """Generic writeback execution is intentionally disabled."""
 
-        Returns:
-            bool: True if the operation was successful, False otherwise.
-        """
-        # Logic for writeback execution
-        return True
+        raise RuntimeError(
+
+            "Generic writeback execution is disabled; "
+
+            "use a specific bounded adapter with explicit authorization"
+
+        )
+
 
     def validate(self, data: Dict[str, Any]) -> Optional[str]:
         """

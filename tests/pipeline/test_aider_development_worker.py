@@ -218,3 +218,150 @@ def test_aider_artifact_cleanup(tmp_path):
     assert not (tmp_path / ".aider.input.history").exists()
     assert not cache.exists()
     assert (tmp_path / ".aider.other.file").exists()
+
+
+def test_diff_vs_head_includes_untracked_file(tmp_path):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+
+    git("init")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "Gate Test")
+
+    tracked = repo / "tracked.py"
+    tracked.write_text("print('base')\n")
+    git("add", "tracked.py")
+    git("commit", "-m", "initial")
+
+    new_file = repo / "new_worker_file.py"
+    new_file.write_text("print('new')\n")
+
+    from engine.aider_development_worker import _diff_vs_head
+
+    diff = _diff_vs_head(repo, ["new_worker_file.py"])
+
+    assert "new_worker_file.py" in diff
+    assert "+print('new')" in diff
+
+
+def test_diff_vs_head_uses_explicit_base_ref(tmp_path):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+
+    git("init")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "Gate Test")
+
+    tracked = repo / "tracked.py"
+    tracked.write_text("print('one')\n")
+    git("add", "tracked.py")
+    git("commit", "-m", "initial")
+
+    base = git("rev-parse", "HEAD").stdout.strip()
+
+    tracked.write_text("print('two')\n")
+    git("add", "tracked.py")
+    git("commit", "-m", "second")
+
+    from engine.aider_development_worker import _diff_vs_head
+
+    diff = _diff_vs_head(
+        repo,
+        ["tracked.py"],
+        base_ref=base,
+    )
+
+    assert "-print('one')" in diff
+    assert "+print('two')" in diff
+
+
+def test_aider_worker_detects_git_history_protection_logic():
+    import inspect
+
+    from engine.aider_development_worker import run_aider_worker
+
+    source = inspect.getsource(run_aider_worker)
+
+    assert "head_before = subprocess.run(" in source
+    assert "base_head = head_before.stdout.strip()" in source
+    assert "head_after = subprocess.run(" in source
+    assert "head_after.stdout.strip() != base_head" in source
+    assert "Aider modified Git history; worker commits " in source
+    assert "are forbidden." in source
+
+
+def test_aider_command_never_runs_from_canonical_repo():
+    import inspect
+
+    from engine.aider_development_worker import run_aider_worker
+
+    source = inspect.getsource(run_aider_worker)
+
+    # This checks specifically the Aider subprocess, not helper Git
+    # commands which legitimately inspect the worker repository.
+    marker = "completed = subprocess.run("
+    assert marker in source
+
+    execution = source[source.index(marker):]
+
+    assert "cwd=worker_root" in execution
+    assert "cwd=repo_root" not in execution[:execution.index("except subprocess.TimeoutExpired")]
+
+def test_worker_output_normalization():
+    from engine.aider_development_worker import _as_text
+
+    assert _as_text("hello") == "hello"
+    assert _as_text(b"hello") == "hello"
+    assert _as_text(None) == ""
+    assert isinstance(_as_text(b"\xff"), str)
+
+def test_default_aider_timeout_is_five_minutes():
+    from engine.aider_development_worker import DEFAULT_TIMEOUT
+
+    assert DEFAULT_TIMEOUT == 300
+
+
+def test_provider_failure_is_detected_when_aider_exits_zero():
+    from engine.aider_development_worker import _provider_failure_observed
+
+    assert _provider_failure_observed(
+        stdout="litellm.APIError: provider unavailable",
+        stderr="",
+    )
+
+    assert _provider_failure_observed(
+        stdout="CohereException: no api key supplied",
+        stderr="",
+    )
+
+    assert _provider_failure_observed(
+        stdout="",
+        stderr="HTTP 429 quota exceeded",
+    )
+
+    assert not _provider_failure_observed(
+        stdout="Aider completed normally.",
+        stderr="",
+    )

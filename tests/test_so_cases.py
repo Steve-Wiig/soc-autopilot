@@ -6,6 +6,19 @@ import pytest
 import json
 from unittest.mock import patch, mock_open, MagicMock
 from engine.writeback.so_cases import sanitize_input, write_to_ledger, create_case, main
+import time
+from engine.writeback.authorization import issue_writeback_authorization
+
+
+def _live_authorization():
+    return issue_writeback_authorization(
+        decision_id="DEC-TEST-SO",
+        target="so_cases",
+        outcome="ALLOW",
+        expires_at=int(time.time()) + 300,
+        secret="unit-test-writeback-secret",
+    )
+
 
 def test_sanitize_input():
     data = {"a" * 100: "b" * 3000, "valid": "data"}
@@ -34,7 +47,7 @@ def test_create_case_api_success(mock_post):
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
     
-    result = create_case("http://test", "key", {"test": "data"}, False)
+    result = create_case("http://test", "key", {"test": "data"}, False, authorization=_live_authorization())
     assert result == "SO-123"
     mock_post.assert_called_once()
 
@@ -42,7 +55,7 @@ def test_create_case_api_success(mock_post):
 def test_create_case_api_failure(mock_post):
     mock_post.side_effect = Exception("Connection Error")
     with pytest.raises(RuntimeError, match="Library code called exit\\(1\\)"):
-        create_case("http://test", "key", {"test": "data"}, False)
+        create_case("http://test", "key", {"test": "data"}, False, authorization=_live_authorization())
 
 def test_create_case_draft_mode():
     result = create_case("http://test", "key", {"test": "data"}, True)

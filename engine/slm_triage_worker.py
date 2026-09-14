@@ -19,12 +19,13 @@ from engine.deterministic_policy import (
 )
 from engine.inference_service import InferenceService
 from engine.model_registry import get_default_router, log_attempt
-from engine.queue_manager import TriageQueueManager, ensure_queue_schema
+from engine.queue_manager import LeaseLostError, TriageQueueManager, ensure_queue_schema
 from engine.strict_queue_transitions import (
     StateTransitionViolation,
     transition_queue_state,
 )
 from engine.trust_boundary import fence_payload_for_llm, scan_for_injection
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -46,19 +47,112 @@ def get_db(db_path: str) -> sqlite3.Connection:
         logger.error(f"DB_ERROR: {e}")
         raise RuntimeError(f"Failed to connect to database: {e}")
 
-def heartbeat(conn: sqlite3.Connection, job_id: int, lease_interval: int) -> None:
+def heartbeat(
+    conn: sqlite3.Connection,
+    job_id: int,
+    lease_interval: int,
+    queue_manager=None,
+) -> None:
+    """Delegate lease heartbeat to canonical queue authority."""
     try:
-        now = datetime.now(timezone.utc)
-        expiry = now + timedelta(seconds=lease_interval)
-        conn.execute("UPDATE triage_queue SET last_heartbeat_at = ?, lease_expires_at = ? WHERE id = ?", (now.strftime('%Y-%m-%d %H:%M:%S'), expiry.strftime('%Y-%m-%d %H:%M:%S'), job_id))
-        conn.commit()
+        if queue_manager is None:
+            queue_manager = TriageQueueManager.__new__(TriageQueueManager)
+            queue_manager.conn = conn
+            queue_manager.cursor = conn.cursor()
+            queue_manager.lease_interval = lease_interval
+            queue_manager._lease_modifier = f"+{lease_interval // 60} minutes"
+        else:
+            queue_manager.conn = conn
+            queue_manager.cursor = conn.cursor()
+        queue_manager.heartbeat(job_id)
     except Exception as e:
         logger.error(f"HEARTBEAT_FAIL: {e}")
 
-def reap_stale(conn: sqlite3.Connection) -> None:
-    now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-    conn.execute("UPDATE triage_queue SET status = 'pending', started_at = NULL, lease_expires_at = NULL, last_heartbeat_at = NULL WHERE status = 'processing' AND lease_expires_at < ?", (now_str,))
-    conn.commit()
+def reap_stale(conn: sqlite3.Connection, queue_manager=None) -> None:
+    """Delegate stale-job recovery to canonical queue authority."""
+    if queue_manager is None:
+        ensure_queue_schema(conn)
+        queue_manager = TriageQueueManager.__new__(TriageQueueManager)
+        queue_manager.conn = conn
+        queue_manager.cursor = conn.cursor()
+        queue_manager.max_attempts = 3
+    else:
+        queue_manager.conn = conn
+        queue_manager.cursor = conn.cursor()
+    queue_manager.reap_stale_jobs()
+
+def _start_lease_heartbeat(
+    db_path: str,
+    job_id: int,
+    lease_interval: int,
+):
+    """
+    Keep the canonical queue lease alive while local inference runs.
+
+    All lease mutation remains owned by TriageQueueManager.
+    """
+    stop_event = threading.Event()
+    ready_event = threading.Event()
+    failure = []
+
+    interval = max(
+        1.0,
+        min(float(lease_interval) / 3.0, 30.0),
+    )
+
+    def heartbeat_loop():
+        manager = None
+        try:
+            manager = TriageQueueManager(
+                db_path=db_path,
+                lease_interval=lease_interval,
+                max_attempts=3,
+            )
+            ready_event.set()
+
+            while not stop_event.wait(interval):
+                manager.heartbeat(job_id)
+
+        except Exception as exc:
+            failure.append(exc)
+            ready_event.set()
+            logger.exception(
+                "LEASE_HEARTBEAT_FAIL job=%s: %s",
+                job_id,
+                exc,
+            )
+
+    thread = threading.Thread(
+        target=heartbeat_loop,
+        name=f"lease-heartbeat-{job_id}",
+        daemon=True,
+    )
+    thread.start()
+
+    ready_event.wait(
+        timeout=max(
+            5.0,
+            min(float(lease_interval), 30.0),
+        )
+    )
+
+    if not ready_event.is_set():
+        stop_event.set()
+        thread.join(timeout=2.0)
+        raise RuntimeError(
+            f"Lease heartbeat failed to initialize for job {job_id}"
+        )
+
+    if failure:
+        stop_event.set()
+        thread.join(timeout=2.0)
+        raise RuntimeError(
+            f"Lease heartbeat failed to initialize for job {job_id}: "
+            f"{failure[0]}"
+        )
+
+    return stop_event, thread, failure
+
 
 def get_queue_depth(conn):
     row = conn.execute("SELECT COUNT(*) FROM triage_queue WHERE status = 'pending'").fetchone()
@@ -87,14 +181,28 @@ def run_worker(config: WorkerConfig) -> None:
 
     while True:
         emit_heartbeat(conn, status="idle")
-        reap_stale(conn)
+        reap_stale(conn, queue_manager)
+        job_id = queue_manager.claim_job(
+            worker_id="slm_triage_worker"
+        )
+
+        if job_id is None:
+            time.sleep(empty_queue_backoff)
+            empty_queue_backoff = min(empty_queue_backoff * 2, MAX_BACKOFF)
+            continue
+
+        empty_queue_backoff = 1
+        emit_heartbeat(conn, status="active")
+
         row = conn.execute(
-            "UPDATE triage_queue SET status = 'processing', started_at = ?, attempts = attempts + 1, lease_expires_at = ? WHERE id = (SELECT id FROM triage_queue WHERE status = 'pending' ORDER BY priority ASC, created_at ASC LIMIT 1) RETURNING id, payload_ref",
-            (datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'), (datetime.now(timezone.utc) + timedelta(seconds=config.lease)).strftime('%Y-%m-%d %H:%M:%S'))
+            "SELECT id, payload_ref FROM triage_queue WHERE id = ?",
+            (job_id,),
         ).fetchone()
-        conn.commit()
 
         if not row:
+            raise RuntimeError(
+                f"Queue manager claimed job {job_id} but it could not be reloaded."
+            )
             time.sleep(empty_queue_backoff)
             empty_queue_backoff = min(empty_queue_backoff * 2, MAX_BACKOFF)
             continue
@@ -130,7 +238,27 @@ def run_worker(config: WorkerConfig) -> None:
 
             # P0: Structured Prompt Fencing (Trust Boundary Enforcement)
             fenced_prompt = fence_payload_for_llm(payload_dict)
-            inference_result = inference_service.generate(prompt=fenced_prompt, role="triage", scope="soc")
+            lease_stop, lease_thread, lease_failure = _start_lease_heartbeat(
+                config.db,
+                job_id,
+                config.lease,
+            )
+            try:
+                inference_result = inference_service.generate(
+                    prompt=fenced_prompt,
+                    role="triage",
+                    scope="soc",
+                )
+            finally:
+                lease_stop.set()
+                lease_thread.join(timeout=2.0)
+
+            if lease_failure:
+                raise RuntimeError(
+                    f"Lease heartbeat failed during inference for job {job_id}: "
+                    f"{lease_failure[0]}"
+                )
+
             raw_output = inference_result.raw_output
             raw_output_hash = hashlib.sha256(raw_output.encode('utf-8')).hexdigest()
             cleaned_output = re.sub(r'^```json\s*', '', raw_output.strip(), flags=re.MULTILINE)

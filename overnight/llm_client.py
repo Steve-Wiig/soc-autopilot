@@ -105,11 +105,11 @@ def _budget_allow(provider, model=None):
     try:
         from overnight.budget_manager import APIBudgetManager
         budget = APIBudgetManager()
-        if provider == "groq":
-            return budget.can_proceed_model_aware("groq", model)
-        return budget.can_proceed(provider)
-    except Exception:
-        return True
+        return budget.reserve_call(provider, model)
+    except Exception as exc:
+        import logging
+        logging.error(f"CONTROL-PLANE FAILURE in budget admission: {exc}")
+        raise
 
 
 def _openrouter_daily_exhausted():
@@ -284,11 +284,6 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     if not api_key:
         return ""
 
-    # Centralized provider budget gate
-    if not _budget_allow("openrouter"):
-        print("    🔒 OpenRouter budget exhausted — skipping")
-        return ""
-
     # Ensure fallback list is loaded
     fallback_list = get_fallback_list(api_key)
 
@@ -352,6 +347,13 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
         try:
             check_quota_or_raise()
             _enforce_free_tier(model)
+
+            # Reserve one shared budget slot for THIS actual outbound request.
+            # Each fallback model attempt is a separate API call.
+            if not _budget_allow("openrouter", model):
+                print(f"    🔒 OpenRouter shared API budget exhausted — skipping {model}")
+                continue
+
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
@@ -366,7 +368,6 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
                     else:
                         print(f"    🔄 Using fallback: {model}")
                 _current_model = model
-                _budget_record("openrouter")
                 return content
 
             elif resp.status_code in (401, 403):
@@ -424,6 +425,11 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
 
     for attempt in range(MAX_RETRIES):
         try:
+            # Reserve one shared budget slot for THIS actual outbound request.
+            if not _budget_allow("gemini"):
+                print("    🔒 Gemini shared API budget exhausted — skipping")
+                return ""
+
             resp = requests.post(GEMINI_URL, json=payload, headers=headers, timeout=90)
 
             if resp.status_code == 429:
@@ -447,7 +453,6 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
             if not parts:
                 return ""
 
-            _budget_record("gemini")
             return parts[0].get("text", "")
         except Exception as e:
             print(f"    [Gemini] API error: {e}")
@@ -677,7 +682,6 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                         _groq_record(model, tokens)
                         content = data["choices"][0]["message"]["content"]
                         _groq_429_count[model] = 0  # success resets backoff
-                        _budget_record("groq")
                         print(f"    ✅ Groq ({model}) responded ({len(content)} chars)")
                         return content
 
@@ -921,15 +925,11 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
     try:
         from overnight.budget_manager import APIBudgetManager
         budget = APIBudgetManager()
-        if not budget.can_proceed("mistral"):
-            print("    🔒 Mistral budget exhausted")
+        if not budget.reserve_call("mistral"):
+            print("    🔒 Mistral shared API budget exhausted")
             return ""
-        if not budget.wait_if_needed("mistral", timeout=30):
-            print("    🔒 Mistral budget wait timeout")
-            return ""
-        
+
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
-        budget.record_call("mistral")
         
         if resp.status_code == 200:
             return resp.json()["choices"][0]["message"]["content"]

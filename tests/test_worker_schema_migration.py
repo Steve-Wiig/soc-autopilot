@@ -76,6 +76,7 @@ def test_first_start_migrates_complete_worker_contract():
         "last_heartbeat_at",
         "payload_ref",
         "failure_reason",
+        "last_modified_by",
     ]
 
     assert columns(conn) == expected

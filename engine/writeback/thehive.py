@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
 from engine.sanitization_pipeline import sanitize_payload
+from engine.writeback.authorization import (
+    WritebackAuthorization,
+    parse_writeback_authorization,
+)
 
 """
 TheHive Case Writeback Adapter
@@ -123,7 +127,7 @@ class TheHiveWritebackAdapter:
         self.verify_sanitization(sanitized, "sanitized payload")
         return sanitized
 
-    def call_thehive_api(self, url: str, api_key: str, payload: Any) -> str:
+    def call_thehive_api(self, url: str, api_key: str, payload: Any, authorization: WritebackAuthorization | None = None) -> str:
         """Create a case in TheHive via REST API.
 
         Args:
@@ -138,6 +142,11 @@ class TheHiveWritebackAdapter:
             RuntimeError: If API returns error status or missing case ID in response.
             requests.exceptions.RequestException: If network request fails.
         """
+        if authorization is None:
+            raise RuntimeError(
+                "Live TheHive writeback requires explicit WritebackAuthorization"
+            )
+
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -202,7 +211,23 @@ class TheHiveWritebackAdapter:
             print(f"Sanitization error: {e}", file=sys.stderr)
             return 4
         try:
-            case_id = self.call_thehive_api(args.url, args.api_key, sanitized_data)
+            authorization = None
+            if args.mode == "live":
+                if not args.authorization_token:
+                    raise RuntimeError(
+                        "--authorization-token is required for live TheHive writeback"
+                    )
+                authorization = parse_writeback_authorization(
+                    args.authorization_token,
+                    expected_target="thehive",
+                )
+
+            case_id = self.call_thehive_api(
+                args.url,
+                args.api_key,
+                sanitized_data,
+                authorization=authorization,
+            )
             self.log_handoff(log_path, case_id, args.mode)
             return case_id
         except requests.exceptions.RequestException as e:
@@ -279,6 +304,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-key", required=True, help="TheHive API Key")
     parser.add_argument("--url", required=True, help="TheHive Base URL")
     parser.add_argument("--mode", choices=['draft', 'live'], default='draft', help="Adapter mode")
+    parser.add_argument(
+        "--authorization-token",
+        help="Signed authorization token required for live mode",
+    )
     parser.add_argument("--log-path", help="Path to the handoff log file (overrides HANDOFF_LOG_PATH env var and default)")
     return parser.parse_args()
 
@@ -316,7 +345,7 @@ def build_payload(raw_data: Any, mode: str) -> Any:
     return _default_adapter.build_payload(raw_data, mode)
 
 
-def call_thehive_api(url: str, api_key: str, payload: Any) -> str:
+def call_thehive_api(url: str, api_key: str, payload: Any, authorization: WritebackAuthorization | None = None) -> str:
     """Create a case in TheHive via REST API (module-level backward compatibility).
 
 
@@ -331,7 +360,7 @@ def call_thehive_api(url: str, api_key: str, payload: Any) -> str:
     Raises:
         RuntimeError: If API call fails.
     """
-    return _default_adapter.call_thehive_api(url, api_key, payload)
+    return _default_adapter.call_thehive_api(url, api_key, payload, authorization=authorization)
 
 
 def log_handoff(log_path: Path, case_id: str, mode: str) -> None:

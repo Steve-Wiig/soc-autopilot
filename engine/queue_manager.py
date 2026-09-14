@@ -11,6 +11,10 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+
+class LeaseLostError(RuntimeError):
+    """Raised when the canonical queue lease is no longer owned."""
+
 # Status constants
 STATUS_PENDING = 'pending'
 STATUS_PROCESSING = 'processing'
@@ -323,13 +327,11 @@ class TriageQueueManager:
         """
         Update the heartbeat and lease expiration for a processing job.
 
-        Parameters
-        ----------
-        job_id : int
-            Identifier of the job to heartbeat.
+        A heartbeat succeeds only when exactly one processing row is updated.
+        Zero rows means the worker no longer owns the lease.
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-        self.cursor.execute(
+        cur = self.cursor.execute(
             f"""
             UPDATE triage_queue
             SET last_heartbeat_at = ?,
@@ -338,8 +340,17 @@ class TriageQueueManager:
             """,
             (now, job_id),
         )
+
+        if cur.rowcount != 1:
+            self.conn.rollback()
+            raise LeaseLostError(
+                f"Lease lost for job {job_id}: heartbeat updated "
+                f"{cur.rowcount} rows"
+            )
+
         self.conn.commit()
         logger.debug("Heartbeat updated for job %d", job_id)
+
     def reap_stale_jobs(self) -> None:
         """
         Recover or fail jobs that have exceeded their lease without completion.
@@ -352,7 +363,8 @@ class TriageQueueManager:
         now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
         stale_jobs = self.cursor.execute(
             """
-            SELECT id, severity, attempts FROM triage_queue
+            SELECT id, severity, attempts, lease_expires_at
+            FROM triage_queue
             WHERE status = 'processing' AND lease_expires_at < ?
             """,
             (now,),
@@ -361,10 +373,15 @@ class TriageQueueManager:
         reset_count = 0
         failed_count = 0
 
-        for job_id, severity, attempts in stale_jobs:
+        for job_id, severity, attempts, lease_expires_at in stale_jobs:
             if attempts < self.max_attempts:
                 try:
-                    transition_queue_state(self.conn, job_id, "pending")
+                    transition_queue_state(
+                        self.conn,
+                        job_id,
+                        "pending",
+                        expected_lease_expires_at=lease_expires_at,
+                    )
                     self.conn.execute(
                         "UPDATE triage_queue SET last_modified_by = 'system' "
                         "WHERE id = ? AND status = 'pending'",
@@ -382,7 +399,12 @@ class TriageQueueManager:
             if severity == SEVERITY_CRITICAL and not self._check_approval(job_id, "failed"):
                 # Escalation path: cannot fail, so reset to pending with flag.
                 try:
-                    transition_queue_state(self.conn, job_id, "pending")
+                    transition_queue_state(
+                        self.conn,
+                        job_id,
+                        "pending",
+                        expected_lease_expires_at=lease_expires_at,
+                    )
                     self.conn.execute(
                         "UPDATE triage_queue SET failure_reason = 'critical_escalation_no_approval', "
                         "last_modified_by = 'system' "
@@ -402,7 +424,11 @@ class TriageQueueManager:
 
             try:
                 transition_queue_state(
-                    self.conn, job_id, "failed", "lease_expired_max_attempts"
+                    self.conn,
+                    job_id,
+                    "failed",
+                    "lease_expired_max_attempts",
+                    expected_lease_expires_at=lease_expires_at,
                 )
                 self.conn.execute(
                     "UPDATE triage_queue SET completed_at = ?, "
@@ -489,6 +515,7 @@ def ensure_queue_schema(conn):
         "payload_ref": "TEXT",
         "failure_reason": "TEXT",
         "severity": "TEXT",
+        "last_modified_by": "TEXT NOT NULL DEFAULT 'system'",
     }
     for column, sql_type in worker_columns.items():
         if column not in columns:
@@ -517,6 +544,22 @@ def ensure_queue_schema(conn):
             job_id TEXT NOT NULL,
             result TEXT NOT NULL,
             processed_at TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS triage_queue_approvals (
+            job_id INTEGER NOT NULL,
+            target_status TEXT NOT NULL
+                CHECK (target_status IN ('completed', 'failed')),
+            approved_by TEXT NOT NULL,
+            approved_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            reason TEXT,
+            judge_metadata TEXT,
+            PRIMARY KEY (job_id, target_status),
+            FOREIGN KEY (job_id)
+                REFERENCES triage_queue (id)
+                ON DELETE CASCADE
         )
     """)
 

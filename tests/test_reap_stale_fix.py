@@ -187,6 +187,13 @@ def test_pending_job_is_not_modified(tmp_path):
 def test_heartbeat_writes_same_timestamp_contract(tmp_path):
     conn = make_db(tmp_path)
 
+    conn.execute("""
+        UPDATE triage_queue
+        SET status='processing'
+        WHERE id='job-pending'
+    """)
+    conn.commit()
+
     heartbeat(
         conn,
         "job-pending",

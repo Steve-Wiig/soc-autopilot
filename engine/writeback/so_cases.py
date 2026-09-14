@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Callable
 
 import requests
+from engine.writeback.authorization import (
+    WritebackAuthorization,
+    parse_writeback_authorization,
+)
 
 # Module-level session for HTTP connection pooling (TCP keepalive)
 _HTTP_SESSION = requests.Session()
@@ -152,7 +156,7 @@ def _get_case_creator(draft_mode: bool) -> Callable[..., str]:
     return lambda api_url, api_key, sanitized, timeout=DEFAULT_TIMEOUT: create_case_live(api_url, api_key, sanitized, timeout)
 
 
-def create_case(api_url: str, api_key: str, payload: Dict[str, Any], draft_mode: bool, timeout: int = DEFAULT_TIMEOUT) -> str:
+def create_case(api_url: str, api_key: str, payload: Dict[str, Any], draft_mode: bool, timeout: int = DEFAULT_TIMEOUT, authorization: WritebackAuthorization | None = None) -> str:
     """Creates a case via the Security Onion API (backward compatible).
 
     Args:
@@ -173,6 +177,11 @@ def create_case(api_url: str, api_key: str, payload: Dict[str, Any], draft_mode:
     
     if draft_mode:
         return creator(sanitized)
+
+    if authorization is None:
+        raise RuntimeError(
+            "Live SO case writeback requires explicit WritebackAuthorization"
+        )
     return creator(api_url, api_key, sanitized, timeout)
 
 
@@ -222,6 +231,10 @@ def main() -> None:
     parser.add_argument("--key", required=True)
     parser.add_argument("--payload", required=True, help="JSON string of case data")
     parser.add_argument("--draft", action="store_true")
+    parser.add_argument(
+        "--authorization-token",
+        help="Signed authorization token required for live mode",
+    )
     parser.add_argument("--timeout", type=int, default=int(os.environ.get(ENV_TIMEOUT, DEFAULT_TIMEOUT)), help=f"API timeout in seconds (default: {DEFAULT_TIMEOUT}, env: {ENV_TIMEOUT})")
     
     args = parser.parse_args()
@@ -231,7 +244,25 @@ def main() -> None:
     except json.JSONDecodeError:
         raise RuntimeError(f"Library code called exit(2)")
 
-    case_id = create_case(args.url, args.key, data, args.draft, args.timeout)
+    authorization = None
+    if not args.draft:
+        if not args.authorization_token:
+            raise RuntimeError(
+                "--authorization-token is required for live SO case writeback"
+            )
+        authorization = parse_writeback_authorization(
+            args.authorization_token,
+            expected_target="so_cases",
+        )
+
+    case_id = create_case(
+        args.url,
+        args.key,
+        data,
+        args.draft,
+        args.timeout,
+        authorization=authorization,
+    )
     
     write_to_ledger(data.get("ref", "N/A"), case_id, args.draft)
     

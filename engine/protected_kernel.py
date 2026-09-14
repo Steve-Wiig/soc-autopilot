@@ -56,6 +56,14 @@ PROTECTED_PATHS: frozenset[str] = frozenset({
 
     # The tree-wide verifier.
     "verify_p0.sh",
+    "engine/aider_development_worker.py",
+    "engine/aider_budget_shim.py",
+    "engine/development_budget_broker.py",
+    "engine/development_worker_dispatch.py",
+    "engine/development_worker_pipeline.py",
+    "engine/development_candidate.py",
+    "engine/git_isolation.py",
+    "engine/isolated_worker_runner.py",
 })
 
 

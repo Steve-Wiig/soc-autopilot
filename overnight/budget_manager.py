@@ -28,9 +28,11 @@ from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
+import fcntl
 
 ROOT = Path(__file__).resolve().parent.parent
 USAGE_FILE = ROOT / "overnight" / "api_usage.json"
+LOCK_FILE = ROOT / "overnight" / "api_usage.lock"
 
 # ============================================================
 # FREE TIER LIMITS (adjust these to match your actual limits)
@@ -75,9 +77,16 @@ SAFETY_MARGIN = 0.85  # Stop at 85% of limit to avoid hitting 429
 class APIBudgetManager:
     """Tracks and enforces API usage limits across providers."""
 
-    def __init__(self, limits: Optional[Dict] = None):
+    def __init__(
+        self,
+        limits: Optional[Dict] = None,
+        *,
+        usage_file: Optional[Path] = None,
+        lock_file: Optional[Path] = None,
+    ):
         self.limits = limits or LIMITS
-        self.usage_file = USAGE_FILE
+        self.usage_file = Path(usage_file) if usage_file else USAGE_FILE
+        self.lock_file = Path(lock_file) if lock_file else LOCK_FILE
         self._usage = self._load_usage()
 
     # ============================================================
@@ -117,6 +126,42 @@ class APIBudgetManager:
         while usage and usage[0] < cutoff:
             usage.popleft()
         self._usage[provider] = usage
+
+    def reserve_call(self, provider: str, model: str = None) -> bool:
+        """Atomically admit and consume one API-call budget slot.
+
+        This is the authoritative admission primitive for concurrent
+        automation. The reservation is written before the external request,
+        so concurrent workers cannot both consume the same final slot.
+
+        A reservation represents an attempted external API call and therefore
+        remains counted even when the provider later returns an error.
+        """
+        self.usage_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with self.lock_file.open("a+") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            try:
+                # Refresh state while holding the process-wide lock.
+                self._usage = self._load_usage()
+
+                if provider == "groq":
+                    allowed = self.can_proceed_model_aware(provider, model)
+                else:
+                    allowed = self.can_proceed(provider)
+
+                if not allowed:
+                    return False
+
+                if provider not in self._usage:
+                    self._usage[provider] = deque()
+
+                self._cleanup_old(provider)
+                self._usage[provider].append(datetime.now())
+                self._save_usage()
+                return True
+            finally:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
     def record_call(self, provider: str):
         """Record a single API call."""

@@ -43,7 +43,7 @@ def authorize_transition(current_state: str, target_state: str, job_record: dict
     return True
 
 
-def transition_queue_state(conn, job_id: int, new_status: str, failure_reason: str = None):
+def transition_queue_state(conn, job_id: int, new_status: str, failure_reason: str = None, expected_lease_expires_at: str = None):
     """P1-1: Single authoritative queue transition mechanism.
 
     Authority chain (each step must succeed; anything else fails closed):
@@ -83,6 +83,20 @@ def transition_queue_state(conn, job_id: int, new_status: str, failure_reason: s
         target,
         {"priority": severity, "approval": {"approved": approved}},
     )
+
+    if expected_lease_expires_at is not None:
+        lease_guard = conn.execute(
+            "UPDATE triage_queue "
+            "SET lease_expires_at = lease_expires_at "
+            "WHERE id = ? AND status = ? AND lease_expires_at = ?",
+            (job_id, current, expected_lease_expires_at),
+        )
+
+        if lease_guard.rowcount != 1:
+            raise StateTransitionViolation(
+                f"Lease changed before transition for job {job_id}; "
+                "stale reaper operation rejected"
+            )
 
     if target == "completed":
         cur = conn.execute(
