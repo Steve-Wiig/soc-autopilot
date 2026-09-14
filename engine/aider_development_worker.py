@@ -426,7 +426,7 @@ def run_aider_worker(
                 model_name=model,
             )
 
-    if selected_provider is not None and not api_key_env:
+    if selected_provider in {"openrouter", "gemini"} and not api_key_env:
         raise RuntimeError(
             "Cloud Aider worker attempts require an explicit api_key_env."
         )
