@@ -46,7 +46,8 @@ def test_explicit_legacy_backend():
     assert result.accepted_for_review is True
 
 
-def test_aider_backend_uses_worker_result():
+def test_aider_backend_uses_worker_result(monkeypatch):
+    monkeypatch.setenv("SOC_AUTOPILOT_DEVELOPMENT_CLOUD", "1")
     expected = AiderWorkerResult(
         success=True,
         changed_files=("engine/example.py",),
@@ -83,7 +84,8 @@ def test_aider_backend_uses_worker_result():
     assert result.worker_result is expected
 
 
-def test_failed_aider_is_not_accepted():
+def test_failed_aider_is_not_accepted(monkeypatch):
+    monkeypatch.setenv("SOC_AUTOPILOT_DEVELOPMENT_CLOUD", "1")
     failed = AiderWorkerResult(
         success=False,
         changed_files=("engine/example.py",),
@@ -147,7 +149,8 @@ def test_legacy_failure_is_not_accepted():
     assert "legacy worker failed" in result.reason.lower()
 
 
-def test_dispatcher_does_not_equate_proposal_with_approval():
+def test_dispatcher_does_not_equate_proposal_with_approval(monkeypatch):
+    monkeypatch.setenv("SOC_AUTOPILOT_DEVELOPMENT_CLOUD", "1")
     expected = AiderWorkerResult(
         success=True,
         changed_files=("engine/example.py",),
