@@ -223,6 +223,18 @@ def build_aider_sandbox_command(
             else []
         ),
         
+        # Keep Aider runtime history out of the worker checkout.
+        # The sandbox HOME is disposable and isolated from the repository.
+        "--setenv",
+        "AIDER_INPUT_HISTORY_FILE",
+        isolated_home + "/.aider.input.history",
+        "--setenv",
+        "AIDER_CHAT_HISTORY_FILE",
+        isolated_home + "/.aider.chat.history.md",
+        "--setenv",
+        "AIDER_LLM_HISTORY_FILE",
+        isolated_home + "/.aider.llm.history",
+
         # Only the explicitly selected development credential is exposed.
         *(
             ["--setenv", api_key_env, api_key]
