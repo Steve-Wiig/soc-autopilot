@@ -254,6 +254,14 @@ def dispatch_development_worker(
 
         providers = resolve_aider_providers()
 
+        if not providers:
+            return DevelopmentWorkerDispatchResult(
+                backend=AIDER_BACKEND,
+                accepted_for_review=False,
+                worker_result=None,
+                reason="No eligible cloud Aider provider is available.",
+            )
+
         last_result: AiderWorkerResult | None = None
         attempted: list[str] = []
 

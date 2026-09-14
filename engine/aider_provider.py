@@ -22,8 +22,6 @@ from engine.openrouter_catalog import (
 
 
 DEFAULT_GEMINI_MODEL = "gemini/gemini-3.8-flash"
-DEFAULT_LOCAL_MODEL = "ollama_chat/qwen2.5-coder:3b"
-DEFAULT_LOCAL_API_BASE = "http://127.0.0.1:11434"
 
 CLOUD_ENABLE_ENV = "SOC_AUTOPILOT_DEVELOPMENT_CLOUD"
 OPENROUTER_MODEL_ENV = "AIDER_OPENROUTER_MODEL"
@@ -116,7 +114,7 @@ def resolve_aider_providers(
 ) -> tuple[AiderProvider, ...]:
     """Return deterministic development-provider order.
 
-    OpenRouter is primary, Gemini secondary, local Ollama last.
+    OpenRouter is primary, Gemini secondary.
 
     OpenRouter is included only when:
       1. cloud development is explicitly enabled,
@@ -155,16 +153,5 @@ def resolve_aider_providers(
                     api_key_env="GEMINI_API_KEY",
                 )
             )
-
-    providers.append(
-        AiderProvider(
-            name="local_ollama",
-            model=env.get("AIDER_LOCAL_MODEL", DEFAULT_LOCAL_MODEL),
-            api_base=env.get(
-                "AIDER_LOCAL_API_BASE",
-                DEFAULT_LOCAL_API_BASE,
-            ),
-        )
-    )
 
     return tuple(providers)

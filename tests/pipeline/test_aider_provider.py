@@ -7,9 +7,7 @@ from engine.aider_provider import (
 def test_local_only_is_default():
     providers = resolve_aider_providers(environ={})
 
-    assert [p.name for p in providers] == ["local_ollama"]
-    assert providers[0].model == "ollama_chat/qwen2.5-coder:3b"
-    assert providers[0].api_key_env is None
+    assert providers == ()
 
 
 def test_cloud_order_is_openrouter_then_gemini_then_local(monkeypatch):
@@ -66,7 +64,6 @@ def test_cloud_order_is_openrouter_then_gemini_then_local(monkeypatch):
     assert [p.name for p in providers] == [
         "openrouter",
         "gemini",
-        "local_ollama",
     ]
 
     assert providers[0].model == "openrouter/example/free-coder"
@@ -76,14 +73,14 @@ def test_cloud_order_is_openrouter_then_gemini_then_local(monkeypatch):
     assert providers[1].api_key_env == "GEMINI_API_KEY"
 
 
-def test_cloud_enabled_but_missing_keys_falls_back_to_local():
+def test_cloud_enabled_but_missing_keys_returns_no_providers():
     providers = resolve_aider_providers(
         environ={
             CLOUD_ENABLE_ENV: "true",
         }
     )
 
-    assert [p.name for p in providers] == ["local_ollama"]
+    assert providers == ()
 
 
 def test_custom_models_are_supported():
@@ -102,8 +99,7 @@ def test_custom_models_are_supported():
 
     assert providers[0].model == "openrouter/custom/model"
     assert providers[1].model == "gemini/custom"
-    assert providers[2].model == "ollama_chat/custom:4b"
-    assert providers[2].api_base == "http://127.0.0.1:9999"
+    assert len(providers) == 2
 
 def test_openrouter_free_only_selects_dynamic_free_model(monkeypatch):
     import engine.aider_provider as provider
@@ -188,7 +184,7 @@ def test_openrouter_free_only_rejects_explicit_paid_model(monkeypatch):
         }
     )
 
-    assert resolved[0].name == "local_ollama"
+    assert resolved == ()
     assert all(item.name != "openrouter" for item in resolved)
 
 
@@ -209,7 +205,7 @@ def test_openrouter_free_only_fails_closed_on_catalog_error(monkeypatch):
     )
 
     assert all(item.name != "openrouter" for item in resolved)
-    assert resolved[-1].name == "local_ollama"
+    assert resolved == ()
 
 def test_openrouter_free_model_gets_openrouter_litellm_prefix(monkeypatch):
     import engine.aider_provider as provider

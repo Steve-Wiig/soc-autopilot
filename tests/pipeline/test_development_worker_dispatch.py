@@ -61,6 +61,8 @@ def test_aider_backend_uses_worker_result():
         prompt="do work",
         files=("engine/example.py",),
         backend=AIDER_BACKEND,
+        model="openrouter/test-free",
+        api_base="https://openrouter.ai/api/v1",
     )
 
     def fake_aider(prompt, files, **kwargs):
@@ -96,6 +98,8 @@ def test_failed_aider_is_not_accepted():
         prompt="do work",
         files=("engine/example.py",),
         backend=AIDER_BACKEND,
+        model="openrouter/test-free",
+        api_base="https://openrouter.ai/api/v1",
     )
 
     from unittest.mock import patch
@@ -158,6 +162,8 @@ def test_dispatcher_does_not_equate_proposal_with_approval():
         prompt="do work",
         files=("engine/example.py",),
         backend=AIDER_BACKEND,
+        model="openrouter/test-free",
+        api_base="https://openrouter.ai/api/v1",
     )
 
     from unittest.mock import patch

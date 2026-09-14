@@ -27,7 +27,7 @@ def _result(
     )
 
 
-def test_default_aider_rotation_openrouter_to_gemini_to_local(
+def test_default_aider_rotation_openrouter_to_gemini(
     monkeypatch,
 ):
     monkeypatch.setenv(CLOUD_ENABLE_ENV, "1")
@@ -51,19 +51,11 @@ def test_default_aider_rotation_openrouter_to_gemini_to_local(
 
         if provider == "gemini":
             return _result(
-                success=False,
-                returncode=1,
-                reason="Aider exited with provider rate limit.",
+                success=True,
+                returncode=0,
+                reason="Aider produced proposal.",
                 model=kwargs["model"],
-                stderr="HTTP 429 quota exceeded",
             )
-
-        return _result(
-            success=True,
-            returncode=0,
-            reason="Aider produced proposal.",
-            model=kwargs["model"],
-        )
 
     monkeypatch.setattr(
         "engine.development_worker_dispatch.run_aider_worker",
@@ -83,7 +75,6 @@ def test_default_aider_rotation_openrouter_to_gemini_to_local(
     assert [x["provider_name"] for x in attempts] == [
         "openrouter",
         "gemini",
-        "local_ollama",
     ]
 
 
@@ -123,7 +114,7 @@ def test_terminal_worker_failure_does_not_fallback(
     assert attempts[0]["provider_name"] == "openrouter"
 
 
-def test_cloud_disabled_uses_local_only(
+def test_cloud_disabled_returns_no_provider(
     monkeypatch,
 ):
     monkeypatch.delenv(CLOUD_ENABLE_ENV, raising=False)
@@ -154,10 +145,9 @@ def test_cloud_disabled_uses_local_only(
         )
     )
 
-    assert result.accepted_for_review is True
-    assert len(attempts) == 1
-    assert attempts[0]["provider_name"] == "local_ollama"
-    assert attempts[0]["api_key_env"] is None
+    assert result.accepted_for_review is False
+    assert result.worker_result is None
+    assert attempts == []
 
 
 def test_explicit_model_does_not_rotate_providers(
