@@ -17,6 +17,20 @@ class WorkerVote:
     Immutable record of a worker's vote on a candidate fix.
     Signature is mandatory and must be a valid Ed25519 signature
     over the signing_payload() when a key registry is provided.
+
+    The signing_payload() method returns a canonical JSON representation
+    of the vote fields, with the ``signature`` field cleared (set to an
+    empty string). This payload is the exact byte string that the worker's
+    Ed25519 private key signs, ensuring that the signature binds to the
+    vote data and not to any other metadata. The payload includes all
+    fields that define the vote: worker_id, worker_class, worker_instance,
+    execution_host, software_version, candidate_hash, decision, and
+    timestamp. By removing the signature before serialization, we avoid
+    a circular dependency where the signature would be part of the data
+    it signs. The canonical JSON is produced with ``sort_keys=True`` and
+    ``separators=(',', ':')`` to guarantee deterministic encoding across
+    different platforms and implementations. This deterministic format
+    is essential for correct verification in the VoteValidator.
     """
     worker_id: str
     worker_class: str

@@ -7,6 +7,12 @@ Security Invariants:
 - Enforces deterministic safety/regression gates.
 - Requires 3 independent Ed25519-signed votes.
 - STRICTLY limits automated promotion to PENDING_HUMAN_MERGE.
+
+State Machine Transitions:
+- GENERATED -> TESTED: After the strict proposal evaluation passes safety and regression gates.
+- TESTED -> CANARY_PASSED: After canary tests have been executed and passed.
+- CANARY_PASSED -> PENDING_HUMAN_MERGE: The candidate is ready for human review and merge.
+- Any transition may be rejected if validation fails, resulting in a REJECTED state.
 """
 from dataclasses import dataclass
 from pathlib import Path
