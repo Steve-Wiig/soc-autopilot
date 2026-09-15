@@ -179,7 +179,7 @@ def _is_aider_artifact(path: str) -> bool:
     return bool(parts and parts[0] in AIDER_ARTIFACT_DIRS)
 
 
-def _worktree_paths_vs_head(repo_root: Path) -> tuple[str, ...]:
+def _worktree_paths_vs_head(repo_root: Path, allowed_paths: set[str] | None = None) -> tuple[str, ...]:
     """Return every source path changed from the worker baseline.
 
     Known Aider-only ephemeral artifacts are deliberately excluded.
@@ -211,6 +211,22 @@ def _worktree_paths_vs_head(repo_root: Path) -> tuple[str, ...]:
         line = line.strip()
         if line and not _is_aider_artifact(line):
             paths.add(line)
+
+    # Explicitly check allowed paths in case they are gitignored (e.g., new file creation)
+    if allowed_paths:
+        for path in allowed_paths:
+            absolute = repo_root / path
+            if absolute.exists() and not absolute.is_symlink():
+                # Check if it's already tracked in HEAD
+                tracked_check = subprocess.run(
+                    ["git", "ls-files", "--error-unmatch", "--", path],
+                    cwd=repo_root,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                if tracked_check.returncode != 0 and not _is_aider_artifact(path):
+                    paths.add(path)
 
     return tuple(sorted(paths))
 
@@ -516,7 +532,7 @@ def run_aider_worker(
                         check=False,
                     )
                 except subprocess.TimeoutExpired as exc:
-                    changed = _worktree_paths_vs_head(worker_root)
+                    changed = _worktree_paths_vs_head(worker_root, allowed)
                     _cleanup_aider_artifacts(worker_root)
                     return AiderWorkerResult(
                         success=False,
@@ -571,7 +587,7 @@ def run_aider_worker(
 
             if head_after.stdout.strip() != base_head:
                 changed_after_commit = _worktree_paths_vs_head(
-                    worker_root
+                    worker_root, allowed
                 )
 
                 diff = _diff_vs_head(
@@ -597,7 +613,7 @@ def run_aider_worker(
                     failure_class=FAILURE_CLASS_TERMINAL,
                 )
 
-            changed = _worktree_paths_vs_head(worker_root)
+            changed = _worktree_paths_vs_head(worker_root, allowed)
 
             unauthorized = tuple(
                 path for path in changed
