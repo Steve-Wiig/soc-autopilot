@@ -1048,6 +1048,30 @@ IMPLEMENTATION RULES:
 
 
 
+class AutoFixOutcome:
+    """Explicit internal outcome for the guarded auto-fix pipeline."""
+
+    ESCALATED = "ESCALATED"
+    STALE_HANDLED = "STALE_HANDLED"
+    STALE_REJECTED = "STALE_REJECTED"
+    SHADOW_PUSHED = "SHADOW_PUSHED"
+    REJECTED = "REJECTED"
+    FAILED = "FAILED"
+
+
+_AUTO_FIX_LAST_OUTCOME = None
+
+
+def _set_auto_fix_outcome(outcome, legacy_result):
+    global _AUTO_FIX_LAST_OUTCOME
+    _AUTO_FIX_LAST_OUTCOME = outcome
+    return legacy_result
+
+
+def get_last_auto_fix_outcome():
+    return _AUTO_FIX_LAST_OUTCOME
+
+
 def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
     _budget_state = AdvisoryAttemptState(
         advisory_id=str(file_path),
@@ -1057,17 +1081,17 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
     _budget_policy = BudgetPolicy()
 
     try: original = file_path.read_text()
-    except Exception: return False
+    except Exception: return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
     # Branch safety check
     try:
         branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
         if not branch:
             print("❌ Detached HEAD detected, aborting")
-            return False
+            return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
     except subprocess.CalledProcessError as e:
         print(f"❌ git branch check failed: {e}")
-        return False
+        return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
     # PROTECTED KERNEL: refuse early rather than burn a TDD generation
     # call, forensic analysis, and cloud API quota on a target the
@@ -1077,7 +1101,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
         _rel_target = file_path.relative_to(ROOT)
     except ValueError:
         print("❌ File path is outside repository root, aborting")
-        return False
+        return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
     if is_protected(_rel_target):
         print(f"       🛡️ PROTECTED KERNEL: {_rel_target} is not writable by the autonomous path.")
@@ -1092,10 +1116,10 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             "ESCALATED",
             f"Protected kernel: {_rel_target}",
         )
-        return True
+        return _set_auto_fix_outcome(AutoFixOutcome.ESCALATED, True)
 
-    if is_ast_defeated(original): return False
-    if issue.get('category', '').lower() in ['style', 'documentation']: return False
+    if is_ast_defeated(original): return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
+    if issue.get('category', '').lower() in ['style', 'documentation']: return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
     targets = _get_test_targets(file_path)
 
@@ -1125,13 +1149,13 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                 "ESCALATED",
                 f"High-risk {category} advisory requires manual/Oracle review.",
             )
-            return True
+            return _set_auto_fix_outcome(AutoFixOutcome.ESCALATED, True)
 
         # Truly non-functional/stale categories.
         if category in ["style", "documentation", ""]:
             print("       ✅ Baseline tests passed. Stale advisory.")
             _record_ledger(file_path, issue, "STALE", "Baseline passed")
-            return True
+            return _set_auto_fix_outcome(AutoFixOutcome.STALE_HANDLED, True)
 
         # High-risk / ambiguous non-functional findings remain gated for review.
         # Functional categories are allowed through to TDD generation so a
@@ -1141,7 +1165,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             print(f"       ⚠️ {reason}")
             _escalate_to_manual(file_path, issue, reason)
             _record_ledger(file_path, issue, "ESCALATED", reason)
-            return True
+            return _set_auto_fix_outcome(AutoFixOutcome.ESCALATED, True)
 
         if category in FUNCTIONAL_CATEGORIES:
             print(
@@ -1212,7 +1236,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                     "STALE",
                     f"TDD red-phase validation failed: {e}",
                 )
-                return False
+                return _set_auto_fix_outcome(AutoFixOutcome.STALE_REJECTED, False)
 
     # NEW SAFETY GATE: If baseline passed, and we failed to generate/validate a TDD test, drop it.
     if baseline_tb is None and not tdd_kept_path:
@@ -1234,10 +1258,10 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
             if category in FUNCTIONAL_CATEGORIES or category in ['style', 'documentation', '']:
                 print(f"       ✅ Baseline passed; no regression test generated for '{category}'. Marking stale.")
                 _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
-                return True
+                return _set_auto_fix_outcome(AutoFixOutcome.STALE_HANDLED, True)
             print(f"       ⚠️ Baseline passed for '{category}' with no TDD. Dropping as stale.")
             _record_ledger(file_path, issue, "STALE", "Baseline passed, no regression test generated")
-            return True
+            return _set_auto_fix_outcome(AutoFixOutcome.STALE_HANDLED, True)
         else:
             # P0 HARDENING: tdd_test_code existed but was vacuous (not kept).
             # Non-documentation/style categories cannot bypass without a valid test.
@@ -1248,7 +1272,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                 "STALE",
                 "Baseline passed, regression test was vacuous and rejected for behavior-changing category",
             )
-            return False
+            return _set_auto_fix_outcome(AutoFixOutcome.STALE_REJECTED, False)
 
     try:
         # 3. GENERATION LOOP
@@ -1349,7 +1373,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                     "ESCALATED",
                     f"Aider terminal worker boundary: {exc}",
                 )
-                return True
+                return _set_auto_fix_outcome(AutoFixOutcome.ESCALATED, True)
             except Exception as exc:
                 print(f"       ⚠️ Aider/legacy generation failed: {exc}")
                 if attempt == 1:
@@ -1360,7 +1384,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                         CandidateFailure.EMPTY_RESPONSE,
                     )
                     continue
-                return False
+                return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
             # PRE-FLIGHT SAFETY GATE: Catch regressions before patch application
             clean_code = strip_fences(raw)
             from overnight.safety_gates import pre_flight_safety_check
@@ -1417,12 +1441,12 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                     # PATCH_ENGINE_UNAVAILABLE - no-op fallback is a governance bug
                     print('       ❌ PATCH_ENGINE_UNAVAILABLE: Cannot generate valid patch')
                     _record_ledger(file_path, issue, 'FAILED', 'Patch engine unavailable')
-                    return False
+                    return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
             except ProtectedKernelViolation as e:
                 print(f"       🛡️ PROTECTED KERNEL: {e}")
                 _escalate_to_manual(file_path, issue, f"Protected kernel: {e}")
                 _record_ledger(file_path, issue, "ESCALATED", f"Protected kernel: {e}")
-                return True
+                return _set_auto_fix_outcome(AutoFixOutcome.ESCALATED, True)
             except Exception as e:
                 if attempt == 0:
                     failed_attempt_1_raw = raw
@@ -1434,7 +1458,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                     elif "algorithm" in critic_constraint.lower() or "logic" in critic_constraint.lower(): current_temp = 0.6
                     else: current_temp = 0.1
                     continue
-                return False
+                return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
             # GUARD: If patch produced no changes, skip pytest and retry
             if not modified_files:
@@ -1451,7 +1475,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                 if attempt == 0:
                     failed_attempt_1_raw = raw
                     continue
-                return False
+                return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
             # 👻 GHOST NAME GATE: Reject patches that use undefined names (saves Pytest runs)
             ghost_violations = {}
@@ -1468,7 +1492,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                     critic_constraint = f"Generated code uses undefined names ({ghosts_str}). Add the missing imports or use existing ones."
                     current_temp = 0.1
                     continue
-                return False
+                return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
             # Backup & Write
             backups = {}
@@ -1500,7 +1524,7 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                     BASE_BRANCH = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
                     if not BASE_BRANCH:
                         print("❌ ERROR: Detached HEAD state. Aborting.")
-                        return False
+                        return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
                     print(f"🔒 Shadow Canary base: {BASE_BRANCH}")
 
                     subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
@@ -1521,20 +1545,20 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                             "SHADOW_PUSHED",
                             "Canary passed; awaiting human review/merge",
                         )
-                        return True
+                        return _set_auto_fix_outcome(AutoFixOutcome.SHADOW_PUSHED, True)
                     else:
                         for path, content in backups.items(): path.write_text(content)
                         subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
                         subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
                         print(f"       🔴 CANARY FAILED: Reverted disk and shadow branch")
-                        return False
+                        return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
                 except Exception as e:
                     for path, content in backups.items(): path.write_text(content)
                     subprocess.run(["git", "checkout", BASE_BRANCH], cwd=ROOT, capture_output=True)
                     subprocess.run(["git", "branch", "-D", shadow_branch], cwd=ROOT, capture_output=True)
                     print(f"       ⚠️ Shadow Git Error: {e}")
-                    return False
+                    return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
 
             # FAILURE: Revert
             for path, content in backups.items():
@@ -1554,8 +1578,8 @@ def apply_auto_fix(file_path, issue, api_keys, advisory_fingerprint=None):
                 _record_ledger(file_path, issue, "REJECTED", "Failed generation/tests")
                 _store_failed_fix(file_path, issue, raw, critic_constraint, advisory_fingerprint)
                 check_and_record_defeat(str(file_path), original, tb)
-                return False
-        return False
+                return _set_auto_fix_outcome(AutoFixOutcome.REJECTED, False)
+        return _set_auto_fix_outcome(AutoFixOutcome.FAILED, False)
     finally:
         _cleanup_tdd_artifact(tdd_write_path)
 
@@ -1779,12 +1803,31 @@ def drain_fix_backlog(api_keys, max_fixes=3):
         # ------------------------------------------
 
         if not fpath.exists(): continue
-        if apply_auto_fix(fpath, item["issue"], api_keys, item.get("advisory_fingerprint")):
+
+        apply_result = apply_auto_fix(
+            fpath,
+            item["issue"],
+            api_keys,
+            item.get("advisory_fingerprint"),
+        )
+        outcome = get_last_auto_fix_outcome()
+
+        if outcome in {
+            AutoFixOutcome.STALE_HANDLED,
+            AutoFixOutcome.SHADOW_PUSHED,
+        }:
             done += 1
+        elif outcome == AutoFixOutcome.ESCALATED:
+            deferred.append({
+                **item,
+                "deferred_reason": "ESCALATED",
+            })
         else:
             item["attempts"] = item.get("attempts", 0) + 1
-            if item["attempts"] >= 3: deferred.append(item)
-            else: remaining.append(item)
+            if item["attempts"] >= 3:
+                deferred.append(item)
+            else:
+                remaining.append(item)
     _save_json(FIX_BACKLOG, remaining)
     if deferred: _save_json(DEFERRED_BACKLOG, deferred)
     return done
