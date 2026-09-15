@@ -37,6 +37,7 @@ def main():
     parser.add_argument("prompt", help="The task description for Aider.")
     parser.add_argument("--files", nargs="+", required=True, help="Allowed files Aider can modify.")
     parser.add_argument("--out-dir", default="proposals", help="Directory to save the patch.")
+    parser.add_argument("--timeout", type=int, default=180, help="Timeout in seconds for worker execution (default: 180).")
     parser.add_argument("--auto", action="store_true", help="Run hands-free. Auto-approves if deterministic gates pass.")
     args = parser.parse_args()
 
@@ -55,22 +56,22 @@ def main():
     print(f"      Registered judges: {', '.join(judges)}")
 
     # 2. Generate the Candidate Hash (We need this to sign the votes)
-    # Since Aider hasn't run yet, we do a dry-run or use a placeholder hash 
-    # for the local quorum signing. 
+    # Since Aider hasn't run yet, we do a dry-run or use a placeholder hash
+    # for the local quorum signing.
     # *Correction*: The orchestrator generates the hash *after* Aider runs.
     # To sign the votes, we must let Aider run first, get the hash, then sign.
     # We will use a custom wrapper to intercept the candidate hash.
-    
+
     print("[2/4] Dispatching to Aider implementation worker...")
     print("      (This may take a minute depending on the provider)\n")
-    
+
     # We need to intercept the candidate to sign the votes.
-    # Let's create a mock orchestrator flow to get the hash, or just 
+    # Let's create a mock orchestrator flow to get the hash, or just
     # ask the user to approve the quorum *after* Aider generates the diff.
-    
-    # Actually, let's just run the dispatch directly to get the diff, 
+
+    # Actually, let's just run the dispatch directly to get the diff,
     # then build the candidate, sign it, and run the quorum.
-    
+
     from engine.development_worker_dispatch import DevelopmentWorkerRequest, dispatch_development_worker
     from engine.development_candidate import DevelopmentCandidate
     from engine.development_worker_pipeline import evaluate_strict_proposal
@@ -80,18 +81,19 @@ def main():
     request = DevelopmentWorkerRequest(
         prompt=args.prompt,
         files=tuple(args.files),
-        backend="aider"
+        backend="aider",
+        timeout=args.timeout
     )
-    
+
     dispatch_result = dispatch_development_worker(request)
-    
+
     if not dispatch_result.accepted_for_review:
         print(f"\n[FAIL] Worker dispatch failed: {dispatch_result.reason}")
         sys.exit(1)
-        
+
     worker_result = dispatch_result.worker_result
     print(f"\n[SUCCESS] Aider generated a diff ({len(worker_result.diff)} chars).")
-    
+
     # 3. Build Candidate & Sign Quorum
     generator_id = f"aider-{dispatch_result.backend}-{worker_result.model_name}"
     candidate = DevelopmentCandidate.from_diff(
@@ -101,10 +103,10 @@ def main():
         changed_files=list(worker_result.changed_files),
         generator_worker_id=generator_id
     )
-    
+
     print(f"[3/4] Candidate Hash: {candidate.diff_sha256[:16]}...")
     print("      Requesting local operator approval for 3-judge quorum...")
-    
+
     # For this CLI, the local operator acts as the trusted root to sign the 3 votes.
     # In a fully automated setup, 3 separate LLM judges would do this.
     if getattr(args, 'auto', False):
@@ -119,11 +121,11 @@ def main():
         approve = True
     else:
         approve = input("\n      Do you approve this proposal for quorum validation? [y/N]: ").lower() == 'y'
-    
+
     if not approve:
         print("\n[ABORTED] Operator rejected the proposal.")
         sys.exit(0)
-        
+
     votes = []
     for j in judges:
         pk = registry.get_private_key(j)
@@ -140,12 +142,12 @@ def main():
         )
         signed_vote = sign_vote(unsigned_vote, pk)
         votes.append(signed_vote)
-        
+
     print(f"      Quorum signed: 3/3 Ed25519 signatures verified.")
 
     # 4. Run the strict pipeline
     print("\n[4/4] Running strict cryptographic pipeline...")
-    
+
     # We bypass the internal dispatch since we already ran it
     approval_result = evaluate_strict_proposal(
         candidate=candidate,
@@ -156,17 +158,17 @@ def main():
         regression_ok=True,
         key_registry=registry
     )
-    
+
     if not approval_result.approved:
         print(f"\n[FAIL] Pipeline rejected proposal: {approval_result.decision.reason}")
         sys.exit(1)
-        
+
     # SUCCESS: Save the patch
     out_dir = Path(args.out_dir)
     out_dir.mkdir(exist_ok=True)
     patch_file = out_dir / f"{candidate.candidate_id}.patch"
     patch_file.write_text(worker_result.diff)
-    
+
     print(f"\n{'='*60}")
     print(f"  [STATUS] {PromotionState.PENDING_HUMAN_MERGE.value}")
     print(f"  [OUTPUT] Patch saved to: {patch_file.resolve()}")
