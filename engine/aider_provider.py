@@ -129,7 +129,7 @@ def resolve_aider_providers(
 
     if _cloud_enabled(env):
         if env.get("OPENROUTER_API_KEY", "").strip():
-            openrouter_model = _select_openrouter_model(env)
+            openrouter_model = "openrouter/deepseek/deepseek-chat"  # HARDCODED TO BYPASS CATALOG
 
             if openrouter_model:
                 providers.append(

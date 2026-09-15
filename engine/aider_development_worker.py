@@ -542,6 +542,9 @@ def run_aider_worker(
                     ),
                 )
 
+                # DEBUG: Print the exact command being executed
+                print(f"\n[DEBUG] Aider command: {' '.join(command)}")
+                
                 # Force non-interactive mode
                 if "--yes" not in command and "--yes-all" not in command:
                     command.append("--yes")
