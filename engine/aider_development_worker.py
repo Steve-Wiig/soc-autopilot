@@ -324,7 +324,7 @@ def _diff_vs_head(
                 "--no-index",
                 "--",
                 "/dev/null",
-                str(absolute),
+                path,  # Use relative path so git apply works from repo root
             ],
             cwd=repo_root,
             text=True,
