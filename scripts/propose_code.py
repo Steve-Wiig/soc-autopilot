@@ -37,6 +37,7 @@ def main():
     parser.add_argument("prompt", help="The task description for Aider.")
     parser.add_argument("--files", nargs="+", required=True, help="Allowed files Aider can modify.")
     parser.add_argument("--out-dir", default="proposals", help="Directory to save the patch.")
+    parser.add_argument("--auto", action="store_true", help="Run hands-free. Auto-approves if deterministic gates pass.")
     args = parser.parse_args()
 
     print(f"\n{'='*60}")
@@ -106,7 +107,18 @@ def main():
     
     # For this CLI, the local operator acts as the trusted root to sign the 3 votes.
     # In a fully automated setup, 3 separate LLM judges would do this.
-    approve = input("\n      Do you approve this proposal for quorum validation? [y/N]: ").lower() == 'y'
+    if getattr(args, 'auto', False):
+        print("      [AUTO] Bypassing human prompt. Running deterministic sanity checks...")
+        if not worker_result.diff.strip():
+            print("      [AUTO-REJECT] Diff is empty.")
+            sys.exit(1)
+        if not set(worker_result.changed_files).issubset(set(args.files)):
+            print("      [AUTO-REJECT] Aider modified files outside the allowed scope.")
+            sys.exit(1)
+        print("      [AUTO-APPROVE] Sanity checks passed. Auto-signing quorum.")
+        approve = True
+    else:
+        approve = input("\n      Do you approve this proposal for quorum validation? [y/N]: ").lower() == 'y'
     
     if not approve:
         print("\n[ABORTED] Operator rejected the proposal.")
