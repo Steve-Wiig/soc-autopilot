@@ -188,7 +188,7 @@ def build_aider_sandbox_command(
         "--chdir",
         "/workspace",
 
-        "--die-with-parent",
+        "--share-net --die-with-parent",
         "--unshare-user",
         "--unshare-pid",
         "--unshare-ipc",
