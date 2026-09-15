@@ -54,3 +54,9 @@ overnight/*.log.pre-*
 crontab_backup_*.txt
 apply_pytest_fix.py
 triage_edge_node.sh
+.env
+proposals/
+overnight.sh
+overnight/
+__pycache__/
+*.pyc
