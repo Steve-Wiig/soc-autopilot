@@ -350,7 +350,7 @@ def run_aider_worker(
     *,
     model: str = DEFAULT_MODEL,
     api_base: str = DEFAULT_OLLAMA_API_BASE,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: int = 300,
     provider_name: str | None = None,
     api_key_env: str | None = None,
 ) -> AiderWorkerResult:
@@ -501,6 +501,7 @@ def run_aider_worker(
 
             with budget_context as budget_broker:
                 command = build_aider_sandbox_command(
+
                     aider_executable=aider,
                     worker_root=worker_root,
                     model=model,
@@ -521,25 +522,49 @@ def run_aider_worker(
                     ),
                 )
 
+                # Force non-interactive mode
+                if "--yes" not in command and "--yes-all" not in command:
+                    command.append("--yes")
+
                 try:
-                    completed = subprocess.run(
+                    import sys
+                    # STREAMING PATCH: Run Aider with Popen to stream output live
+                    process = subprocess.Popen(
                         command,
                         cwd=worker_root,
                         env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
                         text=True,
-                        capture_output=True,
-                        timeout=timeout,
-                        check=False,
                     )
-                except subprocess.TimeoutExpired as exc:
+                    
+                    stdout_lines = []
+                    for line in process.stdout:
+                        # Print live to terminal for real-time diagnosis
+                        sys.stdout.write(f"  [AIDER LIVE] {line}")
+                        sys.stdout.flush()
+                        stdout_lines.append(line)
+                        
+                    process.wait(timeout=timeout)
+                    
+                    # Mock the 'completed' object so the rest of the function works unchanged
+                    class MockCompleted:
+                        pass
+                    completed = MockCompleted()
+                    completed.stdout = "".join(stdout_lines)
+                    completed.stderr = ""
+                    completed.returncode = process.returncode
+                    
+                except subprocess.TimeoutExpired:
+                    process.kill()
                     changed = _worktree_paths_vs_head(worker_root, allowed)
                     _cleanup_aider_artifacts(worker_root)
                     return AiderWorkerResult(
                         success=False,
                         changed_files=changed,
                         diff="",
-                        stdout=_as_text(exc.stdout),
-                        stderr=_as_text(exc.stderr),
+                        stdout="".join(stdout_lines) if 'stdout_lines' in locals() else "",
+                        stderr="",
                         returncode=124,
                         reason=f"Aider worker timed out after {timeout}s.",
                         model_name=model,
