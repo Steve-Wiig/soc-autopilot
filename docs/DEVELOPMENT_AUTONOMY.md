@@ -117,3 +117,35 @@ task/advisory
 Repeatedly unfixable issues should become durable failure knowledge rather than
 consume the same resources indefinitely. The defeat/failure ledger pattern is
 therefore part of the development architecture.
+
+
+## Aider development worker
+
+Aider is an optional development-time implementation worker. It is not part of the production SOC authority path.
+
+The Aider boundary is:
+
+advisory
+-> provenance validation
+-> baseline / TDD
+-> disposable isolated worktree
+-> Aider implementation
+-> authorized-file validation
+-> deterministic diff validation
+-> regression tests
+-> independent verification
+-> canary / promotion
+
+Aider requires:
+- a clean canonical worktree before execution;
+- a disposable isolated worktree;
+- explicit authorized files;
+- Git-history protection;
+- rejection of unauthorized changed paths;
+- deterministic validation before promotion.
+
+Aider cannot authorize production SOC actions, weaken the control plane, or create the authoritative Git checkpoint by itself.
+
+Terminal Aider or safety failures are escalated rather than treated as generic empty-response failures or retried indefinitely.
+
+Cloud development providers may be enabled explicitly for this development plane. They are not production SOC inference fallbacks.

@@ -37,3 +37,12 @@ The LLM is *never* the authorization authority. Production SOC inference is stri
 
 - **Production SOC Path**: Strictly local/edge inference.
 - **Development/Autonomy Path**: Decoupled, may use cloud.
+
+
+## Development autonomy boundary
+
+advisory -> provenance validation -> baseline / TDD -> implementation worker -> deterministic patch gates -> regression -> independent verification -> promotion / Git checkpoint
+
+Aider is an optional development implementation worker operating only in disposable isolated worktrees with explicit file authorization and deterministic safety gates. Cloud development providers may be used when explicitly enabled, but they are not production SOC fallbacks.
+
+Production SOC inference remains local / edge only. Development workers, Pi workers, and edge verification sources do not gain production policy authority.

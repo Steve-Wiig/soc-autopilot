@@ -1,11 +1,11 @@
 # SOC-Autopilot
 
-> **Positioning:** SOC-Autopilot is a **safety-gated**, **AI-assisted** SOC **copilot**. It integrates **human-in-the-loop** approval boundaries to automate investigation workflows while maintaining strict trust and safety controls.
+> **Positioning:** SOC-Autopilot is a **safety-gated, AI-assisted SOC copilot/control-plane research project**. LLMs provide reasoning and proposals; deterministic controls remain authoritative.
 
 
 Local-first, evidence-driven security orchestration and autonomous software maintenance.
 
-> **LLMs propose → safety gates validate → tests verify → independent verification audits → Git records → humans decide where required.**
+> **Core rule:** **LLM proposes → deterministic policy decides → bounded action occurs → telemetry records evidence → humans remain authoritative.**
 
 ## Current state
 
@@ -19,6 +19,14 @@ The engineering workflow favors:
 
 `invariant -> regression test -> smallest safe change -> targeted verification -> full regression suite -> promotion / human review where required`
 
+
+## Current validation baseline
+
+The current repository checkpoint has **845 passing tests**.
+
+The current development-autonomy model includes an optional Aider implementation worker. Aider is development-only, operates in a disposable worktree, is limited to explicitly authorized files, cannot create the authoritative Git commit, and remains subject to deterministic safety, test, verification, and promotion gates.
+
+Production SOC inference remains local/edge only. Cloud LLMs are development/review capabilities, not production SOC fallbacks.
 
 ## Architecture Overview
 

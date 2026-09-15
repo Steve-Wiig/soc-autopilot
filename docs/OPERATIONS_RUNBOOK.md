@@ -139,3 +139,19 @@ Stop:
 
 SIGTERM runs the daemon finally block, which cleans ephemeral TDD artifacts.
 After SIGKILL, remove leftover tests/test_tdd_auto_*.py manually.
+
+
+## Development Aider worker
+
+Aider is development-only and must never be treated as a production SOC inference provider.
+
+Enable explicitly when required:
+
+export SOC_AUTOPILOT_DEVELOPMENT_WORKER=aider
+export SOC_AUTOPILOT_DEVELOPMENT_CLOUD=1
+
+The Aider worker requires a clean canonical worktree and operates in a disposable isolated worktree. Authorized-file scope, Git-history protection, changed-path validation, regression testing, verification, and promotion gates remain mandatory.
+
+Aider output is a proposal for the development pipeline, not an approval or production authorization. Terminal worker or safety failures escalate rather than being retried as generic empty responses.
+
+Production SOC inference remains local / edge only.
