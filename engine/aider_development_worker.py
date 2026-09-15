@@ -259,7 +259,21 @@ def _is_clean_worktree(repo_root: Path) -> bool:
         capture_output=True,
         check=False,
     )
-    return result.returncode == 0 and not result.stdout.strip()
+    if result.returncode != 0:
+        return False
+        
+    if not result.stdout.strip():
+        return True
+
+    # Allow known runtime artifacts that don't affect the codebase
+    allowed_dirty = {'.env', 'overnight.sh', 'overnight/'}
+    for line in result.stdout.splitlines():
+        path = line[3:].strip()
+        if path in allowed_dirty or path.startswith('proposals/'):
+            continue
+        return False
+        
+    return True
 
 
 def _diff_vs_head(
