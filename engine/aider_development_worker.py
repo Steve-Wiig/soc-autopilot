@@ -261,20 +261,27 @@ def _is_clean_worktree(repo_root: Path) -> bool:
     )
     if result.returncode != 0:
         return False
-        
+
     if not result.stdout.strip():
         return True
 
     # Allow known runtime artifacts that don't affect the codebase
-    allowed_dirty = {'.env', 'overnight.sh', 'overnight/'}
+    allowed_prefixes = ('proposals/', '.aider', '.worktrees/')
+    allowed_exact = {'.env', 'overnight.sh', 'overnight/', '.worktrees'}
+    
+    dirty_files = []
     for line in result.stdout.splitlines():
         path = line[3:].strip()
-        if path in allowed_dirty or path.startswith('proposals/'):
+        if path in allowed_exact or any(path.startswith(p) for p in allowed_prefixes):
             continue
-        return False
+        dirty_files.append(path)
         
-    return True
+    if dirty_files:
+        print(f"
+[DEBUG] Worktree not clean. Dirty files: {dirty_files}")
+        return False
 
+    return True
 
 def _diff_vs_head(
     repo_root: Path,
