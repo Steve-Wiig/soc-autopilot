@@ -277,8 +277,7 @@ def _is_clean_worktree(repo_root: Path) -> bool:
         dirty_files.append(path)
         
     if dirty_files:
-        print(f"
-[DEBUG] Worktree not clean. Dirty files: {dirty_files}")
+        print("[DEBUG] Worktree not clean. Dirty files:", dirty_files)
         return False
 
     return True
