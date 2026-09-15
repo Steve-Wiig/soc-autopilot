@@ -69,74 +69,10 @@ def _configured_backend() -> str:
 def _aider_failure_allows_provider_fallback(
     result: AiderWorkerResult,
 ) -> bool:
-    """Return True only for failures plausibly caused by the provider path."""
-
+    """Allow provider rotation only for explicit PROVIDER failures."""
     if result.success:
         return False
-
-    # Never retry after a worker-boundary/safety decision.
-    terminal_markers = (
-        "unauthorized paths",
-        "modified git history",
-        "no working-tree change",
-        "no diff was produced",
-        "could not verify worker head",
-    )
-
-    text = " ".join(
-        (
-            result.reason,
-            result.stdout,
-            result.stderr,
-        )
-    ).lower()
-
-    # Worker-level provider classification is authoritative for fallback.
-    # It intentionally overrides generic "no working-tree change" text.
-    if (
-        "provider/inference failure observed" in text
-        or "provider failure observed" in text
-    ):
-        return True
-
-    if any(marker in text for marker in terminal_markers):
-        return False
-
-    if result.returncode == 124:
-        return True
-
-    provider_markers = (
-        "401",
-        "403",
-        "429",
-        "authentication",
-        "unauthorized",
-        "forbidden",
-        "rate limit",
-        "rate-limit",
-        "quota",
-        "budget exhausted",
-        "budget denied",
-        "provider unavailable",
-        "service unavailable",
-        "connection",
-        "connecterror",
-        "connectionerror",
-        "timed out",
-        "timeout",
-        "model not found",
-        "does not exist",
-        "api error",
-        "api request",
-        "cloud request blocked",
-        "budget broker unavailable",
-        "budget control failure",
-    )
-
-    return result.returncode != 0 and any(
-        marker in text for marker in provider_markers
-    )
-
+    return result.failure_class == "PROVIDER"
 
 def _explicit_aider_kwargs(
     request: DevelopmentWorkerRequest,
@@ -290,6 +226,7 @@ def dispatch_development_worker(
                     returncode=125,
                     reason=f"Provider attempt failed: {exc}",
                     model_name=provider.model,
+                    failure_class="PROVIDER",
                 )
 
             last_result = result

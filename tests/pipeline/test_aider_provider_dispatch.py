@@ -14,6 +14,7 @@ def _result(
     reason: str,
     model: str,
     stderr: str = "",
+    failure_class: str = "WORKER",
 ):
     return AiderWorkerResult(
         success=success,
@@ -24,6 +25,7 @@ def _result(
         returncode=returncode,
         reason=reason,
         model_name=model,
+        failure_class=failure_class,
     )
 
 
@@ -47,6 +49,7 @@ def test_default_aider_rotation_openrouter_to_gemini(
                 reason="Aider exited with provider authentication error.",
                 model=kwargs["model"],
                 stderr="HTTP 401 authentication failed",
+                failure_class="PROVIDER",
             )
 
         if provider == "gemini":
@@ -94,6 +97,7 @@ def test_terminal_worker_failure_does_not_fallback(
             returncode=0,
             reason="Aider modified unauthorized paths: README.md",
             model=kwargs["model"],
+            failure_class="TERMINAL",
         )
 
     monkeypatch.setattr(
@@ -210,6 +214,7 @@ def test_zero_exit_provider_failure_falls_through_to_next_provider(
                     "litellm.APIError provider unavailable"
                 ),
                 model=kwargs["model"],
+                failure_class="PROVIDER",
             )
 
         return _result(
@@ -250,6 +255,7 @@ def test_explicit_provider_failure_classification_overrides_no_change_marker():
             "litellm.APIError provider unavailable"
         ),
         model="openrouter/example:free",
+        failure_class="PROVIDER",
     )
 
     from engine.development_worker_dispatch import (
@@ -275,6 +281,7 @@ def test_genuine_no_change_does_not_fallback(
             returncode=0,
             reason="Aider completed but produced no working-tree change.",
             model=kwargs["model"],
+            failure_class="TERMINAL",
         )
 
     monkeypatch.setattr(
@@ -295,3 +302,36 @@ def test_genuine_no_change_does_not_fallback(
     assert len(attempts) == 1
     assert attempts[0]["provider_name"] == "openrouter"
 
+
+
+def test_free_form_provider_words_cannot_trigger_fallback():
+    from engine.development_worker_dispatch import (
+        _aider_failure_allows_provider_fallback,
+    )
+
+    result = _result(
+        success=False,
+        returncode=1,
+        reason="worker validation failed",
+        model="openrouter/example:free",
+        stderr="provider failure observed timeout 429",
+        failure_class="TERMINAL",
+    )
+
+    assert _aider_failure_allows_provider_fallback(result) is False
+
+
+def test_structured_provider_class_allows_fallback():
+    from engine.development_worker_dispatch import (
+        _aider_failure_allows_provider_fallback,
+    )
+
+    result = _result(
+        success=False,
+        returncode=1,
+        reason="generic failure",
+        model="openrouter/example:free",
+        failure_class="PROVIDER",
+    )
+
+    assert _aider_failure_allows_provider_fallback(result) is True

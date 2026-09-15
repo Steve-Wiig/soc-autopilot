@@ -93,6 +93,11 @@ CLOUD_PROVIDER_BY_MODEL_PREFIX = {
 }
 
 
+FAILURE_CLASS_PROVIDER = "PROVIDER"
+FAILURE_CLASS_TERMINAL = "TERMINAL"
+FAILURE_CLASS_WORKER = "WORKER"
+
+
 def _provider_from_model(model: str) -> str | None:
     for prefix, provider in CLOUD_PROVIDER_BY_MODEL_PREFIX.items():
         if model.startswith(prefix):
@@ -123,6 +128,7 @@ class AiderWorkerResult:
 
     model_name: str = ""
     prompt_hash: str = ""
+    failure_class: str = FAILURE_CLASS_WORKER
 
 
 def _repo_root() -> Path:
@@ -520,6 +526,7 @@ def run_aider_worker(
                         returncode=124,
                         reason=f"Aider worker timed out after {timeout}s.",
                         model_name=model,
+                        failure_class=FAILURE_CLASS_PROVIDER,
                     )
                 except OSError as exc:
                     return AiderWorkerResult(
@@ -586,6 +593,7 @@ def run_aider_worker(
                         "are forbidden."
                     ),
                     model_name=model,
+                    failure_class=FAILURE_CLASS_TERMINAL,
                 )
 
             changed = _worktree_paths_vs_head(worker_root)
@@ -610,11 +618,20 @@ def run_aider_worker(
                         + ", ".join(unauthorized)
                     ),
                     model_name=model,
+                    failure_class=FAILURE_CLASS_TERMINAL,
                 )
 
             if completed.returncode != 0:
                 diff = _diff_vs_head(worker_root, list(changed), base_ref=base_head)
                 _cleanup_aider_artifacts(worker_root)
+                failure_class = (
+                    FAILURE_CLASS_PROVIDER
+                    if _provider_failure_observed(
+                        stdout=_as_text(completed.stdout),
+                        stderr=_as_text(completed.stderr),
+                    )
+                    else FAILURE_CLASS_WORKER
+                )
                 return AiderWorkerResult(
                     success=False,
                     changed_files=changed,
@@ -624,6 +641,7 @@ def run_aider_worker(
                     returncode=completed.returncode,
                     reason="Aider exited with a non-zero status.",
                     model_name=model,
+                    failure_class=failure_class,
                 )
 
             if not changed:
@@ -647,6 +665,7 @@ def run_aider_worker(
                             "without a working-tree change."
                         ),
                         model_name=model,
+                        failure_class=FAILURE_CLASS_PROVIDER,
                     )
 
                 _cleanup_aider_artifacts(worker_root)
@@ -659,6 +678,7 @@ def run_aider_worker(
                     returncode=completed.returncode,
                     reason="Aider completed but produced no working-tree change.",
                     model_name=model,
+                    failure_class=FAILURE_CLASS_TERMINAL,
                 )
 
             diff = _diff_vs_head(worker_root, list(changed), base_ref=base_head)
@@ -674,6 +694,7 @@ def run_aider_worker(
                     returncode=completed.returncode,
                     reason="Changed paths detected but no diff was produced.",
                     model_name=model,
+                    failure_class=FAILURE_CLASS_TERMINAL,
                 )
 
             _cleanup_aider_artifacts(worker_root)
