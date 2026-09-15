@@ -160,10 +160,11 @@ def _resolve_bounded_files(
                 f"Worker file escapes repository root: {item}"
             ) from exc
 
-        if not candidate.is_file():
-            raise FileNotFoundError(
-                f"Worker file does not exist: {candidate}"
-            )
+        # ALLOW FILE CREATION: Skip existence check so Aider can create new files
+        # if not candidate.is_file():
+        #     raise FileNotFoundError(
+        #         f"Worker file does not exist: {candidate}"
+        #     )
 
         resolved.append(candidate)
 
