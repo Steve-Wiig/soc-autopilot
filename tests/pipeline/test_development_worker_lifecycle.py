@@ -178,8 +178,7 @@ def test_bounded_development_worker_lifecycle(monkeypatch):
         candidate_id="candidate-test-001",
         base_commit="HEAD-test",
         diff_text=proposal.diff,
-        changed_files=list(proposal.changed_files),
-    )
+        changed_files=list(proposal.changed_files), generator_worker_id='test_generator_worker_id')
 
     assert candidate.candidate_id == "candidate-test-001"
     assert candidate.verify_diff_integrity(proposal.diff) is True

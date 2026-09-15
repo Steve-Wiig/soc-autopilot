@@ -1,20 +1,24 @@
 """
-P0 Enforcement: Strict Quorum Validation.
-This module enforces the cryptographic and identity invariants defined in Phase 2.
+P0 Enforcement: Strict Quorum with Ed25519 identity verification.
+This module enforces the cryptographic and identity invariants.
 It is the final gate before a candidate can be merged.
 """
-from typing import List
+from typing import List, Optional
 from engine.development_candidate import DevelopmentCandidate
-from engine.worker_vote_contract import WorkerVote
-from contracts.worker_vote_adapter import normalize_worker_vote
-from contracts.worker_identity import VoteValidator
+from contracts.worker_identity import WorkerVote, VoteValidator
+
 
 class QuorumViolation(Exception):
     pass
 
-def enforce_quorum(candidate: DevelopmentCandidate, votes: List[WorkerVote]) -> bool:
+
+def enforce_quorum(
+    candidate: DevelopmentCandidate,
+    votes: List[WorkerVote],
+    key_registry=None,
+) -> bool:
     """
-    Validates a quorum of votes against a specific candidate.
+    Validates a quorum of Ed25519-signed votes against a candidate.
     Raises QuorumViolation if any invariant is broken.
     """
     # 1. Check Vote Count
@@ -26,41 +30,36 @@ def enforce_quorum(candidate: DevelopmentCandidate, votes: List[WorkerVote]) -> 
     if len(set(worker_ids)) != 3:
         raise QuorumViolation(f"Workers not independent. IDs: {worker_ids}")
 
-    # 3. Bind the legacy vote to the current candidate BEFORE
-    # normalization. This prevents malformed legacy metadata from
-    # masking candidate-tampering evidence.
-    validator = VoteValidator()
+    # 2.5. Check Generator Independence (No Self-Voting)
+    if candidate.generator_worker_id in worker_ids:
+        raise QuorumViolation(
+            f"Quorum violation: Candidate generator '{candidate.generator_worker_id}' "
+            "is present in the voting quorum. Self-approval is forbidden."
+        )
+
+    # 3. Validate each vote (candidate hash + Ed25519 signature)
+    validator = VoteValidator(key_registry=key_registry)
 
     for v in votes:
-        if not v.is_valid_for_candidate(candidate.diff_sha256):
+        if v.candidate_hash != candidate.diff_sha256:
             raise QuorumViolation(
                 f"Vote {v.worker_id} does not match candidate hash"
             )
-
         try:
-            normalized = normalize_worker_vote(v)
-
-            validator.validate(
-                normalized,
-                candidate.diff_sha256
-            )
+            validator.validate(v, candidate.diff_sha256)
         except Exception as exc:
             message = str(exc)
-
             if "Wrong candidate hash" in message:
                 raise QuorumViolation(
                     f"Vote {v.worker_id} does not match candidate hash"
                 )
-
             raise QuorumViolation(
                 f"Worker vote identity validation failed: {exc}"
             )
 
     # 4. Check Approval Threshold (2 of 3)
     approvals = sum(
-        1
-        for v in votes
-        if str(v.decision).lower() == "approve"
+        1 for v in votes if str(v.decision).lower() == "approve"
     )
     if approvals < 2:
         raise QuorumViolation(f"Insufficient approvals: {approvals}/3")

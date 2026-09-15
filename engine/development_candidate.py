@@ -14,6 +14,7 @@ class DevelopmentCandidate:
     base_commit: str
     diff_sha256: str
     changed_files: List[str]
+    generator_worker_id: str
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     
     # Pipeline results
@@ -25,13 +26,14 @@ class DevelopmentCandidate:
     final_disposition: Optional[str] = None
 
     @classmethod
-    def from_diff(cls, candidate_id: str, base_commit: str, diff_text: str, changed_files: List[str]):
+    def from_diff(cls, candidate_id: str, base_commit: str, diff_text: str, changed_files: List[str], generator_worker_id: str):
         diff_hash = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
         return cls(
             candidate_id=candidate_id,
             base_commit=base_commit,
             diff_sha256=diff_hash,
-            changed_files=changed_files
+            changed_files=changed_files,
+            generator_worker_id=generator_worker_id
         )
 
     def verify_diff_integrity(self, current_diff_text: str) -> bool:

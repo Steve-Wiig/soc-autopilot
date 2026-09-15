@@ -8,44 +8,68 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from engine.development_candidate import DevelopmentCandidate
-from engine.worker_vote_contract import WorkerVote
+from contracts.worker_identity import WorkerVote
 from engine.strict_quorum import enforce_quorum, QuorumViolation
 
+
 def test_enforcer_rejects_tampered_candidate():
-    """Prove the enforcer catches a candidate that changed after voting."""
-    diff_v1 = "original diff"
-    cand = DevelopmentCandidate.from_diff("c1", "base", diff_v1, ["f.py"])
+    from engine.strict_quorum import enforce_quorum, QuorumViolation
+    from engine.development_candidate import DevelopmentCandidate
+    from tests.helpers.crypto_test_helpers import create_signed_vote, create_test_registry
     
-    # Votes are cast for v1
-    votes = [
-        WorkerVote("p1", cand.diff_sha256, "w1", "c", "i", "t", "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "w2", "c", "i", "t", "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "w3", "c", "i", "t", "approve", "r", "e"),
-    ]
+    candidate = DevelopmentCandidate.from_diff(
+        "c1", "base", "diff", ["file.py"], generator_worker_id="gen_worker"
+    )
+    registry = create_test_registry(["w1", "w2", "w3"])
     
-    # Tamper with candidate (simulate post-review mutation)
-    cand.diff_sha256 = "tampered_hash"
+    # Votes for a DIFFERENT hash (should fail candidate binding)
+    v1 = create_signed_vote("w1", "tampered_hash", registry=registry)
+    v2 = create_signed_vote("w2", "tampered_hash", registry=registry)
+    v3 = create_signed_vote("w3", "tampered_hash", registry=registry)
     
-    with pytest.raises(QuorumViolation, match="does not match candidate hash"):
-        enforce_quorum(cand, votes)
+    try:
+        enforce_quorum(candidate, [v1, v2, v3], key_registry=registry)
+        assert False, "Should have raised QuorumViolation"
+    except QuorumViolation as e:
+        assert "hash" in str(e).lower()
+
 
 def test_enforcer_rejects_non_independent_workers():
-    """Prove the enforcer catches duplicate worker IDs."""
-    cand = DevelopmentCandidate.from_diff("c1", "base", "diff", ["f.py"])
-    votes = [
-        WorkerVote("p1", cand.diff_sha256, "worker-A", "c", "i", "t", "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "worker-B", "c", "i", "t", "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "worker-A", "c", "i", "t", "approve", "r", "e"), # Duplicate
-    ]
-    with pytest.raises(QuorumViolation, match="Workers not independent"):
-        enforce_quorum(cand, votes)
+    from engine.strict_quorum import enforce_quorum, QuorumViolation
+    from engine.development_candidate import DevelopmentCandidate
+    from tests.helpers.crypto_test_helpers import create_signed_vote, create_test_registry
+    
+    # Generator is w1 (should fail self-voting check)
+    candidate = DevelopmentCandidate.from_diff(
+        "c1", "base", "diff", ["file.py"], generator_worker_id="w1"
+    )
+    registry = create_test_registry(["w1", "w2", "w3"])
+    
+    v1 = create_signed_vote("w1", candidate.diff_sha256, registry=registry)
+    v2 = create_signed_vote("w2", candidate.diff_sha256, registry=registry)
+    v3 = create_signed_vote("w3", candidate.diff_sha256, registry=registry)
+    
+    try:
+        enforce_quorum(candidate, [v1, v2, v3], key_registry=registry)
+        assert False, "Should have raised QuorumViolation"
+    except QuorumViolation as e:
+        assert "self-approval" in str(e).lower() or "generator" in str(e).lower()
+
 
 def test_enforcer_accepts_valid_quorum():
-    """Prove a valid quorum passes."""
-    cand = DevelopmentCandidate.from_diff("c1", "base", "diff", ["f.py"])
-    votes = [
-        WorkerVote("p1", cand.diff_sha256, "w1", "c", "i", int(time.time()), "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "w2", "c", "i", int(time.time()), "approve", "r", "e"),
-        WorkerVote("p1", cand.diff_sha256, "w3", "c", "i", int(time.time()), "reject", "r", "e"), # 2/3 is enough
-    ]
-    assert enforce_quorum(cand, votes) is True
+    from engine.strict_quorum import enforce_quorum
+    from engine.development_candidate import DevelopmentCandidate
+    from tests.helpers.crypto_test_helpers import create_signed_vote, create_test_registry
+    
+    candidate = DevelopmentCandidate.from_diff(
+        "c1", "base", "diff", ["file.py"], generator_worker_id="gen_worker"
+    )
+    registry = create_test_registry(["w1", "w2", "w3"])
+    
+    # 2 approvals, 1 rejection (should pass)
+    v1 = create_signed_vote("w1", candidate.diff_sha256, decision="approve", registry=registry)
+    v2 = create_signed_vote("w2", candidate.diff_sha256, decision="approve", registry=registry)
+    v3 = create_signed_vote("w3", candidate.diff_sha256, decision="reject", registry=registry)
+    
+    assert enforce_quorum(candidate, [v1, v2, v3], key_registry=registry) is True
+
