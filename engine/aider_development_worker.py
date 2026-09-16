@@ -537,7 +537,7 @@ def run_aider_worker(
 
                 try:
                     import sys
-                    # STREAMING PATCH: Run Aider with Popen to stream output live
+                    # ROBUST STREAMING: Threaded read to prevent blocking on stdout, with hard timeout
                     process = subprocess.Popen(
                         command,
                         cwd=worker_root,
@@ -546,33 +546,79 @@ def run_aider_worker(
                         stderr=subprocess.STDOUT,
                         text=True,
                     )
-                    
-                    stdout_lines = []
-                    for line in process.stdout:
-                        # Print live to terminal for real-time diagnosis
-                        sys.stdout.write(f"  [AIDER LIVE] {line}")
-                        sys.stdout.flush()
-                        stdout_lines.append(line)
-                        
-                    process.wait(timeout=timeout)
-                    
-                    # Mock the 'completed' object so the rest of the function works unchanged
+
+                    import queue
+                    import threading
+                    import time
+
+                    output_queue = queue.Queue()
+                    output_lines = []
+
+                    def read_output():
+                        try:
+                            for line in process.stdout:
+                                output_queue.put(line)
+                        finally:
+                            output_queue.put(None)
+
+                    reader = threading.Thread(target=read_output, daemon=True)
+                    reader.start()
+
+                    deadline = time.monotonic() + timeout
+                    stream_closed = False
+
+                    while True:
+                        while True:
+                            try:
+                                item = output_queue.get_nowait()
+                            except queue.Empty:
+                                break
+
+                            if item is None:
+                                stream_closed = True
+                                continue
+
+                            output_lines.append(item)
+                            print(f"  [AIDER LIVE] {item}", end="", flush=True)
+
+                        returncode = process.poll()
+                        if returncode is not None and stream_closed:
+                            break
+
+                        if time.monotonic() >= deadline:
+                            process.kill()
+                            try:
+                                process.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                pass
+                            
+                            while True:
+                                try:
+                                    item = output_queue.get_nowait()
+                                except queue.Empty:
+                                    break
+                                if item is not None:
+                                    output_lines.append(item)
+                            
+                            raise subprocess.TimeoutExpired(command, timeout, output="".join(output_lines))
+
+                        time.sleep(0.05)
+
                     class MockCompleted:
                         pass
                     completed = MockCompleted()
-                    completed.stdout = "".join(stdout_lines)
+                    completed.stdout = "".join(output_lines)
                     completed.stderr = ""
                     completed.returncode = process.returncode
-                    
-                except subprocess.TimeoutExpired:
-                    process.kill()
+
+                except subprocess.TimeoutExpired as exc:
                     changed = _worktree_paths_vs_head(worker_root, allowed)
                     _cleanup_aider_artifacts(worker_root)
                     return AiderWorkerResult(
                         success=False,
                         changed_files=changed,
                         diff="",
-                        stdout="".join(stdout_lines) if 'stdout_lines' in locals() else "",
+                        stdout=_as_text(exc.output),
                         stderr="",
                         returncode=124,
                         reason=f"Aider worker timed out after {timeout}s.",
