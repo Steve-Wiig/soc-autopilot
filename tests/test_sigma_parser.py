@@ -14,7 +14,7 @@ detection:
         Image|endswith: '\\rundll32.exe'
     condition: selection
 tags:
-    - attack.t1059
+    - T1059.001
 """
 
 def test_valid_sigma_rule():
@@ -23,7 +23,7 @@ def test_valid_sigma_rule():
     assert result.rule_id == "123e4567-e89b-12d3-a456-426614174000"
     assert result.title == "Suspicious Process Execution"
     assert result.severity.value == "high"
-    assert result.mitre_attack_id == "attack.t1059"
+    assert result.mitre_attack_id == "T1059.001"
 
 def test_missing_required_field():
     """Test that invalid data raises a parser error."""
