@@ -9,10 +9,26 @@ Security Invariants:
 - STRICTLY limits automated promotion to PENDING_HUMAN_MERGE.
 
 State Machine Transitions:
-- GENERATED -> TESTED: After the strict proposal evaluation passes safety and regression gates.
-- TESTED -> CANARY_PASSED: After canary tests have been executed and passed.
-- CANARY_PASSED -> PENDING_HUMAN_MERGE: The candidate is ready for human review and merge.
-- Any transition may be rejected if validation fails, resulting in a REJECTED state.
+
+The orchestrator follows a strict state machine with these transitions:
+
+1. GENERATED -> TESTED
+   - Occurs after the strict proposal evaluation passes both safety and regression gates
+   - Requires cryptographic quorum of 3 independent Ed25519-signed votes
+   - Validates that all changes are within allowed files
+
+2. TESTED -> CANARY_PASSED
+   - Occurs after canary tests have been executed and passed
+   - Ensures the changes don't break critical system functionality
+   - Verifies backward compatibility
+
+3. CANARY_PASSED -> PENDING_HUMAN_MERGE
+   - Final automated transition before human review
+   - Marks the candidate as ready for human review and merge
+   - No further automated transitions are allowed
+
+Any transition may be rejected if validation fails, resulting in a REJECTED state.
+The state machine is strictly enforced and cannot skip steps or transition backwards.
 """
 from dataclasses import dataclass
 from pathlib import Path
