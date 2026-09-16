@@ -10,6 +10,7 @@ class SigmaParserError(Exception):
 def parse_sigma_rule(yaml_str: str) -> DetectionRule:
     """
     Parse a Sigma rule from a YAML string into a DetectionRule model.
+    Strictly validates required fields via Pydantic.
     """
     if not yaml_str or not yaml_str.strip():
         raise SigmaParserError("Empty YAML content")
@@ -19,13 +20,15 @@ def parse_sigma_rule(yaml_str: str) -> DetectionRule:
         if not isinstance(rule_data, dict):
             raise SigmaParserError("YAML content must be a dictionary")
             
-        # Map common Sigma fields to our DetectionRule model
+        # Map common Sigma fields to our DetectionRule model.
+        # We intentionally omit default fallbacks for required fields 
+        # so Pydantic can enforce strict validation and raise ValidationError.
         mapped_data = {
-            "rule_id": str(rule_data.get("id", "unknown")),
-            "title": rule_data.get("title", "Untitled Rule"),
-            "severity": str(rule_data.get("level", "unknown")).lower(),
-            "logsource": rule_data.get("logsource", {}),
-            "detection": rule_data.get("detection", {}),
+            "rule_id": rule_data.get("id"),
+            "title": rule_data.get("title"),
+            "severity": str(rule_data.get("level")).lower() if rule_data.get("level") else None,
+            "logsource": rule_data.get("logsource"),
+            "detection": rule_data.get("detection"),
             "mitre_attack_id": rule_data.get("tags", [None])[0] if isinstance(rule_data.get("tags"), list) else None,
             "description": rule_data.get("description")
         }
