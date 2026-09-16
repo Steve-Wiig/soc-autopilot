@@ -1,12 +1,33 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Dict, Any
+import uuid
+import re
+
+class SeverityLevel(str):
+    """Strict enum for allowed severity levels."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 class DetectionRule(BaseModel):
-    """Model representing a parsed Sigma detection rule."""
-    rule_id: str = Field(..., description="Unique identifier for the rule")
-    title: str = Field(..., description="Human-readable title of the rule")
-    severity: str = Field(..., description="Severity level (e.g., low, medium, high, critical)")
+    """
+    Strict model representing a parsed Sigma detection rule.
+    Future-proofed with explicit validation to prevent AI hallucination.
+    """
+    rule_id: str = Field(..., description="Must be a valid UUID v4 string")
+    title: str = Field(..., min_length=5, max_length=200, description="Human-readable title")
+    severity: SeverityLevel = Field(..., description="Must be low, medium, high, or critical")
     logsource: Dict[str, str] = Field(..., description="The log source this rule applies to")
     detection: Dict[str, Any] = Field(..., description="The detection logic and conditions")
-    mitre_attack_id: Optional[str] = Field(None, description="Associated MITRE ATT&CK technique ID")
-    description: Optional[str] = Field(None, description="Detailed description of the rule")
+    mitre_attack_id: Optional[str] = Field(None, pattern=r"^T[0-9]{4}(\.[0-9]{3})?$", description="e.g., T1059 or T1059.001")
+    description: Optional[str] = Field(None, min_length=10)
+
+    @field_validator('rule_id')
+    @classmethod
+    def validate_uuid(cls, v: str) -> str:
+        try:
+            uuid.UUID(v, version=4)
+            return v
+        except ValueError:
+            raise ValueError('rule_id must be a valid UUID v4 string')
