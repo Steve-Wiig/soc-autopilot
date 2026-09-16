@@ -138,6 +138,7 @@ def main():
             candidate_hash=candidate.diff_sha256,
             decision="approve" if approve else "reject",
             timestamp=int(time.time()),
+            task_id="quorum-run",
             signature="placeholder"
         )
         signed_vote = sign_vote(unsigned_vote, pk)
