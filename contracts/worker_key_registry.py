@@ -66,5 +66,6 @@ def sign_vote(vote, private_key: Ed25519PrivateKey):
         candidate_hash=vote.candidate_hash,
         decision=vote.decision,
         timestamp=vote.timestamp,
+        task_id=vote.task_id,
         signature=sig_b64,
     )
