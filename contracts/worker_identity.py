@@ -24,8 +24,8 @@ class WorkerVote:
     Ed25519 private key signs, ensuring that the signature binds to the
     vote data and not to any other metadata. The payload includes all
     fields that define the vote: worker_id, worker_class, worker_instance,
-    execution_host, software_version, candidate_hash, decision, and
-    timestamp. By removing the signature before serialization, we avoid
+    execution_host, software_version, candidate_hash, decision, timestamp,
+    and task_id. By removing the signature before serialization, we avoid
     a circular dependency where the signature would be part of the data
     it signs. The canonical JSON is produced with ``sort_keys=True`` and
     ``separators=(',', ':')`` to guarantee deterministic encoding across
@@ -39,14 +39,15 @@ class WorkerVote:
     software_version: str
     candidate_hash: str
     decision: str
-    timestamp: int
+    timestamp: float
+    task_id: str
     signature: str
 
     def __post_init__(self):
         fields = [
             self.worker_id, self.worker_class, self.worker_instance,
             self.execution_host, self.software_version, self.candidate_hash,
-            self.decision, self.signature,
+            self.decision, self.task_id, self.signature,
         ]
         if not all(isinstance(f, str) and f.strip() for f in fields):
             raise ValueError("WorkerVote requires non-empty string fields.")
