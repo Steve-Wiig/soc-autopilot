@@ -1,9 +1,9 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Dict, Any
+from enum import Enum
 import uuid
-import re
 
-class SeverityLevel(str):
+class SeverityLevel(str, Enum):
     """Strict enum for allowed severity levels."""
     LOW = "low"
     MEDIUM = "medium"
@@ -20,7 +20,7 @@ class DetectionRule(BaseModel):
     severity: SeverityLevel = Field(..., description="Must be low, medium, high, or critical")
     logsource: Dict[str, str] = Field(..., description="The log source this rule applies to")
     detection: Dict[str, Any] = Field(..., description="The detection logic and conditions")
-    mitre_attack_id: Optional[str] = Field(None, pattern=r"^T[0-9]{4}(\.[0-9]{3})?$", description="e.g., T1059 or T1059.001")
+    mitre_attack_id: Optional[str] = Field(None, pattern=r"^T\d{4}(\.\d{3})?$", description="e.g., T1059 or T1059.001")
     description: Optional[str] = Field(None, min_length=10)
 
     @field_validator('rule_id')
