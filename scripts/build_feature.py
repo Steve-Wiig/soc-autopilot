@@ -1,99 +1,141 @@
 #!/usr/bin/env python3
 """
-Feature Builder: Uses scripts/propose_code.py with timestamp-based patch tracking.
-Commits each successful patch to keep worktree clean for next task.
+Feature Builder: Uses the proven self_improver.py patterns for reliable free tier usage.
 """
-import subprocess
 import sys
+import subprocess
+import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-def build_file(file_path_str: str, issue_desc: str) -> bool:
-    """Build a single file using the proven propose_code.py pipeline."""
-    print(f"\n{'='*60}")
-    print(f"BUILDING: {file_path_str}")
-    print(f"{'='*60}")
+from engine.development_worker_dispatch import dispatch_development_worker, DevelopmentWorkerRequest, AIDER_BACKEND
 
-    # Record the timestamp BEFORE running - only accept patches newer than this
-    run_start = time.time()
+def materialize_aider_diff(diff_text: str, file_path: Path, original: str) -> str:
+    """Convert Aider's unified diff to SEARCH/REPLACE format (from self_improver.py)"""
+    rel_target = str(file_path.relative_to(ROOT))
+    if not diff_text.strip():
+        raise ValueError("Aider returned an empty diff.")
 
-    cmd = [
-        sys.executable,
-        str(ROOT / "scripts" / "propose_code.py"),
-        "--auto",
-        issue_desc,
-        "--files",
-        file_path_str,
-    ]
+    with tempfile.TemporaryDirectory(prefix="soc-autopilot-aider-") as tmp:
+        tmp_root = Path(tmp)
+        temp_target = tmp_root / rel_target
+        temp_target.parent.mkdir(parents=True, exist_ok=True)
+        temp_target.write_text(original)
 
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=700,
+        subprocess.run(["git", "init", "-q"], cwd=tmp_root, check=True, capture_output=True)
+        subprocess.run(["git", "add", "--", rel_target], cwd=tmp_root, check=True, capture_output=True)
+
+        check = subprocess.run(
+            ["git", "apply", "--check", "--whitespace=nowarn", "-"],
+            cwd=tmp_root, input=diff_text, text=True, capture_output=True, check=False,
         )
+        if check.returncode != 0:
+            raise ValueError(f"Aider diff failed validation: {check.stderr or check.stdout}")
 
-        # Find patches NEWER than this run started
-        proposals_dir = ROOT / "proposals"
-        new_patches = [
-            p for p in proposals_dir.glob("prop-*.patch")
-            if p.stat().st_mtime > run_start
-        ]
-        new_patches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-
-        if not new_patches:
-            print(f"❌ FAILED: No NEW patch generated for {file_path_str}")
-            print(f"   (propose_code.py likely failed - check model availability)")
-            print(f"STDOUT tail: {result.stdout[-300:]}")
-            return False
-
-        latest_patch = new_patches[0]
-        print(f"✅ New patch generated: {latest_patch.name} (age: {time.time() - latest_patch.stat().st_mtime:.1f}s)")
-
-        # Apply the patch
-        apply_result = subprocess.run(
-            ["git", "apply", "--ignore-whitespace", str(latest_patch)],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
+        applied = subprocess.run(
+            ["git", "apply", "--whitespace=nowarn", "-"],
+            cwd=tmp_root, input=diff_text, text=True, capture_output=True, check=False,
         )
+        if applied.returncode != 0:
+            raise ValueError(f"Aider diff could not be materialized: {applied.stderr or applied.stdout}")
 
-        if apply_result.returncode != 0:
-            print(f"❌ FAILED to apply patch: {apply_result.stderr}")
-            return False
+        new_content = temp_target.read_text()
 
-        # Commit the patch to keep worktree clean for next task
-        commit_result = subprocess.run(
-            ["git", "add", file_path_str],
-            cwd=ROOT,
-            capture_output=True,
-        )
+    if new_content == original:
+        raise ValueError("Aider diff materialized to no content change.")
+
+    search = original
+    replace = new_content
+    if not search.endswith("\n"): search += "\n"
+    if not replace.endswith("\n"): replace += "\n"
+
+    return f"<<<<<<< {rel_target}\n{search}=======\n{replace}\n>>>>>>> REPLACE\n"
+
+def build_file_with_retry(file_path_str: str, issue_desc: str, max_attempts: int = 3) -> bool:
+    """Build a file with retry logic and failed attempt injection (from self_improver.py)"""
+    fpath = ROOT / file_path_str
+    fpath.parent.mkdir(parents=True, exist_ok=True)
+    
+    original = fpath.read_text() if fpath.exists() else ""
+    rel_target = str(fpath.relative_to(ROOT))
+    
+    failed_attempt_raw = ""
+    
+    for attempt in range(max_attempts):
+        print(f"\n{'='*60}")
+        print(f"BUILDING: {file_path_str} (attempt {attempt + 1}/{max_attempts})")
+        print(f"{'='*60}")
         
-        if commit_result.returncode != 0:
-            print(f"⚠️  Warning: git add failed: {commit_result.stderr.decode()}")
-        
-        commit_result = subprocess.run(
-            ["git", "commit", "-m", f"feat: add {file_path_str}"],
-            cwd=ROOT,
-            capture_output=True,
-        )
-        
-        if commit_result.returncode != 0:
-            print(f"⚠️  Warning: git commit failed: {commit_result.stderr.decode()}")
+        # Build prompt with failed attempt injection (from self_improver.py)
+        prompt = f"""You are the bounded implementation worker for SOC-AUTOPILOT.
 
-        print(f"✅ SUCCESS: {file_path_str} generated, applied, and committed.")
-        return True
+YOU MUST CREATE/EDIT THE FILE.
+Do not merely explain the change. Do not return a prose-only answer.
 
-    except subprocess.TimeoutExpired:
-        print(f"❌ FAILED: Timeout after 700 seconds")
-        return False
-    except Exception as e:
-        print(f"❌ FAILED: {e}")
-        return False
+You may modify ONLY:
+{rel_target}
+
+Implement the issue below.
+
+ISSUE:
+{issue_desc}
+
+IMPLEMENTATION RULES:
+1. Modify ONLY the authorized file.
+2. If the file is new, the SEARCH block must be EMPTY, and the REPLACE block must contain the COMPLETE, fully implemented code.
+3. NEVER output placeholder text like '[exact search text]' or '[replace text]'.
+4. Include all necessary imports.
+5. The caller will independently validate the resulting diff, scope, safety, and regression behavior.
+"""
+        
+        # Inject failed attempt (from self_improver.py)
+        if failed_attempt_raw:
+            prompt += f"\n\nPREVIOUS FAILED ATTEMPT — DO NOT REPEAT:\n{failed_attempt_raw[:5000]}"
+        
+        try:
+            request = DevelopmentWorkerRequest(
+                prompt=prompt,
+                files=(rel_target,),
+                backend=AIDER_BACKEND,
+                timeout=600,
+            )
+            
+            result = dispatch_development_worker(request)
+            
+            if not result.accepted_for_review or not result.worker_result:
+                print(f"❌ Worker rejected: {result.reason}")
+                failed_attempt_raw = result.reason or ""
+                continue
+            
+            worker_result = result.worker_result
+            changed = {str(Path(path)) for path in worker_result.changed_files}
+            
+            if changed != {rel_target}:
+                print(f"❌ Aider modified unauthorized files: {changed}")
+                failed_attempt_raw = f"Modified unauthorized files: {changed}"
+                continue
+            
+            # Convert Aider's diff to SEARCH/REPLACE format (from self_improver.py)
+            search_replace_block = materialize_aider_diff(worker_result.diff, fpath, original)
+            
+            # Apply using the proven patch engine (from self_improver.py)
+            from overnight.multi_file_patcher import parse_multi_file_diff, apply_multi_file_patches
+            patches = parse_multi_file_diff(search_replace_block, ROOT)
+            apply_multi_file_patches(patches, repo_root=ROOT, authorized_files={fpath.relative_to(ROOT)})
+            
+            print(f"✅ SUCCESS: {file_path_str} generated and applied.")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Attempt {attempt + 1} failed: {e}")
+            failed_attempt_raw = str(e)
+            continue
+    
+    print(f"💥 All {max_attempts} attempts failed")
+    return False
 
 if __name__ == "__main__":
     features = [
@@ -110,13 +152,20 @@ if __name__ == "__main__":
             "Write pytest tests for AlertEnrichmentService. Test successful enrichment, timeout (using a very short timeout and mocking), failure (mocking an exception), and dict input. CRITICAL: Use valid UUID v4 for alert_id and valid severity enums ('low', 'medium', 'high', 'critical')."
         )
     ]
-
+    
     all_success = True
     for fpath, desc in features:
-        if not build_file(fpath, desc):
+        if not build_file_with_retry(fpath, desc):
             all_success = False
+            # Commit before moving to next file
+            subprocess.run(["git", "add", fpath], cwd=ROOT)
+            subprocess.run(["git", "commit", "-m", f"feat: add {fpath}"], cwd=ROOT)
             break
-
+        else:
+            # Commit successful file
+            subprocess.run(["git", "add", fpath], cwd=ROOT)
+            subprocess.run(["git", "commit", "-m", f"feat: add {fpath}"], cwd=ROOT)
+            
     if all_success:
         print("\n🎉 All features built successfully!")
         sys.exit(0)
