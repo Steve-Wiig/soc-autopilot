@@ -588,7 +588,7 @@ def run_aider_worker(
                         if time.monotonic() >= deadline:
                             process.kill()
                             try:
-                                process.wait(timeout=5)
+                                process.wait(timeout=600)
                             except subprocess.TimeoutExpired:
                                 pass
                             
