@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Overnight Runner: Uses propose_code.py with FREE_ONLY disabled to bypass catalog validation.
+Overnight Runner: Uses propose_code.py with CLOUD enabled and FREE_ONLY catalog check disabled.
 """
 import os
 import subprocess
@@ -37,8 +37,9 @@ def run_task(task_name: str, prompt: str, files_str: str) -> bool:
     run_start = time.time()
     files_list = files_str.split()
 
-    # Set environment to bypass the live catalog validation
+    # Set environment to ENABLE cloud and BYPASS the live catalog validation
     env = os.environ.copy()
+    env["SOC_AUTOPILOT_DEVELOPMENT_CLOUD"] = "1"
     env["SOC_AUTOPILOT_DEVELOPMENT_FREE_ONLY"] = "0"
 
     cmd = [
