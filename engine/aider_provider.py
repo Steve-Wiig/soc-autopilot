@@ -129,7 +129,7 @@ def resolve_aider_providers(
 
     if _cloud_enabled(env):
         if env.get("OPENROUTER_API_KEY", "").strip():
-            openrouter_model = "openrouter/inclusionai/ling-3.0-flash-vl:free"  # HARDCODED TO BYPASS CATALOG
+            openrouter_model = "openrouter/mistralai/mistral-7b-instruct:free"  # HARDCODED TO BYPASS CATALOG
 
             if openrouter_model:
                 providers.append(
