@@ -129,7 +129,7 @@ def resolve_aider_providers(
 
     if _cloud_enabled(env):
         if env.get("OPENROUTER_API_KEY", "").strip():
-            openrouter_model = "openrouter/nvidia/nemotron-3-super-120b-a12b:free"  # HARDCODED TO BYPASS CATALOG
+            openrouter_model = "openrouter/meta-llama/llama-3.1-8b-instruct:free"  # HARDCODED TO BYPASS CATALOG
 
             if openrouter_model:
                 providers.append(
