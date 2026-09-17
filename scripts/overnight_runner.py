@@ -57,7 +57,8 @@ def run_task(task_name: str, prompt: str, files_str: str) -> bool:
         # DEBUG: If propose_code.py failed, show why
         if result.returncode != 0:
             print(f"❌ propose_code.py failed with code {result.returncode}")
-            print(f"STDERR: {result.stderr[-500:]}")
+            print(f"STDERR:\n{result.stderr[-1000:]}")
+            print(f"STDOUT:\n{result.stdout[-2000:]}")
             return False
 
         proposals_dir = ROOT / "proposals"
