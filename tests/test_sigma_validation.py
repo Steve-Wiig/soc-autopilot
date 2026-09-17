@@ -1,3 +1,4 @@
+import pytest
 from engine.sigma_parser import validate_sigma_syntax
 from contracts.detection_models import DetectionRule
 
