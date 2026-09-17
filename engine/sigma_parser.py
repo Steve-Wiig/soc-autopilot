@@ -83,3 +83,22 @@ def export_to_elastic(rule: DetectionRule) -> dict:
             must_clauses.append({"term": {key: value}})
     
     return {"query": {"bool": {"must": must_clauses}}}
+
+def validate_sigma_syntax(rule: DetectionRule) -> list[str]:
+    """
+    Check a DetectionRule for common Sigma anti-patterns and return a list of warning strings.
+    """
+    warnings = []
+
+    if rule.detection is None or not isinstance(rule.detection, dict):
+        warnings.append("Detection section is empty or invalid")
+        return warnings
+
+    if "condition" not in rule.detection:
+        warnings.append("Detection is missing 'condition' key")
+
+    selection = rule.detection.get("selection")
+    if isinstance(selection, dict) and not selection:
+        warnings.append("Detection 'selection' is empty")
+
+    return warnings
