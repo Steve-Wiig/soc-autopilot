@@ -61,3 +61,25 @@ def export_to_splunk(rule: DetectionRule) -> str:
             parts.append(f"{key}={value}")
     
     return " ".join(parts)
+
+def export_to_elastic(rule: DetectionRule) -> dict:
+    """
+    Translate the DetectionRule's detection dict into a basic Elastic Query DSL dictionary.
+    Returns a dict in the form:
+        {'query': {'bool': {'must': [{'term': {'Field': value}}, ...]}}}
+    """
+    if not rule.detection or not isinstance(rule.detection, dict):
+        return {"query": {"bool": {"must": []}}}
+    
+    selection = rule.detection.get('selection', {})
+    if isinstance(selection, dict) and selection:
+        must_clauses = [{"term": {field: value}} for field, value in selection.items()]
+        return {"query": {"bool": {"must": must_clauses}}}
+    
+    # Fallback: treat top-level non-dict values as term clauses
+    must_clauses = []
+    for key, value in rule.detection.items():
+        if not isinstance(value, dict):
+            must_clauses.append({"term": {key: value}})
+    
+    return {"query": {"bool": {"must": must_clauses}}}
