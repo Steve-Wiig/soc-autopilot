@@ -41,3 +41,23 @@ def parse_sigma_rule(yaml_str: str) -> DetectionRule:
         raise SigmaParserError(f"Validation error: {str(e)}")
     except Exception as e:
         raise SigmaParserError(f"Unexpected error: {str(e)}")
+
+def export_to_splunk(rule: DetectionRule) -> str:
+    """
+    Translate the DetectionRule's detection dict into a basic Splunk SPL query string.
+    """
+    if not rule.detection or not isinstance(rule.detection, dict):
+        return ""
+    
+    # Sigma rules typically define a 'selection' dict with field:value pairs
+    selection = rule.detection.get('selection', {})
+    if isinstance(selection, dict) and selection:
+        return " ".join(f"{field}={value}" for field, value in selection.items())
+    
+    # Fallback: treat top-level non-dict values as field=value pairs
+    parts = []
+    for key, value in rule.detection.items():
+        if not isinstance(value, dict):
+            parts.append(f"{key}={value}")
+    
+    return " ".join(parts)
