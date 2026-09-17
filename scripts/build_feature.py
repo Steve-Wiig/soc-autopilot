@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
 Feature Builder: Uses scripts/propose_code.py with timestamp-based patch tracking.
-Prevents reuse of old patches by only accepting patches newer than the run start.
+Commits each successful patch to keep worktree clean for next task.
 """
 import subprocess
 import sys
 import time
 from pathlib import Path
-from datetime import datetime
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -67,7 +66,26 @@ def build_file(file_path_str: str, issue_desc: str) -> bool:
             print(f"❌ FAILED to apply patch: {apply_result.stderr}")
             return False
 
-        print(f"✅ SUCCESS: {file_path_str} generated and applied.")
+        # Commit the patch to keep worktree clean for next task
+        commit_result = subprocess.run(
+            ["git", "add", file_path_str],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        
+        if commit_result.returncode != 0:
+            print(f"⚠️  Warning: git add failed: {commit_result.stderr.decode()}")
+        
+        commit_result = subprocess.run(
+            ["git", "commit", "-m", f"feat: add {file_path_str}"],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        
+        if commit_result.returncode != 0:
+            print(f"⚠️  Warning: git commit failed: {commit_result.stderr.decode()}")
+
+        print(f"✅ SUCCESS: {file_path_str} generated, applied, and committed.")
         return True
 
     except subprocess.TimeoutExpired:
