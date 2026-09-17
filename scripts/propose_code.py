@@ -37,7 +37,7 @@ def main():
     parser.add_argument("prompt", help="The task description for Aider.")
     parser.add_argument("--files", nargs="+", required=True, help="Allowed files Aider can modify.")
     parser.add_argument("--out-dir", default="proposals", help="Directory to save the patch.")
-    parser.add_argument("--timeout", type=int, default=180, help="Timeout in seconds for worker execution (default: 180).")
+    parser.add_argument("--timeout", type=int, default=600, help="Timeout in seconds for worker execution (default: 600).")
     parser.add_argument("--auto", action="store_true", help="Run hands-free. Auto-approves if deterministic gates pass.")
     args = parser.parse_args()
 

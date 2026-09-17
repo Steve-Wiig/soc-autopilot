@@ -129,7 +129,7 @@ def resolve_aider_providers(
 
     if _cloud_enabled(env):
         if env.get("OPENROUTER_API_KEY", "").strip():
-            openrouter_model = "openrouter/stealth/union-alpha"  # HARDCODED TO BYPASS CATALOG
+            openrouter_model = "openrouter/qwen/qwen-2.5-coder-7b-instruct:free"  # HARDCODED TO BYPASS CATALOG
 
             if openrouter_model:
                 providers.append(
