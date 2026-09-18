@@ -344,6 +344,91 @@ def test_aider_worker_detects_git_history_protection_logic():
     assert "are forbidden." in source
 
 
+def test_aider_worker_rejects_head_mutation(monkeypatch):
+    from contextlib import nullcontext
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import engine.aider_development_worker as worker
+
+    repo_root = Path("/tmp/aider-history-test-repo")
+    worker_root = repo_root / ".worker"
+    calls = {"head": 0}
+
+    class FakeProcess:
+        returncode = 0
+        stdout = ()
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def kill(self):
+            return None
+
+    def fake_run(command, **kwargs):
+        if command == ["git", "rev-parse", "HEAD"]:
+            calls["head"] += 1
+            sha = (
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                if calls["head"] == 1
+                else "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            )
+            return SimpleNamespace(
+                returncode=0,
+                stdout=sha + "\n",
+                stderr="",
+            )
+
+        raise AssertionError(f"Unexpected subprocess.run command: {command!r}")
+
+    with patch(
+        "engine.aider_development_worker._repo_root",
+        return_value=repo_root,
+    ), patch(
+        "engine.aider_development_worker._is_clean_worktree",
+        return_value=True,
+    ), patch(
+        "engine.aider_development_worker._resolve_bounded_files",
+        return_value=[repo_root / "tests" / "example.py"],
+    ), patch(
+        "engine.aider_development_worker.shutil.which",
+        return_value="/usr/bin/aider",
+    ), patch(
+        "engine.aider_development_worker.build_aider_sandbox_command",
+        return_value=["fake-aider"],
+    ), patch(
+        "engine.aider_development_worker.run_in_worktree",
+        return_value=nullcontext(worker_root),
+    ), patch(
+        "engine.aider_development_worker.subprocess.run",
+        side_effect=fake_run,
+    ), patch(
+        "engine.aider_development_worker.subprocess.Popen",
+        return_value=FakeProcess(),
+    ), patch(
+        "engine.aider_development_worker._worktree_paths_vs_head",
+        return_value=("tests/example.py",),
+    ), patch(
+        "engine.aider_development_worker._diff_vs_head",
+        return_value="diff --git a/tests/example.py b/tests/example.py\n",
+    ), patch(
+        "engine.aider_development_worker._cleanup_aider_artifacts",
+    ):
+        result = worker.run_aider_worker(
+            "do bounded work",
+            ["tests/example.py"],
+        )
+
+    assert result.success is False
+    assert result.returncode == 125
+    assert "git history" in result.reason.lower()
+    assert calls["head"] == 2
+
+
 def test_aider_command_never_runs_from_canonical_repo():
     import inspect
 
