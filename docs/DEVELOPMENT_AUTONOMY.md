@@ -119,9 +119,13 @@ consume the same resources indefinitely. The defeat/failure ledger pattern is
 therefore part of the development architecture.
 
 
-## Aider development worker
+## Aider implementation status
 
-Aider is an optional development-time implementation worker. It is not part of the production SOC authority path.
+OBSERVED: the repository contains an Aider implementation worker for bounded development work.
+
+Aider operates in the development plane only. It is not part of the production SOC authority path.
+
+Its output remains subject to explicit file authorization, disposable worktree isolation, deterministic validation, regression testing, independent verification, canary controls, and human promotion requirements.
 
 The Aider boundary is:
 

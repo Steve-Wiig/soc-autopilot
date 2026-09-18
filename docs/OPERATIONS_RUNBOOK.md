@@ -32,7 +32,7 @@ git diff --check
 git status --short
 ```
 
-The documentation checkpoint that preceded this pass recorded 338 passing tests.
+The latest local regression-suite checkpoint recorded 870 passing tests and 1 skipped test. This validates the regression suite and does not establish production operational readiness.
 
 ## Runtime investigation order
 

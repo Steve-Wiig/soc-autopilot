@@ -1,12 +1,22 @@
 # SOC-Autopilot Architecture
 
-**Last updated: September 14, 2026**
+**Last updated: September 18, 2026**
 
 ## Architectural rule
 
 LLM proposes -> deterministic policy decides -> bounded action occurs -> telemetry records evidence -> humans remain authoritative.
 
 SOC-Autopilot separates production SOC autonomy from development autonomy.
+
+## Authority map
+
+| Plane | Proposal source | Decision authority | Final promotion authority |
+|---|---|---|---|
+| Production SOC | Local/edge LLM | Deterministic policy | Human where policy requires |
+| Development | Aider or another bounded worker | Deterministic safety and verification gates | Human merge / promotion |
+| Pi / edge review | Advisory verifier | No production policy authority | Existing promotion gates |
+
+The implementation worker, model, Pi reviewer, and other development components are proposal or evidence sources. They do not become policy authority merely by producing a successful result.
 
 ## Production SOC path
 

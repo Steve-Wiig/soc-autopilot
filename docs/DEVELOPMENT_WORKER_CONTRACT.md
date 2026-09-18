@@ -61,12 +61,9 @@ through the existing patch application and verification machinery.
 
 The worker implementation must remain replaceable.
 
-## Proposed Worker: Aider
+## Aider Worker Implementation
 
-Aider may be introduced as another implementation worker.
-
-Aider MUST be treated as a replaceable worker and NOT as the system's safety,
-routing, verification, or governance layer.
+Aider is implemented as a replaceable development worker. It MUST be treated as a replaceable worker and MUST NOT become the system's safety, routing, verification, or governance layer.
 
 The intended future relationship is:
 
