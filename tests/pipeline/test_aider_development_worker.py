@@ -64,6 +64,42 @@ def test_non_positive_timeout_rejected():
     assert "timeout must be positive" in result.reason.lower()
 
 
+def test_openrouter_policy_rejection_stops_before_worker(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    with patch(
+        "engine.aider_development_worker._repo_root",
+        return_value=tmp_path,
+    ), patch(
+        "engine.aider_development_worker._is_clean_worktree",
+        return_value=True,
+    ), patch(
+        "engine.aider_development_worker._resolve_bounded_files",
+        return_value=[tmp_path / "engine" / "example.py"],
+    ), patch(
+        "engine.aider_development_worker.shutil.which",
+        return_value="/usr/bin/aider",
+    ), patch(
+        "engine.aider_development_worker.validate_openrouter_model_allowed",
+        return_value=False,
+    ) as validate_mock, patch(
+        "engine.aider_development_worker.run_in_worktree"
+    ) as worktree_mock:
+
+        result = run_aider_worker(
+            "do work",
+            ["engine/example.py"],
+            model="openrouter/example/unknown",
+            provider_name="openrouter",
+            api_key_env="OPENROUTER_API_KEY",
+        )
+
+    assert result.success is False
+    assert "not permitted" in result.reason.lower()
+    validate_mock.assert_called_once()
+    worktree_mock.assert_not_called()
+
+
 def test_dirty_worktree_rejected():
     with patch(
         "engine.aider_development_worker._repo_root",

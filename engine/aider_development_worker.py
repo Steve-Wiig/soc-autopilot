@@ -435,10 +435,6 @@ def run_aider_worker(
 
     selected_provider = provider_name or _provider_from_model(model)
 
-    if selected_provider == "openrouter":
-        # BYPASSED: Free-tier catalog validation disabled to allow hardcoded model fallback
-        pass
-
     api_key = None
     if api_key_env:
         api_key = os.environ.get(api_key_env, "").strip()
@@ -461,6 +457,26 @@ def run_aider_worker(
         raise RuntimeError(
             "Cloud Aider worker attempts require an explicit api_key_env."
         )
+
+    if selected_provider == "openrouter":
+        if not validate_openrouter_model_allowed(
+            model,
+            api_key=api_key,
+            environ=os.environ.copy(),
+        ):
+            return AiderWorkerResult(
+                success=False,
+                changed_files=(),
+                diff="",
+                stdout="",
+                stderr="",
+                returncode=126,
+                reason=(
+                    "OpenRouter model is not permitted by the current "
+                    "development provider policy."
+                ),
+                model_name=model,
+            )
 
     budget_context = (
         DevelopmentBudgetBrokerContext(
