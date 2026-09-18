@@ -1,180 +1,220 @@
 #!/usr/bin/env python3
 """
-Development Runner CLI.
-The steering wheel for the autonomous development pipeline.
+Bounded development proposal CLI.
 
-Usage:
-    python3 scripts/propose_code.py "Fix the trailing whitespace in the orchestrator tests" --files engine/development_orchestrator.py tests/test_development_orchestrator.py
+This command generates a bounded Aider proposal for human review.
+
+It MUST NOT:
+- auto-approve proposals;
+- manufacture quorum votes;
+- create Git commits;
+- stage Git changes;
+- reset or clean the canonical checkout;
+- merge or promote changes.
+
+The worker remains the implementation mechanism. Human review and promotion
+remain authoritative.
 """
+
+from __future__ import annotations
+
 import argparse
-import sys
+import hashlib
 import os
+import sys
 from pathlib import Path
 
-# Ensure project root is in path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-from engine.development_orchestrator import run_development_cycle
 from contracts.promotion_state import PromotionState
-from contracts.worker_key_registry import WorkerKeyRegistry
-from contracts.worker_identity import WorkerVote
-import time
-import base64
+from engine.development_candidate import DevelopmentCandidate
+from engine.development_worker_dispatch import (
+    DevelopmentWorkerRequest,
+    dispatch_development_worker,
+)
 
-def main():
-    # Auto-load .env file if it exists
-    env_path = Path(__file__).parent.parent / ".env"
-    if env_path.exists():
-        print(f"[ENV] Loading API keys from {env_path.name}...")
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, val = line.split("=", 1)
-                import os
-                os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
 
-    parser = argparse.ArgumentParser(description="Generate a cryptographically verified code proposal.")
-    parser.add_argument("prompt", help="The task description for Aider.")
-    parser.add_argument("--files", nargs="+", required=True, help="Allowed files Aider can modify.")
-    parser.add_argument("--out-dir", default="proposals", help="Directory to save the patch.")
-    parser.add_argument("--timeout", type=int, default=600, help="Timeout in seconds for worker execution (default: 600).")
-    parser.add_argument("--auto", action="store_true", help="Run hands-free. Auto-approves if deterministic gates pass.")
+def _load_dotenv() -> None:
+    """Load local development credentials without copying .env elsewhere."""
+    env_path = ROOT / ".env"
+
+    if not env_path.exists():
+        return
+
+    print(f"[ENV] Loading API keys from {env_path.name}...")
+
+    for raw in env_path.read_text().splitlines():
+        line = raw.strip()
+
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+
+        os.environ.setdefault(
+            key.strip(),
+            value.strip().strip('"').strip("'"),
+        )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Generate a bounded development proposal for human review.",
+    )
+
+    parser.add_argument(
+        "prompt",
+        help="Task description for the implementation worker.",
+    )
+
+    parser.add_argument(
+        "--files",
+        nargs="+",
+        required=True,
+        help="Explicit files the worker is allowed to modify.",
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default="proposals",
+        help="Directory for generated proposal artifacts.",
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        help="Worker timeout in seconds.",
+    )
+
+    return parser
+
+
+def main() -> int:
+    _load_dotenv()
+
+    parser = build_parser()
     args = parser.parse_args()
 
-    print(f"\n{'='*60}")
-    print(f"  [TASK] {args.prompt}")
-    print(f"  [SCOPE] {', '.join(args.files)}")
-    print(f"{'='*60}\n")
-
-    # 1. Initialize Key Registry (In production, this is loaded from secure storage)
-    print("[1/4] Initializing cryptographic key registry...")
-    registry = WorkerKeyRegistry()
-    # Register 3 independent judge keys for this session
-    judges = ["judge_alpha", "judge_beta", "judge_gamma"]
-    for j in judges:
-        registry.register_worker(j)
-    print(f"      Registered judges: {', '.join(judges)}")
-
-    # 2. Generate the Candidate Hash (We need this to sign the votes)
-    # Since Aider hasn't run yet, we do a dry-run or use a placeholder hash
-    # for the local quorum signing.
-    # *Correction*: The orchestrator generates the hash *after* Aider runs.
-    # To sign the votes, we must let Aider run first, get the hash, then sign.
-    # We will use a custom wrapper to intercept the candidate hash.
-
-    print("[2/4] Dispatching to Aider implementation worker...")
-    print("      (This may take a minute depending on the provider)\n")
-
-    # We need to intercept the candidate to sign the votes.
-    # Let's create a mock orchestrator flow to get the hash, or just
-    # ask the user to approve the quorum *after* Aider generates the diff.
-
-    # Actually, let's just run the dispatch directly to get the diff,
-    # then build the candidate, sign it, and run the quorum.
-
-    from engine.development_worker_dispatch import DevelopmentWorkerRequest, dispatch_development_worker
-    from engine.development_candidate import DevelopmentCandidate
-    from engine.development_worker_pipeline import evaluate_strict_proposal
-    from contracts.worker_key_registry import sign_vote
-    import hashlib
+    print()
+    print("=" * 60)
+    print("  BOUNDED DEVELOPMENT PROPOSAL")
+    print("=" * 60)
+    print(f"  TASK:  {args.prompt}")
+    print(f"  SCOPE: {', '.join(args.files)}")
+    print("=" * 60)
+    print()
 
     request = DevelopmentWorkerRequest(
         prompt=args.prompt,
         files=tuple(args.files),
         backend="aider",
-        timeout=args.timeout
+        timeout=args.timeout,
     )
+
+    print("[1/3] Dispatching bounded Aider worker...")
 
     dispatch_result = dispatch_development_worker(request)
 
     if not dispatch_result.accepted_for_review:
-        print(f"\n[FAIL] Worker dispatch failed: {dispatch_result.reason}")
-        sys.exit(1)
+        print()
+        print("[REJECTED] Worker did not produce an acceptable proposal.")
+        print(f"Reason: {dispatch_result.reason}")
+        return 1
 
     worker_result = dispatch_result.worker_result
-    print(f"\n[SUCCESS] Aider generated a diff ({len(worker_result.diff)} chars).")
 
-    # 3. Build Candidate & Sign Quorum
-    generator_id = f"aider-{dispatch_result.backend}-{worker_result.model_name}"
+    print()
+    print(
+        "[PASS] Worker produced a bounded proposal "
+        f"({len(worker_result.diff)} diff bytes)."
+    )
+
+    changed = set(worker_result.changed_files)
+    allowed = set(args.files)
+
+    if not changed:
+        print("[REJECTED] Worker produced no changed files.")
+        return 1
+
+    unauthorized = sorted(changed - allowed)
+
+    if unauthorized:
+        print("[REJECTED] Unauthorized changed paths:")
+        for path in unauthorized:
+            print(f"  {path}")
+        return 1
+
+    diff_sha256 = hashlib.sha256(
+        worker_result.diff.encode("utf-8")
+    ).hexdigest()
+
     candidate = DevelopmentCandidate.from_diff(
-        candidate_id=f"prop-{hash(worker_result.diff) & 0xffffffff}",
+        candidate_id=f"prop-{diff_sha256[:16]}",
         base_commit="HEAD",
         diff_text=worker_result.diff,
         changed_files=list(worker_result.changed_files),
-        generator_worker_id=generator_id
+        generator_worker_id=(
+            f"aider-{dispatch_result.backend}-"
+            f"{worker_result.model_name}"
+        ),
     )
 
-    print(f"[3/4] Candidate Hash: {candidate.diff_sha256[:16]}...")
-    print("      Requesting local operator approval for 3-judge quorum...")
+    out_dir = ROOT / args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # For this CLI, the local operator acts as the trusted root to sign the 3 votes.
-    # In a fully automated setup, 3 separate LLM judges would do this.
-    if getattr(args, 'auto', False):
-        print("      [AUTO] Bypassing human prompt. Running deterministic sanity checks...")
-        if not worker_result.diff.strip():
-            print("      [AUTO-REJECT] Diff is empty.")
-            sys.exit(1)
-        if not set(worker_result.changed_files).issubset(set(args.files)):
-            print("      [AUTO-REJECT] Aider modified files outside the allowed scope.")
-            sys.exit(1)
-        print("      [AUTO-APPROVE] Sanity checks passed. Auto-signing quorum.")
-        approve = True
-    else:
-        approve = input("\n      Do you approve this proposal for quorum validation? [y/N]: ").lower() == 'y'
-
-    if not approve:
-        print("\n[ABORTED] Operator rejected the proposal.")
-        sys.exit(0)
-
-    votes = []
-    for j in judges:
-        pk = registry.get_private_key(j)
-        unsigned_vote = WorkerVote(
-            worker_id=j,
-            worker_class="local_operator",
-            worker_instance="cli_runner",
-            execution_host="localhost",
-            software_version="1.0.0",
-            candidate_hash=candidate.diff_sha256,
-            decision="approve" if approve else "reject",
-            timestamp=int(time.time()),
-            task_id="quorum-run",
-            signature="placeholder"
-        )
-        signed_vote = sign_vote(unsigned_vote, pk)
-        votes.append(signed_vote)
-
-    print(f"      Quorum signed: 3/3 Ed25519 signatures verified.")
-
-    # 4. Run the strict pipeline
-    print("\n[4/4] Running strict cryptographic pipeline...")
-
-    # We bypass the internal dispatch since we already ran it
-    approval_result = evaluate_strict_proposal(
-        candidate=candidate,
-        result=worker_result,
-        allowed_files=args.files,
-        votes=votes,
-        safety_ok=True,
-        regression_ok=True,
-        key_registry=registry
-    )
-
-    if not approval_result.approved:
-        print(f"\n[FAIL] Pipeline rejected proposal: {approval_result.decision.reason}")
-        sys.exit(1)
-
-    # SUCCESS: Save the patch
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(exist_ok=True)
     patch_file = out_dir / f"{candidate.candidate_id}.patch"
+    report_file = out_dir / f"{candidate.candidate_id}.md"
+
     patch_file.write_text(worker_result.diff)
 
-    print(f"\n{'='*60}")
-    print(f"  [STATUS] {PromotionState.PENDING_HUMAN_MERGE.value}")
-    print(f"  [OUTPUT] Patch saved to: {patch_file.resolve()}")
-    print(f"  [NEXT]   Review the patch, then run: git apply {patch_file}")
-    print(f"{'='*60}\n")
+    report_file.write_text(
+        "\n".join(
+            [
+                f"# Development Proposal {candidate.candidate_id}",
+                "",
+                f"- State: `{PromotionState.PENDING_HUMAN_MERGE.value}`",
+                "- Worker: Aider",
+                f"- Worker model: `{worker_result.model_name}`",
+                f"- Base commit: `{candidate.base_commit}`",
+                f"- Diff SHA-256: `{candidate.diff_sha256}`",
+                "",
+                "## Changed files",
+                "",
+                *[f"- `{path}`" for path in candidate.changed_files],
+                "",
+                "## Worker reason",
+                "",
+                worker_result.reason,
+                "",
+                "## Human review",
+                "",
+                "This artifact is a proposal only.",
+                "No quorum approval was manufactured.",
+                "No Git commit was created by this command.",
+                "Human review and promotion are required before merge.",
+                "",
+            ]
+        )
+    )
+
+    print()
+    print("[2/3] Proposal artifacts written:")
+    print(f"  Patch:  {patch_file}")
+    print(f"  Report: {report_file}")
+
+    print()
+    print("[3/3] STATUS")
+    print(f"  {PromotionState.PENDING_HUMAN_MERGE.value}")
+    print()
+    print("No quorum was generated.")
+    print("No Git staging was performed.")
+    print("No Git commit was created.")
+    print("Human review remains authoritative.")
+
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
