@@ -317,13 +317,15 @@ def test_aider_command_never_runs_from_canonical_repo():
 
     # This checks specifically the Aider subprocess, not helper Git
     # commands which legitimately inspect the worker repository.
-    marker = "completed = subprocess.run("
+    marker = "process = subprocess.Popen("
     assert marker in source
 
     execution = source[source.index(marker):]
+    timeout_boundary = execution.index("except subprocess.TimeoutExpired")
+    aider_execution = execution[:timeout_boundary]
 
-    assert "cwd=worker_root" in execution
-    assert "cwd=repo_root" not in execution[:execution.index("except subprocess.TimeoutExpired")]
+    assert "cwd=worker_root" in aider_execution
+    assert "cwd=repo_root" not in aider_execution
 
 def test_worker_output_normalization():
     from engine.aider_development_worker import _as_text
