@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, time, fcntl, hashlib
+import json, time, fcntl, hashlib, os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -14,9 +14,15 @@ def process_patch(patch_dict, patch_json_str):
     try:
         import redis
         redis_pwd = os.environ.get("REDIS_PASSWORD")
-    if not redis_pwd or redis_pwd == "CHANGE_ME":
-        raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
-    r = redis.Redis(password=redis_pwd, password=os.environ.get("REDIS_PASSWORD"), host='192.168.1.31', port=6379, db=0, decode_responses=True)
+        if not redis_pwd or redis_pwd == "CHANGE_ME":
+            raise RuntimeError("Fatal: REDIS_PASSWORD must be explicitly configured")
+        r = redis.Redis(
+            password=redis_pwd,
+            host='192.168.1.31',
+            port=6379,
+            db=0,
+            decode_responses=True,
+        )
         job_id = get_deterministic_job_id(patch_dict)
         full_path = ROOT / patch_dict['file']
         original_content = full_path.read_text() if full_path.exists() else ""
@@ -63,11 +69,14 @@ def main():
             try:
                 for line in f:
                     if line.strip():
-                        try: patches.append((json.loads(line), line))
+                        try:
+                            patches.append((json.loads(line), line))
                         except Exception as e:
-                        import logging
-                        logging.error(f'CONTROL-PLANE FAILURE in pi_idle_reviewer: {e}')
-                        raise
+                            import logging
+                            logging.error(
+                                f'CONTROL-PLANE FAILURE in pi_idle_reviewer: {e}'
+                            )
+                            raise
             finally:
                 fcntl.flock(f, fcntl.LOCK_UN)
         if patches:

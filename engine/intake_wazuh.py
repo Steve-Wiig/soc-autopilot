@@ -177,12 +177,12 @@ def parse_and_validate(raw_payload: str) -> dict[str, Any]:
     try:
         data = json.loads(raw_payload)
     except json.JSONDecodeError:
-        raise RuntimeError("Library code called exit(2)")
+        raise ParseError("Parsing failed")
     
     sanitized, err = sanitize_payload(data)
     if err:
         logging.error(f"Sanitization failed: {err}")
-        raise RuntimeError("Library code called exit(1)")
+        raise ValidationError("Validation failed")
     
     return sanitized
 def persist_alert(conn: sqlite3.Connection, alert_record: dict[str, Any]) -> None:
@@ -256,7 +256,7 @@ def intake_adapter(raw_payload: str) -> int:
         return 202
     except sqlite3.Error as e:
         logging.critical(f"Database error: {e}")
-        raise RuntimeError("Library code called exit(1)")
+        raise ValidationError("Validation failed")
     finally:
         conn.close()
 if __name__ == "__main__":
@@ -266,10 +266,9 @@ if __name__ == "__main__":
         input_data = sys.stdin.read()
         status_code = intake_adapter(input_data)
         sys.exit(0)
-    except RuntimeError as e:
-        if "exit(2)" in str(e):
-            sys.exit(EXIT_PARSE_ERROR)
-        sys.exit(EXIT_GENERAL_ERROR)
+    except IntakeError as e:
+        logging.error(f"Intake failed: {e}")
+        sys.exit(e.exit_code)
     except json.JSONDecodeError:
         sys.exit(EXIT_PARSE_ERROR)
     except Exception:

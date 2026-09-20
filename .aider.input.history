@@ -40,3 +40,52 @@
 +Do not modify any other source file.
 +Do not create tests; the test file is already supplied.
 +Do not commit anything.
+
+# 2026-09-19 17:55:21.435144
++Look at tools/dashboard.py around line 18. The security verifier flagged a 'shell=True' subprocess call as a potential dangerous construct. Refactor it to use a list of arguments instead of shell=True to prevent command injection, and show me the diff.
+
+# 2026-09-19 17:57:03.796765
++exit
+
+# 2026-09-19 18:00:33.244159
++Look at tools/dashboard.py around line 11. The security verifier flagged a 'shell=True' subprocess call. Refactor it to use a list of arguments instead of shell=True to prevent command injection, and show me the diff.
+
+# 2026-09-19 19:38:54.573720
++clear
+
+# 2026-09-19 19:39:18.858728
++Write a python function that calculates the fibonacci sequence up to n, and add a docstring.
++
+
+# 2026-09-19 21:10:17.426608
++Read tools/dashboard.py. Find the subprocess.run call with shell=True. Show me the exact 5 lines of code that need to change to fix it, and explain the fix. Do not rewrite the whole file.
+
+# 2026-09-20 01:23:23.946781
++Look at engine/ioc_extractor.py. Refactor the _get_pg_conn function to use a standard global variable instead of modifying function attributes, to satisfy static analysis rules about module-level side effects. Show me the diff.
+
+# 2026-09-20 16:08:22.316097
++Read the entire engine/ioc_extractor.py file and refactor it.
+
+# 2026-09-20 16:41:11.334587
++Show me lines 10 to 30 of engine/ioc_extractor.py. Output ONLY the code, no explanation, no markdown formatting.
+
+# 2026-09-20 18:56:20.488817
++> Show me the exact function signature of _get_pg_conn in engine/ioc_extractor.py.
+
+# 2026-09-20 21:52:16.877201
++Refactor the _get_pg_conn function to use a standard global variable instead of modifying function attributes. Ensure thread safety.
+
+# 2026-09-20 21:52:16.877300
++Refactor the _get_pg_conn function to use a standard global variable instead of modifying function attributes. Ensure thread safety.
+
+# 2026-09-20 21:52:30.708259
++Add proper type hints to all functions in this file. Do not change logic.
+
+# 2026-09-20 21:52:30.708357
++Add proper type hints to all functions in this file. Do not change logic.
+
+# 2026-09-20 21:52:44.531099
++Add comprehensive docstrings to the update_quota function following Google style guidelines.
+
+# 2026-09-20 21:52:44.532358
++Add comprehensive docstrings to the update_quota function following Google style guidelines.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
-import subprocess, json, sys, os, signal
+import subprocess
+import shlex, json, sys, os, signal
 from pathlib import Path
 from collections import Counter
 
@@ -13,10 +14,12 @@ sys.path.insert(0, str(ROOT))
 def h1(text): print(f"\n=== {text} ===")
 
 def run(cmd, timeout=10):
-    """Run a shell command with a timeout to prevent hangs."""
+    """Run a shell command with a timeout to prevent hangs. (Secure: shell=False)"""
     try:
+        if isinstance(cmd, str):
+            cmd = shlex.split(cmd)
         return subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=timeout
+            cmd, shell=False, capture_output=True, text=True, timeout=timeout
         ).stdout.strip()
     except subprocess.TimeoutExpired:
         return f"(timeout after {timeout}s)"

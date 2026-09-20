@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 import hashlib
 import string
 """
+from tools.deferred_dedup import add_or_update, is_duplicate
 soc-autopilot: Autonomous Engineering System
 A Staff-Level, Self-Healing, Test-Driven, Causal-Triage Autonomous Engineering System.
 """
@@ -331,19 +332,26 @@ def _resolve_contained_repository_path(file_path):
 _BUILTINS = set(dir(_builtins)) | {'__name__', '__file__', '__doc__', 'self', 'cls', 'None', 'True', 'False'}
 
 def _check_for_ghost_names(source_code: str):
-    """Check for hallucinated imports. Disabled aggressive local-var checking
-    to prevent false positives on loop variables (i, e, row, etc.)."""
+    """Enhanced ghost name detection.
+    
+    Checks for:
+    1. Hallucinated imports (modules that don't exist)
+    2. Undefined names used in Load context (variables, functions, classes)
+    
+    Conservative approach: only flags names that are clearly undefined
+    and not in common safe lists.
+    """
     try:
         tree = ast.parse(source_code)
     except SyntaxError:
         return []
 
-    # Only check for hallucinated external imports.
-    # Checking ast.Name nodes for local variables causes too many false positives.
     hallucinated = []
-    # Python 3.10+ provides perfect stdlib detection, eliminating false positives
+    
+    # Python 3.10+ provides perfect stdlib detection
     known_stdlib = sys.stdlib_module_names | {'engine', 'overnight', 'tools', 'orchestrator', 'memory'}
-
+    
+    # CHECK 1: Hallucinated imports (existing logic)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -355,7 +363,91 @@ def _check_for_ghost_names(source_code: str):
                 root_mod = node.module.split('.')[0]
                 if root_mod not in known_stdlib:
                     hallucinated.append(node.module)
-
+    
+    # CHECK 2: Undefined names used in Load context
+    # Collect all names that are "in scope"
+    defined_names = set()
+    
+    # Add built-in names
+    import builtins
+    defined_names.update(dir(builtins))
+    
+    # Add common safe names (loop vars, exception vars, etc.)
+    safe_names = {
+        'i', 'j', 'k', 'x', 'y', 'z',  # Loop variables
+        'e', 'ex', 'err', 'exc',  # Exception variables
+        'row', 'item', 'entry', 'record',  # Common iteration vars
+        'self', 'cls',  # Method/class context
+        '_', '__',  # Throwaway variables
+        'True', 'False', 'None',  # Constants
+    }
+    defined_names.update(safe_names)
+    
+    # Walk the AST to collect all defined names
+    for node in ast.walk(tree):
+        # Function/class definitions
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defined_names.add(node.name)
+            # Add parameters
+            if hasattr(node, 'args'):
+                for arg in node.args.args:
+                    defined_names.add(arg.arg)
+                if node.args.vararg:
+                    defined_names.add(node.args.vararg.arg)
+                if node.args.kwarg:
+                    defined_names.add(node.args.kwarg.arg)
+        
+        # Assignments
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    defined_names.add(target.id)
+                elif isinstance(target, ast.Tuple):
+                    for elt in target.elts:
+                        if isinstance(elt, ast.Name):
+                            defined_names.add(elt.id)
+        
+        # For loop variables
+        elif isinstance(node, ast.For):
+            if isinstance(node.target, ast.Name):
+                defined_names.add(node.target.id)
+            elif isinstance(node.target, ast.Tuple):
+                for elt in node.target.elts:
+                    if isinstance(elt, ast.Name):
+                        defined_names.add(elt.id)
+        
+        # With statement variables
+        elif isinstance(node, ast.With):
+            for item in node.items:
+                if item.optional_vars and isinstance(item.optional_vars, ast.Name):
+                    defined_names.add(item.optional_vars.id)
+        
+        # Exception handler variables
+        elif isinstance(node, ast.ExceptHandler):
+            if node.name:
+                defined_names.add(node.name)
+        
+        # Import statements (already checked above, but add to defined)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name.split('.')[0]
+                defined_names.add(name)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                defined_names.add(name)
+    
+    # Now check all Name nodes in Load context
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            if node.id not in defined_names:
+                # Only flag if it looks like it should be an import or global
+                # (starts with lowercase, not a single letter, not in safe list)
+                if (not node.id.startswith('_') and 
+                    len(node.id) > 1 and 
+                    node.id not in safe_names):
+                    hallucinated.append(f"undefined:{node.id}")
+    
     return list(set(hallucinated))
 
 def _get_imported_signatures(file_path, max_sigs=8):
@@ -510,12 +602,51 @@ def run_pytest(targets, timeout=60):
 # FORENSIC ANALYSIS (Improvement #5)
 # Two-phase: understand the defect BEFORE generating the fix.
 # ============================================================
+# ============================================================
+# FORENSIC ANALYSIS CACHE (Efficacy Improvement)
+# Caches forensic analysis results by (source_hash, issue_desc)
+# to avoid redundant LLM calls across retry attempts.
+# ============================================================
+_FORENSIC_CACHE_PATH = ROOT / "overnight" / "forensic_cache.json"
+
+def _load_forensic_cache() -> dict:
+    """Load the forensic analysis cache from disk."""
+    try:
+        if _FORENSIC_CACHE_PATH.exists():
+            return json.loads(_FORENSIC_CACHE_PATH.read_text())
+    except Exception:
+        pass
+    return {}
+
+def _save_forensic_cache(cache: dict) -> None:
+    """Persist the forensic analysis cache to disk."""
+    try:
+        _FORENSIC_CACHE_PATH.write_text(json.dumps(cache, indent=2))
+    except Exception:
+        pass  # Non-blocking
+
+def _forensic_cache_key(source_code: str, issue_desc: str) -> str:
+    """Generate a deterministic cache key from source hash + issue description."""
+    import hashlib
+    src_hash = hashlib.sha256(source_code.encode("utf-8")).hexdigest()[:16]
+    desc_hash = hashlib.sha256(issue_desc.encode("utf-8")).hexdigest()[:16]
+    return f"{src_hash}_{desc_hash}"
+
 def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
     """Phase 1: Structured root cause extraction before fix generation.
 
     Returns a formatted context string to inject into the fix prompt.
     Falls back to empty string on any failure (non-blocking).
+    Uses file-backed cache to avoid redundant LLM calls on retries.
     """
+    # --- CACHE CHECK ---
+    issue_desc = issue.get("description", "Unknown issue")
+    cache_key = _forensic_cache_key(source_code, issue_desc)
+    cache = _load_forensic_cache()
+    if cache_key in cache:
+        cached_result = cache[cache_key]
+        print(f"       💾 Forensic cache hit ({cache_key[:12]}...)")
+        return cached_result
     issue_desc = issue.get("description", "Unknown issue")
     category = issue.get("category", "unknown")
 
@@ -572,7 +703,13 @@ def _forensic_analysis(issue, source_code, baseline_tb, api_keys):
         if risk:
             context_parts.append(f"  Risk: {risk}")
 
-        return "\n".join(context_parts) + "\n\n"
+        result = "\n".join(context_parts) + "\n\n"
+        
+        # --- CACHE STORE ---
+        cache[cache_key] = result
+        _save_forensic_cache(cache)
+        
+        return result
 
     except Exception:
         return ""  # Non-blocking: fall back to direct generation
@@ -1776,7 +1913,10 @@ def drain_fix_backlog(api_keys, max_fixes=3):
         if not fpath.exists() or not current_hash or (recorded_hash and recorded_hash != current_hash):
             print(f"       ⚠️ STALE ADVISORY: {item['file']} has changed or provenance is missing. Deferring.")
             item["deferred_reason"] = "STALE_SOURCE_HASH_MISMATCH"
-            deferred.append(item)
+                        # Deduplication check
+            if not is_duplicate(item):
+                deferred.append(item)
+            add_or_update(item)
             continue
         # ------------------------------------------
 
@@ -1790,7 +1930,10 @@ def drain_fix_backlog(api_keys, max_fixes=3):
         if _classify_and_route_local(issue_desc):
             print(f"       🔀 Intercepted stylistic fix. Routing to Local SLM (Port 11435). Bypassing cloud budget.")
             _record_ledger(fpath, item.get('issue', {}), "DEFERRED", "Routed to Local SLM (Validation Phase)")
-            deferred.append(item)  # GATED FIX: Prevent silent deletion from backlog
+                        # Deduplication check
+            if not is_duplicate(item):
+                deferred.append(item)
+            add_or_update(item)
             continue
         # ----------------------------------------------------------------
         # --- HARDENING: Source Provenance Validation ---
@@ -1798,7 +1941,10 @@ def drain_fix_backlog(api_keys, max_fixes=3):
         if not validation["is_current"]:
             print(f"       ⚠️ STALE ADVISORY: {item['file']} - {validation['reason']}. Deferring.")
             item["deferred_reason"] = validation["reason"]
-            deferred.append(item)
+                        # Deduplication check
+            if not is_duplicate(item):
+                deferred.append(item)
+            add_or_update(item)
             continue
         # ------------------------------------------
 
@@ -1818,14 +1964,18 @@ def drain_fix_backlog(api_keys, max_fixes=3):
         }:
             done += 1
         elif outcome == AutoFixOutcome.ESCALATED:
-            deferred.append({
-                **item,
-                "deferred_reason": "ESCALATED",
-            })
+            # Deduplication check for escalated item
+            escalated_item = {**item, "deferred_reason": "ESCALATED"}
+            if not is_duplicate(escalated_item):
+                deferred.append(escalated_item)
+            add_or_update(escalated_item)
         else:
             item["attempts"] = item.get("attempts", 0) + 1
             if item["attempts"] >= 3:
-                deferred.append(item)
+                # Deduplication check
+                if not is_duplicate(item):
+                    deferred.append(item)
+                add_or_update(item)
             else:
                 remaining.append(item)
     _save_json(FIX_BACKLOG, remaining)
@@ -2172,7 +2322,23 @@ def _process_async_tdd_queue():
         try:
             import requests
             print(f"       ⏳ Evaluating TDD {idx+1}/{len(lines)} via Local Ollama (may take up to 5m)...")
-            prompt = f"Evaluate this pytest test for quality. Is it a valid test? Reply ONLY 'GOOD' or 'BAD'.\n\nIssue: {entry.get('issue_desc')}\nTest:\n{entry.get('tdd_code')}"
+            prompt = f"""Evaluate this pytest test for quality and specificity.
+
+Issue: {entry.get('issue_desc')}
+
+Test:
+{entry.get('tdd_code')}
+
+Check:
+1. Does the test have at least one assert statement?
+2. Does the test specifically address the issue described above?
+3. Is the test NOT just a generic placeholder (e.g., just importing and doing nothing)?
+
+Reply with ONLY one of these verdicts:
+- GOOD: Test is valid and specific to the issue
+- BAD: Test is invalid, generic, or doesn't address the issue
+
+Verdict:"""
             resp = requests.post("http://127.0.0.1:11434/api/generate", json={"model": "qwen2.5-coder:1.5b", "prompt": prompt, "stream": False}, timeout=300)
             consecutive_failures = 0  # Reset on successful connection
 
@@ -2195,7 +2361,23 @@ def _process_async_tdd_queue():
                 # CLOUD FALLBACK: Ensure progress even if local 1-core VM is choked
                 from overnight.llm_client import generate, load_api_keys
                 keys = load_api_keys()
-                fallback_prompt = f"Evaluate this pytest test for quality. Is it a valid test? Reply ONLY 'GOOD' or 'BAD'.\n\nIssue: {entry.get('issue_desc')}\nTest:\n{entry.get('tdd_code')}"
+                fallback_prompt = f"""Evaluate this pytest test for quality and specificity.
+
+Issue: {entry.get('issue_desc')}
+
+Test:
+{entry.get('tdd_code')}
+
+Check:
+1. Does the test have at least one assert statement?
+2. Does the test specifically address the issue described above?
+3. Is the test NOT just a generic placeholder (e.g., just importing and doing nothing)?
+
+Reply with ONLY one of these verdicts:
+- GOOD: Test is valid and specific to the issue
+- BAD: Test is invalid, generic, or doesn't address the issue
+
+Verdict:"""
 
                 cloud_resp = generate(fallback_prompt, keys, temperature=0.1, max_tokens=50, model_type="code")
                 text_v = (cloud_resp or "").upper()

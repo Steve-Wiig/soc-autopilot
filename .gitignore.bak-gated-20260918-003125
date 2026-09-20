@@ -1,0 +1,62 @@
+# Generated logs and evidence
+overnight/evidence/
+overnight/*.log
+overnight/progress.json
+overnight/morning_report.md
+overnight/audits/
+overnight/spike_plans/
+overnight/tasks.json
+# Python cache
+__pycache__/
+*.pyc
+# Temp files
+*.tmp
+.DS_Store
+.venv/
+.env
+*.bak
+handoff_log.txt
+overnight/*.json
+overnight/*.lock
+# Telemetry Buffer (Stage 1)
+overnight/.telemetry_buffer/
+overnight/defeat_ledger.jsonl
+# Autonomous Runtime & Queues
+.quarantined_tests/
+data/
+logs/
+overnight/.reasoning_buffer/
+overnight/advisory_queue/
+overnight/oracle_queue/pending/
+overnight/oracle_queue/rejected/
+*.orig_backup
+*.db
+*.patch
+*_audit.log
+integration_*
+*.log
+overnight/*.txt
+overnight/*.jsonl
+tests/test_tdd_auto_*.py
+engine/inference_ledger.jsonl
+
+# Local documentation rebuild backups
+/docs/archive/
+/runtime/
+/docs/archive/
+/.env
+
+# Local safety backups created during surgical refactors
+*.backup*
+overnight/daemon.pid
+overnight/*.log
+overnight/*.log.pre-*
+crontab_backup_*.txt
+apply_pytest_fix.py
+triage_edge_node.sh
+.env
+proposals/
+overnight.sh
+overnight/
+__pycache__/
+*.pyc

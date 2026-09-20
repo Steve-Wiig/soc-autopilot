@@ -44,7 +44,8 @@ def test_sanitize_payload_invalid_level():
     assert result["severity"] == 5  # Clamped by max(0, min(5, raw_level))
 
 def test_intake_adapter_invalid_json():
-    with pytest.raises(RuntimeError, match="exit\\(2\\)"):
+    from engine.intake_wazuh import ParseError
+    with pytest.raises(ParseError):
         intake_adapter("invalid-json")
 
 def test_intake_adapter_db_insertion(db_setup, monkeypatch):

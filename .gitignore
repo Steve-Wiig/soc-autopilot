@@ -60,3 +60,4 @@ overnight.sh
 overnight/
 __pycache__/
 *.pyc
+.aider*

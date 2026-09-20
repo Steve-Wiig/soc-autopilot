@@ -381,7 +381,9 @@ def update_quota(
     sq_conn: sqlite3.Connection,
     provider: str,
     cost: int,
-    cursor: Optional[sqlite3.Cursor] = None
+    cursor: Optional[sqlite3.Cursor] = None,
+    actor: str = "system",
+    approval_ref: Optional[str] = None
 ) -> None:
     """Decrements the quota for a specific provider in the SQLite database.
 
@@ -390,6 +392,8 @@ def update_quota(
         provider: The name of the enrichment provider.
         cost: The amount to decrement from the quota.
         cursor: Optional cursor to reuse.
+        actor: The actor performing the mutation (default: "system").
+        approval_ref: Optional reference to the approval for this mutation.
 
     Raises:
         ValueError: If the provider has insufficient quota or is not found.
@@ -399,17 +403,31 @@ def update_quota(
         cursor = sq_conn.cursor()
         own_cursor = True
     try:
+        # 1. Get remaining before update
+        cursor.execute("SELECT remaining FROM quota_ledger WHERE provider = ?", (provider,))
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Provider '{provider}' not found in quota_ledger")
+        
+        remaining_before = row[0]
+        if remaining_before < cost:
+            raise ValueError(f"Insufficient quota for provider '{provider}': {remaining_before} remaining, {cost} required")
+        
+        # 2. Perform update
         cursor.execute(
             "UPDATE quota_ledger SET remaining = remaining - ? WHERE provider = ? AND remaining >= ?",
             (cost, provider, cost)
         )
-        if cursor.rowcount == 0:
-            cursor.execute("SELECT remaining FROM quota_ledger WHERE provider = ?", (provider,))
-            row = cursor.fetchone()
-            if row is None:
-                raise ValueError(f"Provider '{provider}' not found in quota_ledger")
-            else:
-                raise ValueError(f"Insufficient quota for provider '{provider}': {row[0]} remaining, {cost} required")
+        
+        remaining_after = remaining_before - cost
+        
+        # 3. Append-only audit log (Section 30 compliance)
+        cursor.execute(
+            """INSERT INTO quota_audit_log 
+               (provider, cost, remaining_before, remaining_after, timestamp, actor, approval_ref) 
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (provider, cost, remaining_before, remaining_after, datetime.now(timezone.utc).isoformat(), actor, approval_ref)
+        )
     finally:
         if own_cursor:
             cursor.close()

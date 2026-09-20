@@ -37,7 +37,7 @@ def test_extract_iocs_returns_int():
 
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = MagicMock()
-    with patch("engine.ioc_extractor._get_pg_conn", return_value=mock_conn):
+    with patch("engine.ioc_extractor.get_pg_conn", return_value=mock_conn):
         with patch("engine.ioc_extractor.execute_values") as mock_ev:
             result = extract_iocs(alert)
 
@@ -56,7 +56,7 @@ def test_extract_iocs_empty_alert():
 
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = MagicMock()
-    with patch("engine.ioc_extractor._get_pg_conn", return_value=mock_conn):
+    with patch("engine.ioc_extractor.get_pg_conn", return_value=mock_conn):
         with patch("engine.ioc_extractor.execute_values") as mock_ev:
             result = extract_iocs(alert)
 
@@ -69,7 +69,7 @@ def test_extract_iocs_handles_minimal_structure():
 
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = MagicMock()
-    with patch("engine.ioc_extractor._get_pg_conn", return_value=mock_conn):
+    with patch("engine.ioc_extractor.get_pg_conn", return_value=mock_conn):
         with patch("engine.ioc_extractor.execute_values") as mock_ev:
             result = extract_iocs(alert)
 

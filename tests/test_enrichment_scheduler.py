@@ -22,6 +22,18 @@ def _make_quota_db():
             remaining INTEGER DEFAULT 100
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS quota_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
+            cost INTEGER NOT NULL,
+            remaining_before INTEGER NOT NULL,
+            remaining_after INTEGER NOT NULL,
+            timestamp TEXT NOT NULL,
+            actor TEXT DEFAULT 'system',
+            approval_ref TEXT
+        )
+    """)
     conn.execute("INSERT INTO quota_ledger (provider, remaining) VALUES ('gemini', 90)")
     conn.commit()
     return conn

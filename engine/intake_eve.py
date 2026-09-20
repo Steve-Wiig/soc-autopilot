@@ -177,14 +177,19 @@ def _log_audit(cursor: sqlite3.Cursor, event_id: int, old_status: Optional[str],
 
 
 def shannon_entropy(data: str) -> float:
-    """Calculate Shannon entropy of a string."""
+    """Calculate Shannon entropy of a string in O(N) time."""
     if not data:
         return 0.0
+    
+    counts = Counter(data)
+    length = len(data)
     entropy = 0.0
-    for x in range(256):
-        p_x = data.count(chr(x)) / len(data)
-        if p_x > 0:
-            entropy += -p_x * math.log2(p_x)
+    
+    for count in counts.values():
+        if count > 0:
+            probability = count / length
+            entropy -= probability * math.log2(probability)
+            
     return entropy
 
 
