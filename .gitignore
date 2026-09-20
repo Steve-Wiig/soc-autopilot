@@ -61,3 +61,11 @@ overnight/
 __pycache__/
 *.pyc
 .aider*
+
+# Aider and overnight backup artifacts
+.worktrees/
+*.bak*
+.gated-*
+docs/.gated-*
+tests/.gated-*
+
