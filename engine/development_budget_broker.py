@@ -22,12 +22,42 @@ import socket
 import threading
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import TracebackType
 
 from overnight.budget_manager import APIBudgetManager
 
+# Maximum number of pending connections the broker's listening socket will
+# queue before the OS starts refusing new ones.
+_LISTEN_BACKLOG = 8
+
+# How long (seconds) `accept()` blocks before looping back to check the stop
+# event. Keeps the serve loop responsive to `stop()` without busy-waiting.
+_ACCEPT_POLL_INTERVAL_SECONDS = 0.25
+
+# How long (seconds) a per-connection socket will block on `recv()` before
+# giving up on a slow/stalled client.
+_CONNECTION_RECV_TIMEOUT_SECONDS = 5.0
+
+# How long (seconds) `stop()` waits for the serve thread to exit before
+# giving up on a clean join.
+_SERVE_THREAD_JOIN_TIMEOUT_SECONDS = 2.0
+
+# Hard cap on the size of a single request line, to avoid unbounded memory
+# growth from a misbehaving or malicious client.
+_MAX_REQUEST_LINE_BYTES = 65536
+
+# Chunk size used when draining a client connection's socket buffer.
+_RECV_CHUNK_BYTES = 4096
+
 
 class DevelopmentBudgetBroker:
-    """Threaded Unix-socket broker backed by the shared API budget."""
+    """Threaded Unix-socket broker backed by the shared API budget.
+
+    Listens on a Unix-domain socket and serves newline-delimited JSON
+    "reserve" requests from sandboxed development workers, forwarding
+    admission decisions to the underlying `APIBudgetManager`. Optionally
+    restricts which provider/model combination callers may request.
+    """
 
     def __init__(
         self,
@@ -51,9 +81,18 @@ class DevelopmentBudgetBroker:
         )
         self._server: socket.socket | None = None
         self._thread: threading.Thread | None = None
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
 
     def start(self) -> Path:
+        """Bind the broker's Unix socket and start serving in a background thread.
+
+        Returns:
+            The filesystem path of the bound Unix-domain socket.
+
+        Raises:
+            RuntimeError: If the broker is already running.
+            ValueError: If no `socket_path` was configured.
+        """
         if self._server is not None:
             raise RuntimeError("Budget broker already running")
 
@@ -69,11 +108,11 @@ class DevelopmentBudgetBroker:
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server.bind(str(self.socket_path))
         self.socket_path.chmod(0o600)
-        server.listen(8)
-        server.settimeout(0.25)
+        server.listen(_LISTEN_BACKLOG)
+        server.settimeout(_ACCEPT_POLL_INTERVAL_SECONDS)
 
         self._server = server
-        self._stop.clear()
+        self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._serve,
             name="development-budget-broker",
@@ -84,7 +123,12 @@ class DevelopmentBudgetBroker:
         return self.socket_path
 
     def stop(self) -> None:
-        self._stop.set()
+        """Signal the serve loop to stop, join its thread, and remove the socket file.
+
+        Safe to call multiple times; subsequent calls are no-ops once the
+        broker has already been stopped.
+        """
+        self._stop_event.set()
 
         if self._server is not None:
             try:
@@ -94,7 +138,7 @@ class DevelopmentBudgetBroker:
             self._server = None
 
         if self._thread is not None:
-            self._thread.join(timeout=2.0)
+            self._thread.join(timeout=_SERVE_THREAD_JOIN_TIMEOUT_SECONDS)
             self._thread = None
 
         if self.socket_path is not None:
@@ -104,11 +148,16 @@ class DevelopmentBudgetBroker:
                 pass
 
     def _serve(self) -> None:
+        """Accept and handle connections until `stop()` is called.
+
+        Runs on the background thread started by `start()`. Uses a short
+        accept timeout so the stop event is checked regularly.
+        """
         server = self._server
         if server is None:
             return
 
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             try:
                 conn, _ = server.accept()
             except socket.timeout:
@@ -117,15 +166,23 @@ class DevelopmentBudgetBroker:
                 break
 
             with conn:
-                conn.settimeout(5.0)
+                conn.settimeout(_CONNECTION_RECV_TIMEOUT_SECONDS)
                 self._handle_connection(conn)
 
     def _handle_connection(self, conn: socket.socket) -> None:
+        """Read one newline-delimited JSON request and reply on the given socket.
+
+        Args:
+            conn: The accepted client connection. Left open/closed by the
+                caller (the `with conn:` block in `_serve`).
+        """
         buffer = b""
 
-        while b"\n" not in buffer and len(buffer) < 65536:
+        # Read until we have a full request line, the client disconnects, or
+        # the request exceeds the configured size limit.
+        while b"\n" not in buffer and len(buffer) < _MAX_REQUEST_LINE_BYTES:
             try:
-                chunk = conn.recv(4096)
+                chunk = conn.recv(_RECV_CHUNK_BYTES)
             except socket.timeout:
                 return
 
@@ -134,13 +191,15 @@ class DevelopmentBudgetBroker:
 
             buffer += chunk
 
-        if len(buffer) >= 65536:
+        if len(buffer) >= _MAX_REQUEST_LINE_BYTES:
             self._send(
                 conn,
                 {"ok": False, "error": "REQUEST_TOO_LARGE"},
             )
             return
 
+        # Parse only the first line; anything after the first newline is
+        # ignored (the protocol is strictly one request per connection).
         try:
             request = json.loads(buffer.split(b"\n", 1)[0])
         except json.JSONDecodeError:
@@ -210,14 +269,20 @@ class DevelopmentBudgetBroker:
         )
 
     @staticmethod
-    def _send(conn: socket.socket, payload: dict) -> None:
+    def _send(conn: socket.socket, payload: dict[str, object]) -> None:
+        """Serialize `payload` as JSON and write it, newline-terminated, to `conn`."""
         conn.sendall(
             (json.dumps(payload, separators=(",", ":")) + "\n").encode()
         )
 
 
 class DevelopmentBudgetBrokerContext:
-    """Create a temporary broker socket and clean it up deterministically."""
+    """Context manager that runs a `DevelopmentBudgetBroker` on a temporary socket.
+
+    Creates a private temporary directory for the Unix-domain socket file so
+    callers don't need to manage socket path lifecycle themselves, and
+    guarantees the broker is stopped and the directory cleaned up on exit.
+    """
 
     def __init__(
         self,
@@ -233,6 +298,7 @@ class DevelopmentBudgetBrokerContext:
         self.broker: DevelopmentBudgetBroker | None = None
 
     def __enter__(self) -> DevelopmentBudgetBroker:
+        """Create the temporary socket directory, start the broker, and return it."""
         self._tmp = TemporaryDirectory(prefix="soc-autopilot-budget-")
         path = Path(self._tmp.name) / "budget.sock"
         self.broker = DevelopmentBudgetBroker(
@@ -244,7 +310,13 @@ class DevelopmentBudgetBrokerContext:
         self.broker.start()
         return self.broker
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Stop the broker and remove the temporary socket directory."""
         if self.broker is not None:
             self.broker.stop()
         if self._tmp is not None:

@@ -1,34 +1,70 @@
 """
 Demonstrates the Noise Crusher handling a massive brute-force attack.
+
+This script simulates a burst of near-identical SSH brute-force alerts
+being ingested from WAZUH, shows how the deterministic dedup layer
+collapses them into a small number of investigation clusters, and then
+runs each cluster through the investigation controller to observe the
+resulting hypothesis, simulated remediation action, and policy decision.
 """
 from __future__ import annotations
+
 import hashlib
 import json
+
 from engine.canonical_envelope import EventEnvelope, TrustLabels
 from engine.deterministic_dedup import cluster_alerts
 from engine.investigation_controller import run_investigation
 
-def process_burst(num_alerts: int):
+# Simulated attack characteristics (kept identical across the burst so the
+# dedup layer has something meaningful to collapse).
+SOURCE_IP = "192.168.1.100"
+DEST_IP = "10.0.0.10"
+WAZUH_RULE_ID = "5710"
+WAZUH_RULE_MESSAGE = "sshd: Attempt to login using a non-existing user"
+TARGET_USER = "root"
+ALERT_ACTION = "alert"
+
+# Envelope/collector metadata for the simulated ingestion source.
+ENVELOPE_SOURCE = "wazuh"
+COLLECTOR_VERSION = "1.0.0"
+TRANSFORM_VERSION = "1.0.0"
+
+
+def process_burst(num_alerts: int) -> None:
+    """Simulate a burst of brute-force alerts and run them through the pipeline.
+
+    Builds ``num_alerts`` near-duplicate SSH brute-force alert envelopes,
+    feeds them through deterministic dedup to collapse them into
+    investigation clusters, and then runs each resulting cluster through
+    the investigation controller, printing the intake, dedup, brain,
+    executor, and policy outcomes along the way.
+
+    Args:
+        num_alerts: The number of raw alerts to simulate in the burst.
+    """
     print(f"\n* * * SIMULATING BRUTE FORCE ATTACK ({num_alerts} ALERTS) * * *")
 
-    envelopes = []
-    for i in range(num_alerts):
-        raw_json = {
-            "timestamp": f"2026-09-08T14:35:{i:02d}Z",
-            "src_ip": "192.168.1.100",
-            "dest_ip": "10.0.0.10",
-            "rule": {"id": "5710", "msg": "sshd: Attempt to login using a non-existing user"},
-            "data": {"dstuser": "root"},
-            "action": "alert"
+    envelopes: list[EventEnvelope] = []
+    for alert_index in range(num_alerts):
+        alert_payload = {
+            "timestamp": f"2026-09-08T14:35:{alert_index:02d}Z",
+            "src_ip": SOURCE_IP,
+            "dest_ip": DEST_IP,
+            "rule": {"id": WAZUH_RULE_ID, "msg": WAZUH_RULE_MESSAGE},
+            "data": {"dstuser": TARGET_USER},
+            "action": ALERT_ACTION,
         }
-        raw_hash = hashlib.sha256(json.dumps(raw_json, sort_keys=True).encode()).hexdigest()
+        payload_hash = hashlib.sha256(
+            json.dumps(alert_payload, sort_keys=True).encode()
+        ).hexdigest()
         envelopes.append(EventEnvelope(
-            source="wazuh",
-            collector_version="1.0.0",
-            transform_version="1.0.0",
-            original_payload_hash=raw_hash,
-            normalized_payload_hash=raw_hash,
-            payload=raw_json,
+            source=ENVELOPE_SOURCE,
+            collector_version=COLLECTOR_VERSION,
+            transform_version=TRANSFORM_VERSION,
+            original_payload_hash=payload_hash,
+            normalized_payload_hash=payload_hash,
+            payload=alert_payload,
             trust_labels=TrustLabels(sanitized=True, untrusted_content=True)
         ))
 
@@ -55,6 +91,7 @@ def process_burst(num_alerts: int):
                 print(f"  [POLICY]  DECISION: ALLOW")
 
     print(f"\n* * * SPINE STRESS TEST COMPLETE * * *\n")
+
 
 if __name__ == "__main__":
     process_burst(50)

@@ -1,18 +1,37 @@
+"""
+Pydantic contract models for detection rules.
+
+This module defines strict, validated data models representing
+Sigma-style detection rules. These models are intended to prevent
+malformed or hallucinated data (e.g., from AI-generated content)
+from entering the system by enforcing strict typing and validation
+rules at the schema level.
+"""
+
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Dict, Any
 from enum import Enum
 import uuid
 
+
 class SeverityLevel(str, Enum):
-    """Strict enum for allowed severity levels."""
+    """
+    Strict enum for allowed severity levels.
+
+    Restricts the `severity` field on `DetectionRule` to one of a
+    fixed set of known values, preventing invalid or arbitrary
+    severity strings from being accepted.
+    """
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
+
 class DetectionRule(BaseModel):
     """
     Strict model representing a parsed Sigma detection rule.
+
     Future-proofed with explicit validation to prevent AI hallucination.
     """
     rule_id: str = Field(..., description="Must be a valid UUID v4 string")
@@ -26,6 +45,18 @@ class DetectionRule(BaseModel):
     @field_validator('rule_id')
     @classmethod
     def validate_uuid(cls, v: str) -> str:
+        """
+        Validate that `rule_id` is a properly formatted UUID v4 string.
+
+        Args:
+            v: The candidate rule_id value to validate.
+
+        Returns:
+            The validated rule_id string, unchanged.
+
+        Raises:
+            ValueError: If `v` is not a valid UUID v4 string.
+        """
         try:
             uuid.UUID(v, version=4)
             return v

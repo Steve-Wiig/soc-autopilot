@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+from typing import Any
 
 
 _SOCKET_ENV = "AIDER_BUDGET_SOCKET"
@@ -25,6 +26,12 @@ _METADATA_ALLOWED_OPENROUTER_PREFIX = "/api/"
 
 
 def _is_blocked_metadata_url(url: object) -> bool:
+    """Return True if `url` points at a metadata endpoint that must be blocked.
+
+    Metadata endpoints are informational/model-listing calls (e.g. Aider's
+    legacy OpenRouter model-page lookup) that are distinct from the actual
+    provider API calls, which must remain reachable.
+    """
     if not isinstance(url, str) or not url:
         return False
 
@@ -50,6 +57,11 @@ def _is_blocked_metadata_url(url: object) -> bool:
 
 
 def _install_metadata_network_gate() -> None:
+    """Monkeypatch `requests.Session.request` to block metadata URL calls.
+
+    Idempotent: safe to call multiple times, the patch is only applied once
+    per process.
+    """
     import requests
 
     if getattr(requests, "_soc_autopilot_metadata_gate_installed", False):
@@ -57,7 +69,14 @@ def _install_metadata_network_gate() -> None:
 
     original_request = requests.sessions.Session.request
 
-    def guarded_request(self, method, url, *args, **kwargs):
+    def guarded_request(
+        self: "requests.sessions.Session",
+        method: str,
+        url: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> "requests.Response":
+        """Delegate to the original `request`, blocking metadata URLs first."""
         if _is_blocked_metadata_url(url):
             raise RuntimeError(
                 "Aider metadata network request blocked by SOC-AUTOPILOT: "
@@ -76,6 +95,7 @@ def _install_metadata_network_gate() -> None:
 
 
 def _provider_for_model(model: str) -> str | None:
+    """Return the cloud provider name for `model`, or None if it is local."""
     if model.startswith("openrouter/"):
         return "openrouter"
     if model.startswith("gemini/"):
@@ -84,6 +104,12 @@ def _provider_for_model(model: str) -> str | None:
 
 
 def _reserve(provider: str, model: str) -> None:
+    """Request an atomic budget reservation from the parent broker.
+
+    Connects to the Unix socket named by the `AIDER_BUDGET_SOCKET`
+    environment variable, sends a reservation request, and raises
+    `RuntimeError` unless the broker confirms the reservation.
+    """
     socket_path = os.environ.get(_SOCKET_ENV, "").strip()
 
     # Cloud execution MUST have the broker.
@@ -92,7 +118,7 @@ def _reserve(provider: str, model: str) -> None:
             f"Aider cloud request blocked: {_SOCKET_ENV} is not configured"
         )
 
-    request = {
+    reservation_payload = {
         "op": "reserve",
         "provider": provider,
         "model": model,
@@ -103,7 +129,7 @@ def _reserve(provider: str, model: str) -> None:
             sock.settimeout(5.0)
             sock.connect(socket_path)
             sock.sendall(
-                (json.dumps(request, separators=(",", ":")) + "\n").encode()
+                (json.dumps(reservation_payload, separators=(",", ":")) + "\n").encode()
             )
 
             data = b""
@@ -137,9 +163,13 @@ def _reserve(provider: str, model: str) -> None:
 
 
 def install() -> None:
+    """Install the metadata network gate and the LiteLLM budget-enforcing shim.
+
+    Idempotent: safe to call multiple times, each patch is only applied once
+    per process.
+    """
     _install_metadata_network_gate()
 
-    global litellm
     import litellm
 
     if getattr(litellm, "_soc_autopilot_budget_shim_installed", False):
@@ -147,7 +177,8 @@ def install() -> None:
 
     original_completion = litellm.completion
 
-    def guarded_completion(*args, **kwargs):
+    def guarded_completion(*args: Any, **kwargs: Any) -> Any:
+        """Reserve cloud budget (if needed) before delegating to LiteLLM."""
         model = kwargs.get("model")
 
         if not isinstance(model, str) or not model:

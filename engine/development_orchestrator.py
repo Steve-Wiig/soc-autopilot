@@ -46,8 +46,23 @@ from contracts.worker_identity import WorkerVote
 from contracts.worker_key_registry import WorkerKeyRegistry
 
 
+# Mask applied to the diff hash when deriving a short, stable candidate ID suffix.
+_CANDIDATE_ID_HASH_MASK = 0xffffffff
+
+
 @dataclass(frozen=True)
 class OrchestrationResult:
+    """
+    Outcome of a single development orchestration cycle.
+
+    Attributes:
+        success: True if the candidate cleared all gates and reached
+            PENDING_HUMAN_MERGE; False if it was rejected at any stage.
+        candidate: The generated DevelopmentCandidate, or None if the
+            worker dispatch itself failed before a candidate could be built.
+        state: The final PromotionState reached by this cycle.
+        reason: Human-readable explanation of the outcome (success or failure).
+    """
     success: bool
     candidate: DevelopmentCandidate | None
     state: PromotionState
@@ -66,7 +81,26 @@ def run_development_cycle(
     regression_reason: str = "",
 ) -> OrchestrationResult:
     """
-    Executes a bounded development cycle.
+    Executes a single bounded development cycle end-to-end:
+    dispatches the Aider worker, builds a candidate from its diff,
+    evaluates it against the strict cryptographic/safety pipeline,
+    and advances it through the promotion state machine up to
+    PENDING_HUMAN_MERGE (never further).
+
+    Args:
+        prompt: The instruction given to the development worker.
+        allowed_files: The set of files the worker is permitted to modify.
+        key_registry: Registry of known worker public keys used to verify votes.
+        judge_votes: Independent Ed25519-signed votes on the candidate.
+        safety_ok: Result of the deterministic safety gate.
+        regression_ok: Result of the deterministic regression gate.
+        safety_reason: Explanation to attach if the safety gate failed.
+        regression_reason: Explanation to attach if the regression gate failed.
+
+    Returns:
+        An OrchestrationResult describing whether the cycle succeeded,
+        the resulting candidate (if any), the final PromotionState, and
+        a human-readable reason for that outcome.
     """
     # 1. Dispatch to the Aider worker
     request = DevelopmentWorkerRequest(
@@ -75,7 +109,7 @@ def run_development_cycle(
         backend="aider"
     )
     dispatch_result = dispatch_development_worker(request)
-    
+
     if not dispatch_result.accepted_for_review:
         return OrchestrationResult(
             success=False,
@@ -85,13 +119,13 @@ def run_development_cycle(
         )
 
     worker_result: AiderWorkerResult = dispatch_result.worker_result
-    
+
     # 2. Create the Candidate (Binding the generator identity)
     # We use the backend name + model as the generator ID for traceability
     generator_id = f"aider-{dispatch_result.backend}-{worker_result.model_name}"
-    
+
     candidate = DevelopmentCandidate.from_diff(
-        candidate_id=f"candidate-{hash(worker_result.diff) & 0xffffffff}",
+        candidate_id=f"candidate-{hash(worker_result.diff) & _CANDIDATE_ID_HASH_MASK}",
         base_commit="HEAD",
         diff_text=worker_result.diff,
         changed_files=list(worker_result.changed_files),
@@ -113,14 +147,17 @@ def run_development_cycle(
 
     # 4. State Transition
     current_state = PromotionState.GENERATED
-    
+
     if not approval_result.approved:
         try:
             validate_transition(current_state, PromotionState.REJECTED)
             final_state = PromotionState.REJECTED
         except TransitionError:
-            final_state = PromotionState.REJECTED # Fallback
-            
+            # Even if REJECTED is not a formally declared transition from the
+            # current state, we still surface REJECTED as the terminal state
+            # for this cycle rather than propagating the transition error.
+            final_state = PromotionState.REJECTED
+
         return OrchestrationResult(
             success=False,
             candidate=candidate,
@@ -138,12 +175,12 @@ def run_development_cycle(
         validate_transition(PromotionState.TESTED, PromotionState.CANARY_PASSED)
         validate_transition(PromotionState.CANARY_PASSED, PromotionState.PENDING_HUMAN_MERGE)
         final_state = PromotionState.PENDING_HUMAN_MERGE
-    except TransitionError as e:
+    except TransitionError as transition_error:
         return OrchestrationResult(
             success=False,
             candidate=candidate,
             state=PromotionState.REJECTED,
-            reason=f"State machine violation: {e}"
+            reason=f"State machine violation: {transition_error}"
         )
 
     return OrchestrationResult(
