@@ -14,6 +14,7 @@ import json
 import os
 import socket
 from typing import Any
+import litellm
 
 
 _SOCKET_ENV = "AIDER_BUDGET_SOCKET"
@@ -169,8 +170,6 @@ def install() -> None:
     per process.
     """
     _install_metadata_network_gate()
-
-    import litellm
 
     if getattr(litellm, "_soc_autopilot_budget_shim_installed", False):
         return

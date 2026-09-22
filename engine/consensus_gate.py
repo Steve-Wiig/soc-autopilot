@@ -8,7 +8,6 @@ import logging
 import re
 from typing import Any, Dict, Tuple
 
-from overnight.llm_client import generate, _call_gemini
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +84,9 @@ def get_consensus(
     Raises:
         ValueError: If the proposal contains prohibited characters.
     """
+    # Import inside function to avoid import-time side effects and allow monkeypatching
+    from overnight.llm_client import generate, _call_gemini
+
     # Input sanitization: reject proposals containing potentially dangerous characters.
     if any(bad in proposal for bad in (';', '--')):
         raise ValueError("Proposal contains prohibited characters")
@@ -101,28 +103,28 @@ def get_consensus(
 
     # JUDGE 1: OpenRouter (heavy model).
     try:
-        judge1_response = generate(prompt, api_keys, temperature=0.1, max_tokens=200)
-        judge1_vote = extract_json(judge1_response)
+        raw1 = generate(prompt, api_keys, temperature=0.1, max_tokens=200)
+        vote1 = extract_json(raw1)
     except Exception as exc:
-        judge1_vote = {"approve": False, "reason": f"Judge 1 Error: {exc}"}
+        vote1 = {"approve": False, "reason": f"Judge 1 Error: {exc}"}
 
     # JUDGE 2: Gemini (direct).
     try:
-        judge2_response = _call_gemini(prompt, api_keys.get("gemini"), max_tokens=200, temperature=0.1)
-        judge2_vote = extract_json(judge2_response or "")
+        raw2 = _call_gemini(prompt, api_keys.get("gemini"), max_tokens=200, temperature=0.1)
+        vote2 = extract_json(raw2 or "")
     except Exception as exc:
-        judge2_vote = {"approve": False, "reason": f"Judge 2 Error: {exc}"}
+        vote2 = {"approve": False, "reason": f"Judge 2 Error: {exc}"}
 
-    approved = judge1_vote.get("approve") is True and judge2_vote.get("approve") is True
+    approved = vote1.get("approve") is True and vote2.get("approve") is True
 
     # Append-only audit trail: capture proposal, votes, and decision outcome.
     audit_log = (
         f"PROPOSAL: {proposal}\n"
-        f"VOTE1: {json.dumps(judge1_vote, ensure_ascii=False)}\n"
-        f"VOTE2: {json.dumps(judge2_vote, ensure_ascii=False)}\n"
+        f"VOTE1: {json.dumps(vote1, ensure_ascii=False)}\n"
+        f"VOTE2: {json.dumps(vote2, ensure_ascii=False)}\n"
         f"DECISION: {'APPROVED' if approved else 'REJECTED'}\n"
     )
     print(audit_log, flush=True)
     logger.info(audit_log)
 
-    return approved, judge1_vote, judge2_vote
+    return approved, vote1, vote2
