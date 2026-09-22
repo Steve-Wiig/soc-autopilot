@@ -72,6 +72,7 @@ def _openrouter_model_ref(model_id: str) -> str:
 
 
 def _select_openrouter_model(env: Mapping[str, str]) -> str | None:
+    from engine.openrouter_catalog import free_models # Moved to prevent circular import(env: Mapping[str, str]) -> str | None:
     """Resolve an OpenRouter model without permitting paid inference.
 
     When free-only mode is enabled, the OpenRouter catalog is authoritative.

@@ -122,6 +122,7 @@ def get_consensus(
         f"VOTE2: {json.dumps(judge2_vote, ensure_ascii=False)}\n"
         f"DECISION: {'APPROVED' if approved else 'REJECTED'}\n"
     )
+    print(audit_log, flush=True)
     logger.info(audit_log)
 
     return approved, judge1_vote, judge2_vote
