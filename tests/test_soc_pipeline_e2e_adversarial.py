@@ -29,7 +29,7 @@ def test_prompt_contains_required_sections():
     env = _make_envelope(src_ip="192.168.1.100", timestamp=t1)
     
     results = pipeline.process_alerts([env])
-    incident, _ = results[0]
+    incident, _, _ = results[0]
     
     prompt = incident.model_context
     assert "### SYSTEM INSTRUCTIONS" in prompt
@@ -47,7 +47,7 @@ def test_prompt_references_evidence_ids():
     env = _make_envelope(src_ip="192.168.1.100", timestamp=t1)
     
     results = pipeline.process_alerts([env])
-    incident, _ = results[0]
+    incident, _, _ = results[0]
     
     prompt = incident.model_context
     assert "Evidence " in prompt
@@ -63,7 +63,7 @@ def test_prompt_truncates_large_context():
     results = pipeline.process_alerts(events)
     
     assert len(results) == 1, f"Expected 1 incident, got {len(results)}"
-    incident, _ = results[0]
+    incident, _, _ = results[0]
     
     prompt = incident.model_context
     
@@ -82,7 +82,7 @@ def test_prompt_truncates_large_enrichment():
     
     env = _make_envelope(src_ip="1.1.1.1", timestamp=t1)
     results = pipeline.process_alerts([env])
-    incident, _ = results[0]
+    incident, _, _ = results[0]
     
     from engine.deterministic_enrichment import EnrichmentEngine
     engine = EnrichmentEngine()
@@ -103,7 +103,7 @@ def test_prompt_separates_trust_boundaries():
     env = _make_envelope(src_ip="10.0.0.5", timestamp=t1)
     
     results = pipeline.process_alerts([env])
-    incident, _ = results[0]
+    incident, _, _ = results[0]
     
     prompt = incident.model_context
     assert "### UNTRUSTED EXTERNAL EVIDENCE" in prompt

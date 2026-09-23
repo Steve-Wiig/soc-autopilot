@@ -24,7 +24,7 @@ def test_policy_allows_safe_actions():
         incident_id="test-1", model_recommendation="NO_ACTION",
         model_severity="LOW", model_confidence=0.95, requires_human_review=False
     )
-    decision = evaluate_deterministic_policy(envelope)
+    decision = evaluate_deterministic_policy(envelope, authoritative_trusted_source=True)
     assert decision.authorized_action == "NO_ACTION"
     assert decision.incident_id == "test-1"
     assert decision.decision_id is not None  # Proves unique binding
@@ -34,7 +34,7 @@ def test_policy_fails_closed_on_high_severity():
         incident_id="test-2", model_recommendation="NO_ACTION",
         model_severity="HIGH", model_confidence=0.95, requires_human_review=False
     )
-    decision = evaluate_deterministic_policy(envelope)
+    decision = evaluate_deterministic_policy(envelope, authoritative_trusted_source=True)
     assert decision.authorized_action == "REVIEW_REQUIRED"
     assert "severity=HIGH" in decision.decision_reason
 
@@ -43,7 +43,7 @@ def test_policy_blocks_high_impact_actions():
         incident_id="test-3", model_recommendation="ISOLATE",
         model_severity="LOW", model_confidence=0.99, requires_human_review=False
     )
-    decision = evaluate_deterministic_policy(envelope)
+    decision = evaluate_deterministic_policy(envelope, authoritative_trusted_source=True)
     assert decision.authorized_action == "REVIEW_REQUIRED"
     assert "requires human authorization" in decision.decision_reason
 
@@ -63,7 +63,7 @@ def test_telemetry_failure_forces_fail_closed():
     
     results = pipeline.process_alerts([env])
     assert len(results) == 1
-    incident, decision = results[0]
+    incident, decision, _ = results[0]
     
     assert decision.authorized_action == "REVIEW_REQUIRED"
     assert "MANDATORY TELEMETRY FAILURE" in decision.decision_reason
