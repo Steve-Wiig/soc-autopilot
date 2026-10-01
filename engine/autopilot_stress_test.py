@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import List
 
 from engine.canonical_envelope import EventEnvelope, TrustLabels
 from engine.deterministic_dedup import cluster_alerts
 from engine.investigation_controller import run_investigation
+
 
 # Simulated attack characteristics (kept identical across the burst so the
 # dedup layer has something meaningful to collapse).
@@ -45,7 +47,7 @@ def process_burst(num_alerts: int) -> None:
     """
     print(f"\n* * * SIMULATING BRUTE FORCE ATTACK ({num_alerts} ALERTS) * * *")
 
-    envelopes: list[EventEnvelope] = []
+    envelopes: List[EventEnvelope] = []
     for alert_index in range(num_alerts):
         alert_payload = {
             "timestamp": f"2026-09-08T14:35:{alert_index:02d}Z",
