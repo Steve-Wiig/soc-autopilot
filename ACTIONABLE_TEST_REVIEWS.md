@@ -666,3 +666,22 @@ By following these steps and understanding the test cases, you can confidently v
 
 **Actionable Fix for 7B Model**: None required
 
+---
+📱 Reviewed by Android Phone (3B) on Fri Oct  2 10:22:52 AM UTC 2026
+### File: test_investigation_controller.py
+- **Efficacy**: The tests cover edge cases such as budget exhaustion and different handling of high blast radius scenarios.
+- **Sanity**: All assertions are logical and free of false positives. The code structure is clear, and the logic for generating mock LLM proposals is handled correctly.
+- **Code Quality**: There are no type hints, which can be improved for clarity. However, the naming conventions used (`LLMAction`, `InvestigationState`) are clear and meaningful.
+
+**Actionable Fix for 7B Model**:
+None required.
+
+---
+📱 Reviewed by Android Phone (3B) on Fri Oct  2 10:29:39 AM UTC 2026
+### File: test_cer_critic.py
+- **Efficacy**: The test checks for the fallback path where `OPENROUTER_API_KEY` is not set and returns a default string. However, it does not check edge cases like what happens when the API call fails or times out.
+- **Sanity**: The assertions are logical and free of false positives. The test ensures that `generate_strategic_constraint` returns a non-empty string.
+- **Code Quality**: There is no missing type hinting, but the function `sanitize_for_external_api` could be improved for clarity and efficiency by using named capture groups in the regular expressions. Additionally, the function `compress_traceback` could be simplified by removing unnecessary checks and using list comprehensions more effectively.
+
+**Actionable Fix for 7B Model**: Ensure that the fallback path is thoroughly tested during development to prevent silent failures.
+
