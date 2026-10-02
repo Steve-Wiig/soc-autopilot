@@ -159,6 +159,34 @@ def main() -> None:
     corpus = input_path.read_text(encoding="utf-8")
     print(f"   Loaded {len(corpus):,} characters ({len(corpus.split()):,} words)")
 
+    # CROSS-FILE DEPENDENCY MAPPING (Ripple Effect Warning)
+    print("🗺️  Mapping cross-file dependencies...")
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["python3", "tools/dependency_mapper.py", str(input_path)],
+            capture_output=True, text=True, timeout=10
+        )
+        dep_output = result.stdout.strip()
+        if dep_output.startswith("DEPENDENTS_FOUND:"):
+            dep_list = dep_output.replace("DEPENDENTS_FOUND:", "").strip()
+            ripple_warning = f"""
+
+### ⚠️ CRITICAL CROSS-FILE DEPENDENCIES (RIPPLE EFFECT)
+The following files IMPORT from this module. If you change function signatures, dataclass fields, or exported variables in this file, you MUST update these dependent files to prevent breaking the build:
+{dep_list}
+"""
+            print(f"   ⚠️  Found dependent files. Injecting ripple warning into prompt.")
+        else:
+            ripple_warning = "
+### ℹ️ No external files import from this module. Safe to refactor internally.
+"
+            print("   ✅ No external dependents found.")
+    except Exception as e:
+        ripple_warning = ""
+        print(f"   ⚠️  Dependency mapping failed: {e}")
+
+
     # Build prompt
     if args.prompt_file:
         prompt_path = Path(args.prompt_file)
@@ -193,6 +221,7 @@ RULES:
         system_content = "You are a Staff Software Engineer and Security Architect. Provide structured, evidence-based analysis."
 
     user_prompt = prompt_template.replace("{corpus}", corpus)
+    user_prompt += ripple_warning
 
     # Initialize client
     client = OpenAI(
