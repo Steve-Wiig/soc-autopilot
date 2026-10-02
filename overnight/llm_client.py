@@ -224,7 +224,7 @@ def discover_free_models(api_key):
 
         # Return top 8 model IDs
         result = [c["id"] for c in candidates[:8]]
-        if result:
+        # if result:
             print(f"    🔍 Discovered {len(result)} free instruct models:")
             for c in candidates[:8]:
                 print(f"       {c['id']} (~{c['params']}B, {c['context']:,} ctx)")
@@ -489,7 +489,7 @@ def discover_groq_models(api_key):
         # Sort by context length
         candidates.sort(key=lambda x: x["context"], reverse=True)
         result = [c["id"] for c in candidates[:6]]
-        if result:
+        # if result:
             print(f"    🔍 Groq: discovered {len(result)} models")
         return result
     except Exception as e:
@@ -836,7 +836,7 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         temperature=temperature,
         allow_fallback=allow_fallback,
     )
-    if result:
+    # if result:
         return _finalize("openrouter", result)
 
     if not allow_fallback:
@@ -855,19 +855,19 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    if result:
+    # if result:
         return _finalize("groq", result)
 
-    print("    🔄 Groq busy → trying Mistral")
-    result = _call_mistral(
+    # print("    🔄 Groq busy → trying Mistral (DISABLED)")
+    # result = _call_mistral(
         prompt,
         api_keys.get("mistral", ""),
         system_prompt=system_prompt,
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    if result:
-        return _finalize("mistral", result)
+    # if result:
+        # return _finalize("mistral", result)
 
     if _openrouter_daily_exhausted():
         print("    ⏳ Providers busy and OpenRouter daily quota locked. Deferring to next cycle.")
@@ -883,7 +883,7 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    if result:
+    # if result:
         return _finalize("openrouter", result)
 
     result = _call_groq(
