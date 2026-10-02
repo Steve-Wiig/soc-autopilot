@@ -269,6 +269,62 @@ def main():
     print(f"   Pending review: {len(_nrm)} ({len(_dlog)} decided)")
     print(f"   TDD eval queue: {len(_tdd)}")
 
+    # ── 3b. AUTONOMOUS SWARM STATUS ──
+    h1("🤖 AUTONOMOUS SWARM STATUS")
+    
+    # Current task
+    current_task_file = ROOT / ".current_task"
+    if current_task_file.exists():
+        print(f"   🎯 Currently working on: {current_task_file.read_text().strip()}")
+    else:
+        print("   🎯 Currently working on: (idle)")
+        
+    # Pause status
+    pause_file = ROOT / ".swarm_paused"
+    if pause_file.exists():
+        print("   ⏸️  Status: PAUSED")
+    else:
+        print("   ▶️  Status: RUNNING")
+        
+    # Metrics
+    metrics_file = ROOT / "logs" / "swarm_metrics.jsonl"
+    if metrics_file.exists():
+        try:
+            lines = metrics_file.read_text().strip().split('\n')
+            total = len([l for l in lines if l.strip()])
+            commits = sum(1 for l in lines if '"event":"commit_success"' in l)
+            skips = sum(1 for l in lines if '"event":"trivial_skip"' in l)
+            fails = sum(1 for l in lines if '"event":"self_heal_fail"' in l)
+            
+            print(f"   📊 Metrics (last {total} events):")
+            print(f"      ✅ Commits: {commits}")
+            print(f"      ⚠️  Skips: {skips}")
+            print(f"      ❌ Failures: {fails}")
+            
+            terminal = commits + fails
+            if terminal > 0:
+                rate = (commits / terminal) * 100
+                print(f"      📈 Success rate: {rate:.1f}%")
+        except Exception as e:
+            print(f"   📊 Metrics: (error reading: {e})")
+    else:
+        print("   📊 Metrics: (no data yet)")
+        
+    # Skip list count
+    skip_file = ROOT / "skip_list.txt"
+    if skip_file.exists():
+        skip_count = sum(1 for l in skip_file.read_text().split('\n') if l.strip())
+        print(f"   🚫 Skip list: {skip_count} files blacklisted")
+        
+    # Recent alerts
+    alert_file = ROOT / "logs" / "swarm_alerts.log"
+    if alert_file.exists():
+        alerts = alert_file.read_text().strip().split('\n')
+        if alerts and alerts[0]:
+            print(f"   🚨 Last alert: {alerts[-1]}")
+            
+    print("")
+
     # ── 4. LIVE ACTIVITY ──
     h1("📈 LIVE ACTIVITY (Last 10 lines)")
     log_out = run("tail -n 10 overnight/drun_continuous.log 2>/dev/null")
