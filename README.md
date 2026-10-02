@@ -30,3 +30,34 @@ The repository intentionally distinguishes observed implementation from experime
 ## Validation checkpoint
 
 The latest local regression-suite checkpoint recorded 870 passing tests and 1 skipped test. This is a test-suite checkpoint, not a production-readiness claim.
+
+---
+
+## 🤖 Autonomous System Status (Current)
+
+This project is now a **fully autonomous, self-healing AI development pipeline**. It requires zero manual intervention for daily operations.
+
+### 🛡️ Core Guarantees
+- **Boot Persistence**: All core services run via `systemd --user` with linger enabled, surviving VM reboots automatically.
+- **Financial Safety**: Strictly enforces OpenRouter `:free` tier models. Zero risk of accidental paid API usage.
+- **Self-Healing**: Auto-detects and breaks infinite loops, enforces pristine Git state, and prevents disk exhaustion via automated log/worktree garbage collection.
+- **QA-Driven**: The 7B local swarm prioritizes files based on actionable feedback from the 3B Android Phone QA worker.
+
+### 🎮 Operator Commands
+You no longer need to manage background processes manually. Use these commands:
+
+| Command | Description |
+| :--- | :--- |
+| `dashboard` | View unified system health, queue status, and autonomous swarm metrics. |
+| `~/swarm-pause.sh` | Safely pause the autonomous swarm for manual intervention. |
+| `~/swarm-resume.sh` | Resume the autonomous swarm. |
+| `systemctl --user status soc-*.service` | Check the raw systemd status of all background daemons. |
+| `journalctl --user -u soc-swarm.service -f` | Follow the live logs of the 7B self-healing swarm. |
+
+### 📊 Monitoring
+Run `dashboard` to see the **🤖 AUTONOMOUS SWARM STATUS** section, which displays:
+- Current file being hardened.
+- Real-time success/failure metrics.
+- Skip list count (auto-pruned if > 50 files).
+- Recent failure alerts.
+
