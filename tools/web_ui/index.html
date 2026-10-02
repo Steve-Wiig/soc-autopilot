@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Autopilot Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { gray: { 850: '#1f2937', 950: '#0b0f19' } } } } }
+    </script>
+    <style>.terminal { font-family: 'Courier New', Courier, monospace; }</style>
+</head>
+<body class="bg-gray-950 text-gray-200 min-h-screen flex flex-col">
+    <header class="bg-gray-900 border-b border-gray-800 p-4 shadow-lg">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 class="text-2xl font-bold text-green-400 tracking-tight">🤖 SOC Autopilot <span class="text-gray-500 text-sm font-normal">v3.0</span></h1>
+            <div class="flex gap-6 text-sm items-center">
+                <div><span class="text-gray-500">Current Task:</span><span id="current-task" class="text-blue-400 font-mono ml-2">Loading...</span></div>
+                <div><span class="text-gray-500">Files Skipped:</span><span id="skipped-files" class="text-yellow-400 font-mono ml-2">0</span></div>
+                <button id="swarmToggle" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm">PAUSE</button>
+            </div>
+        </div>
+    </header>
+    <main class="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section class="lg:col-span-1 bg-gray-900 rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
+            <h2 class="text-lg font-semibold text-gray-100 mb-4">📋 Architectural Backlog</h2>
+            <form id="backlog-form" class="mb-4 space-y-3">
+                <input type="text" id="task-file" placeholder="File path (e.g., engine/worker.py)" required class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200">
+                <textarea id="task-desc" placeholder="Describe the refactor or feature..." required rows="3" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200"></textarea>
+                <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition-colors text-sm">➕ Add to Backlog</button>
+            </form>
+            <div id="backlog-list" class="flex-1 overflow-y-auto space-y-2 pr-2"></div>
+        </section>
+        <section class="lg:col-span-2 bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
+            <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">
+                📡 Live Swarm Activity
+                <span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
+            </h2>
+            <div id="log-viewer" class="flex-1 bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 overflow-y-auto whitespace-pre-wrap break-all">
+                <span class="text-gray-600">Connecting to log stream...</span>
+            </div>
+        </section>
+    </main>
+    <script>
+        async function updateStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                document.getElementById('current-task').textContent = data.current_task || 'Idle';
+                document.getElementById('skipped-files').textContent = data.skipped_files;
+                
+                // Update pause button state
+                const pauseRes = await fetch('/api/pause', { method: 'POST' }); // Just to check state, or we can add a GET /api/pause
+                // For simplicity, we'll just toggle on click and let the swarm read the file
+            } catch (e) { console.error(e); }
+        }
+        setInterval(updateStatus, 5000); updateStatus();
+
+        document.getElementById('swarmToggle').addEventListener('click', async () => {
+            const res = await fetch('/api/pause', { method: 'POST' });
+            const data = await res.json();
+            const btn = document.getElementById('swarmToggle');
+            if (data.paused) {
+                btn.textContent = 'RESUME';
+                btn.className = 'bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm';
+            } else {
+                btn.textContent = 'PAUSE';
+                btn.className = 'bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm';
+            }
+        });
+
+        async function updateBacklog() {
+            try {
+                const res = await fetch('/api/backlog');
+                const items = await res.json();
+                const list = document.getElementById('backlog-list');
+                list.innerHTML = '';
+                if (items.length === 0) { list.innerHTML = '<p class="text-gray-500 text-sm text-center mt-10">Backlog is empty.</p>'; return; }
+                items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-gray-800 border border-gray-700 rounded p-3 text-sm flex justify-between items-start';
+                    div.innerHTML = `
+                        <div class="flex-1">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-mono text-blue-400 font-semibold">${item.file}</span>
+                                <span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">${item.priority || 'high'}</span>
+                            </div>
+                            <p class="text-gray-300 leading-snug">${item.task}</p>
+                        </div>
+                        <button onclick="removeBacklog('${item.file}')" class="ml-2 text-red-400 hover:text-red-300 font-bold px-2" title="Remove">×</button>
+                    `;
+                    list.appendChild(div);
+                });
+            } catch (e) { console.error(e); }
+        }
+        
+        async function removeBacklog(file) {
+            await fetch(`/api/backlog?file=${encodeURIComponent(file)}`, { method: 'DELETE' });
+            updateBacklog();
+        }
+
+        setInterval(updateBacklog, 10000); updateBacklog();
+
+        document.getElementById('backlog-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = document.getElementById('task-file').value;
+            const task = document.getElementById('task-desc').value;
+            await fetch('/api/backlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file, task }) });
+            document.getElementById('task-file').value = '';
+            document.getElementById('task-desc').value = '';
+            updateBacklog();
+        });
+
+        const logViewer = document.getElementById('log-viewer');
+        const eventSource = new EventSource('/stream/logs');
+        eventSource.onmessage = function(event) {
+            const line = document.createElement('div');
+            line.textContent = event.data;
+            if (event.data.includes('✅')) line.className = 'text-green-400';
+            else if (event.data.includes('❌') || event.data.includes('Error')) line.className = 'text-red-400';
+            else if (event.data.includes('⚠️')) line.className = 'text-yellow-400';
+            else line.className = 'text-gray-300';
+            logViewer.appendChild(line);
+            logViewer.scrollTop = logViewer.scrollHeight;
+        };
+    </script>
+</body>
+</html>
