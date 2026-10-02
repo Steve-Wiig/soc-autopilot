@@ -8,15 +8,11 @@ and builds the fallback list automatically.
 import os
 
 def _enforce_free_tier(model: str) -> None:
-    """Hard guard: prevents non-free model calls unless the operator has
-    explicitly opted in via ALLOW_PAID_CALLS=true in the environment.
-    Only the exact string 'true' (case-insensitive) enables paid calls."""
-    if os.getenv("ALLOW_PAID_CALLS", "false").lower() == "true":
-        return
+    """Hard guard: Physically prevents any paid model from being called."""
     if not str(model).strip().endswith(":free"):
         raise RuntimeError(
-            f"SECURITY VIOLATION: Attempted to call non-free model '{model}'. "
-            "Set ALLOW_PAID_CALLS=true in .env to permit paid calls."
+            f"SECURITY VIOLATION: Attempted to call paid model '{model}'. "
+            "Only ':free' models are permitted to prevent API drain."
         )
 
 import re
@@ -94,22 +90,19 @@ def _budget_record(provider):
     try:
         from overnight.budget_manager import APIBudgetManager
         APIBudgetManager().record_call(provider)
-    except Exception as e:
-        # HARDENED: Fail closed with telemetry
-        import logging
-        logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
-        raise
+    except Exception:
+        pass
 
 
 def _budget_allow(provider, model=None):
     try:
         from overnight.budget_manager import APIBudgetManager
         budget = APIBudgetManager()
-        return budget.reserve_call(provider, model)
-    except Exception as exc:
-        import logging
-        logging.error(f"CONTROL-PLANE FAILURE in budget admission: {exc}")
-        raise
+        if provider == "groq":
+            return budget.can_proceed_model_aware("groq", model)
+        return budget.can_proceed(provider)
+    except Exception:
+        return True
 
 
 def _openrouter_daily_exhausted():
@@ -224,7 +217,7 @@ def discover_free_models(api_key):
 
         # Return top 8 model IDs
         result = [c["id"] for c in candidates[:8]]
-        # if result:
+        if result:
             print(f"    🔍 Discovered {len(result)} free instruct models:")
             for c in candidates[:8]:
                 print(f"       {c['id']} (~{c['params']}B, {c['context']:,} ctx)")
@@ -284,6 +277,12 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     if not api_key:
         return ""
 
+    # Hard RPD limit (funded tier: 1000) — skip entirely if exhausted/locked
+    from overnight import openrouter_quota
+    if not openrouter_quota.is_available():
+        print(f"    🔒 OpenRouter locked/exhausted ({openrouter_quota.remaining()} left) — skipping")
+        return ""
+
     # Ensure fallback list is loaded
     fallback_list = get_fallback_list(api_key)
 
@@ -319,13 +318,19 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     attempts = 0
     max_attempts = 1 if not allow_fallback else 3
 
-    for model in models_to_try:
+    for try_model in models_to_try:
         attempts += 1
         if attempts > max_attempts:
             break
 
-        # Budget admission already checked; successful calls are recorded below
-
+        # Count every attempt against the daily quota
+        from overnight import openrouter_quota
+        if not openrouter_quota.is_available():
+            break
+        openrouter_quota.record_attempt()
+        if not openrouter_quota.is_available():
+            break
+        
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -338,7 +343,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
         messages.append({"role": "user", "content": prompt})
 
         payload = {
-            "model": model,
+            "model": try_model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -346,14 +351,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
 
         try:
             check_quota_or_raise()
-            _enforce_free_tier(model)
-
-            # Reserve one shared budget slot for THIS actual outbound request.
-            # Each fallback model attempt is a separate API call.
-            if not _budget_allow("openrouter", model):
-                print(f"    🔒 OpenRouter shared API budget exhausted — skipping {model}")
-                continue
-
+            _enforce_free_tier(try_model)
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
@@ -362,44 +360,37 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
                     continue
                 content = data["choices"][0]["message"]["content"]
 
-                if model != _current_model:
-                    if fallback_list and model == fallback_list[0]:
-                        print(f"    ✅ Primary recovered: {model}")
+                if try_model != _current_model:
+                    if fallback_list and try_model == fallback_list[0]:
+                        print(f"    ✅ Primary recovered: {try_model}")
                     else:
-                        print(f"    🔄 Using fallback: {model}")
-                _current_model = model
+                        print(f"    🔄 Using fallback: {try_model}")
+                _current_model = try_model
+                _budget_record("openrouter")
                 return content
 
             elif resp.status_code in (401, 403):
-                print(f"    ❌ OpenRouter auth failure for {model}: {resp.status_code}")
+                print(f"    ❌ OpenRouter auth failure for {try_model}: {resp.status_code}")
                 return ""
             elif resp.status_code == 429:
-                from overnight import openrouter_quota
-                print(f"    ⚠️  {model} rate-limited. OpenRouter cooldown triggered.")
-                openrouter_quota.force_lock(f"429 on {model}")
-                break  # STOP retry storm
-
+                print(f"    ⚠️  {try_model} rate-limited. Locking OpenRouter (duration per openrouter_quota.LOCK_HOURS).")
+                openrouter_quota.force_lock(f"429 on {try_model}")
+                break  # STOP trying other OpenRouter models, quota is exhausted!
 
             elif resp.status_code == 404:
-                print(f"    ⚠️  {model} not available → next")
+                print(f"    ⚠️  {try_model} not available → next")
                 continue
 
             elif resp.status_code == 402:
-                print(f"    ❌ {model} quota exhausted → next")
+                print(f"    ❌ {try_model} quota exhausted → next")
                 continue
 
-            elif resp.status_code == 400:
-                print(f"    ❌ {model} 400 bad request → abort")
-                break
-            elif 500 <= resp.status_code < 600:
-                print(f"    ❌ {model} {resp.status_code} server error → abort")
-                break
             else:
-                print(f"    ❌ {model} returned {resp.status_code} → next")
+                print(f"    ❌ {try_model} returned {resp.status_code} → next")
                 continue
 
         except Exception as e:
-            print(f"    ❌ {model} error: {e} → next")
+            print(f"    ❌ {try_model} error: {e} → next")
             continue
 
     # All OpenRouter models saturated — return empty immediately
@@ -425,15 +416,10 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
 
     for attempt in range(MAX_RETRIES):
         try:
-            # Reserve one shared budget slot for THIS actual outbound request.
-            if not _budget_allow("gemini"):
-                print("    🔒 Gemini shared API budget exhausted — skipping")
-                return ""
-
             resp = requests.post(GEMINI_URL, json=payload, headers=headers, timeout=90)
 
             if resp.status_code == 429:
-                wait = min(15 * (2 ** attempt), 60)
+                wait = 60 * (attempt + 1)
                 print(f"    [Gemini] Rate limited. Waiting {wait}s...")
                 time.sleep(wait)
                 continue
@@ -453,6 +439,7 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
             if not parts:
                 return ""
 
+            _budget_record("gemini")
             return parts[0].get("text", "")
         except Exception as e:
             print(f"    [Gemini] API error: {e}")
@@ -489,7 +476,7 @@ def discover_groq_models(api_key):
         # Sort by context length
         candidates.sort(key=lambda x: x["context"], reverse=True)
         result = [c["id"] for c in candidates[:6]]
-        # if result:
+        if result:
             print(f"    🔍 Groq: discovered {len(result)} models")
         return result
     except Exception as e:
@@ -504,11 +491,8 @@ def get_groq_models(api_key):
             cache = json.loads(GROQ_CACHE_FILE.read_text())
             if time.time() - cache.get("timestamp", 0) < CACHE_TTL:
                 return cache["models"]
-        except Exception as e:
-            # HARDENED: Fail closed with telemetry
-            import logging
-            logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
-            raise
+        except:
+            pass
 
     models = discover_groq_models(api_key)
     if models:
@@ -593,11 +577,8 @@ def _groq_note_rl(model, headers):
         st = headers.get("x-ratelimit-reset-tokens")
         if sr: e["req_reset"] = now + _parse_dur(sr)
         if st: e["tok_reset"] = now + _parse_dur(st)
-    except Exception as e:
-        # HARDENED: Fail closed with telemetry
-        import logging
-        logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
-        raise
+    except Exception:
+        pass
 
 
 def _groq_preempted(model):
@@ -642,12 +623,12 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
         _last_groq_call = time.time()
 
     for pass_num in range(2):  # pass 1: try ready models; pass 2: after cooldown wait
-        for model in models:
-            if _groq_preempted(model):
+        for try_model in models:
+            if _groq_preempted(try_model):
                 continue  # server says remaining=0; don't probe until reset
-            if _in_cooldown(model):
+            if _in_cooldown(try_model):
                 continue  # don't waste a request probing a cooled-down model
-            if not _budget_allow("groq", model):
+            if not _budget_allow("groq", try_model):
                 continue  # budget manager says no
 
 
@@ -655,7 +636,7 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
             body = prompt[:9000]
             max_out = min(max_tokens, 4096)
             needed = _est_tokens(body) + max_out
-            if not _groq_headroom(model, needed):
+            if not _groq_headroom(try_model, needed):
                 continue
 
             for attempt in range(2):
@@ -663,14 +644,14 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                 if system_prompt:
                     messages.append({"role": "system", "content": system_prompt})
                 messages.append({"role": "user", "content": body})
-                payload = {"model": model, "messages": messages,
+                payload = {"model": try_model, "messages": messages,
                            "temperature": temperature, "max_tokens": max_out}
                 try:
                     _pace()
                     resp = requests.post(GROQ_URL, json=payload, headers=headers, timeout=90)
-                    _groq_note_rl(model, resp.headers)
+                    _groq_note_rl(try_model, resp.headers)
                 except Exception as e:
-                    print(f"    ❌ Groq model error: {e} → next")
+                    print(f"    ❌ Groq {try_model} error: {e} → next")
                     break
 
                 if resp.status_code == 200:
@@ -679,10 +660,11 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                         usage = data.get("usage", {})
                         tokens = (usage.get("prompt_tokens", 0)
                                   + usage.get("completion_tokens", 0)) or needed
-                        _groq_record(model, tokens)
+                        _groq_record(try_model, tokens)
                         content = data["choices"][0]["message"]["content"]
-                        _groq_429_count[model] = 0  # success resets backoff
-                        print(f"    ✅ Groq ({model}) responded ({len(content)} chars)")
+                        _groq_429_count[try_model] = 0  # success resets backoff
+                        _budget_record("groq")
+                        print(f"    ✅ Groq ({try_model}) responded ({len(content)} chars)")
                         return content
 
                 elif resp.status_code == 429:
@@ -692,12 +674,12 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                     except ValueError:
                         base = 5
                     # Exponential backoff when the same model keeps rejecting us
-                    n = _groq_429_count.get(model, 0) + 1
-                    _groq_429_count[model] = n
+                    n = _groq_429_count.get(try_model, 0) + 1
+                    _groq_429_count[try_model] = n
                     wait = min(base * (2 ** (n - 1)), 90)
-                    _groq_cooldown[model] = time.time() + wait
-                    _groq_record(model, needed)
-                    print(f"    ⚠️  Groq {model} rate-limited (hit x{n}) → backoff {wait}s")
+                    _groq_cooldown[try_model] = time.time() + wait
+                    _groq_record(try_model, needed)
+                    print(f"    ⚠️  Groq {try_model} rate-limited (hit x{n}) → backoff {wait}s")
                     break
 
                 elif resp.status_code == 413:
@@ -783,11 +765,6 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
     Order: OpenRouter -> Groq -> Mistral -> wait & retry.
     Gemini is reserved for critique/pre-analysis by default.
     """
-
-    # No-credentials short-circuit: a client with no keys has nothing to retry.
-    # Without this, the fallback chain cycles three dead providers and sleeps 30s.
-    if not api_keys or not any(v for v in api_keys.values() if v):
-        return ""
     if system_prompt is None:
         lowered = prompt.lower()
 
@@ -821,11 +798,8 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         try:
             from engine.reasoning_ledger import record_interaction
             record_interaction("heavy_generation", prompt, result, provider)
-        except Exception as e:
-            # HARDENED: Fail closed with telemetry
-            import logging
-            logging.error(f'CONTROL-PLANE FAILURE in llm_client.py: {e}')
-            raise
+        except Exception:
+            pass
         return result
 
     result = _call_openrouter(
@@ -836,7 +810,7 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         temperature=temperature,
         allow_fallback=allow_fallback,
     )
-    # if result:
+    if result:
         return _finalize("openrouter", result)
 
     if not allow_fallback:
@@ -855,19 +829,19 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    # if result:
+    if result:
         return _finalize("groq", result)
 
-    # print("    🔄 Groq busy → trying Mistral (DISABLED)")
-    # result = _call_mistral(
+    print("    🔄 Groq busy → trying Mistral")
+    result = _call_mistral(
         prompt,
         api_keys.get("mistral", ""),
         system_prompt=system_prompt,
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    # if result:
-        # return _finalize("mistral", result)
+    if result:
+        return _finalize("mistral", result)
 
     if _openrouter_daily_exhausted():
         print("    ⏳ Providers busy and OpenRouter daily quota locked. Deferring to next cycle.")
@@ -883,7 +857,7 @@ def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    # if result:
+    if result:
         return _finalize("openrouter", result)
 
     result = _call_groq(
@@ -925,11 +899,17 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
     try:
         from overnight.budget_manager import APIBudgetManager
         budget = APIBudgetManager()
-        if not budget.reserve_call("mistral"):
-            print("    🔒 Mistral shared API budget exhausted")
+        if not budget.can_proceed("mistral"):
+            print("    🔒 Mistral budget exhausted")
             return ""
-
+        if not budget.wait_if_needed("mistral", timeout=30):
+            print("    🔒 Mistral budget wait timeout")
+            return ""
+        
+        _enforce_free_tier(try_model)
+        
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        budget.record_call("mistral")
         
         if resp.status_code == 200:
             return resp.json()["choices"][0]["message"]["content"]
@@ -944,27 +924,20 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
         return ""
 
 
-def strip_fences(text: str) -> str:
-    """Robustly extract Python code from LLM response, handling unclosed fences and conversational text."""
+def strip_fences(text):
+    """Remove markdown code fences."""
     if not text:
         return ""
-
     text = text.strip()
 
-    # 1. Try to find a complete markdown block (python or generic)
-    # Handles: ```python\ncode\n```
-    m = re.search(r'```(?:python)?\s*\n(.*?)\n\s*```', text, re.DOTALL | re.IGNORECASE)
+    m = re.search(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?(.*?)\n?```[ \t]*$", text, re.DOTALL)
     if m:
         return m.group(1).strip()
 
-    # 2. Try to find an unclosed markdown block (LLM got cut off)
-    # Handles: ```python\ncode
-    m = re.search(r'```(?:python)?\s*\n(.*)', text, re.DOTALL | re.IGNORECASE)
-    if m:
-        return m.group(1).strip()
+    text = re.sub(r"^```[a-zA-Z0-9_+-]*[ \t]*\n?", "", text)
+    text = re.sub(r"\n?```[ \t]*$", "", text)
+    return text.strip()
 
-    # 3. Fallback: If no fences at all, just return the stripped text
-    return text
 
 
 
