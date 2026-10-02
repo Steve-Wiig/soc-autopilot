@@ -5,6 +5,10 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, Any, Optional, Tuple, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests import Session
+from pydantic import BaseModel, validator, Field
 
 DEFAULT_CONFIG_PATH: str = str(Path(__file__).parent / "config.json")
 
@@ -19,7 +23,7 @@ MOCK_TOKEN = "mock_token"
 MAX_CONCURRENT_CHECKS = 10
 
 
-def sanitize_token(token: str | None) -> str:
+def sanitize_token(token: Optional[str]) -> str:
     if not token:
         return "****"
     if len(token) <= 4:
@@ -27,14 +31,35 @@ def sanitize_token(token: str | None) -> str:
     return token[:4] + "****"
 
 
-def sanitize_auth(auth: tuple[str, str] | None) -> tuple[str, str]:
+def sanitize_auth(auth: Optional[Tuple[str, str]]) -> Tuple[str, str]:
     if not auth:
         return ("****", "****")
     user, token = auth
     return (user, sanitize_token(token))
 
 
-def validate_config(config: dict) -> None:
+class Config(BaseModel):
+    user_env: str = Field(..., description="Environment variable name for the API user")
+    token_env: str = Field(..., description="Environment variable name for the API token")
+    read: str = Field(..., description="Path for the read endpoint (must start with '/')")
+    forbidden: str = Field(..., description="Path for the forbidden endpoint (must start with '/')")
+    forbidden_method: str = Field(..., description="HTTP method to test (must be in VALID_METHODS)")
+
+    @validator("forbidden_method")
+    def validate_forbidden_method(cls, v: str) -> str:
+        v = v.upper()
+        if v not in VALID_METHODS:
+            raise ValueError(f"Invalid forbidden_method: {v}. Must be one of {VALID_METHODS}")
+        return v
+
+    @validator("read", "forbidden")
+    def validate_paths(cls, v: str) -> str:
+        if not v.startswith("/"):
+            raise ValueError(f"Path must start with '/': {v}")
+        return v
+
+
+def validate_config(config: Dict[str, Config]) -> None:
     """
     Validate the configuration dictionary for all services.
 
@@ -66,20 +91,20 @@ def validate_config(config: dict) -> None:
         if missing:
             raise ValueError(f"Service '{service}' missing required keys: {missing}")
 
-        method = cfg["forbidden_method"].upper()
-        if method not in VALID_METHODS:
-            raise ValueError(
-                f"Service '{service}' has invalid forbidden_method: {cfg['forbidden_method']}. "
-                f"Must be one of {VALID_METHODS}"
-            )
-        cfg["forbidden_method"] = method
 
-        for key in ("read", "forbidden"):
-            if not isinstance(cfg[key], str) or not cfg[key].startswith("/"):
-                raise ValueError(f"Service '{service}' {key} must be a path starting with '/'")
+def load_config(config_path: Optional[str] = None) -> Dict[str, Config]:
+    """
+    Load and validate the configuration file.
 
+    Args:
+        config_path: Path to the configuration file. If None, uses the default path.
 
-def load_config(config_path: str | None = None) -> dict:
+    Returns:
+        A dictionary mapping service names to Config objects.
+
+    Raises:
+        RuntimeError: If the config file is not found or is invalid.
+    """
     path = config_path or os.getenv("CONFIG_FILE", DEFAULT_CONFIG_PATH)
     try:
         with open(path, "r") as f:
@@ -94,7 +119,7 @@ def load_config(config_path: str | None = None) -> dict:
     except ValueError as exc:
         raise RuntimeError(f"CONFIG ERROR: validation failed: {exc}")
 
-    return config
+    return {service: Config(**cfg) for service, cfg in config.items()}
 
 
 @dataclass
@@ -103,10 +128,19 @@ class MockResponse:
 
 
 def get_mock_response(status_code: int) -> MockResponse:
+    """
+    Create a mock response object.
+
+    Args:
+        status_code: HTTP status code for the mock response.
+
+    Returns:
+        A MockResponse object.
+    """
     return MockResponse(status_code)
 
 
-def check_service(service: str, cfg: dict, lab_url: str, session: "requests.Session | None", dry_run: bool = False) -> bool:
+def check_service(service: str, cfg: Config, lab_url: str, session: Optional[Session], dry_run: bool = False) -> bool:
     """
     Verify credential permissions for a single service.
 
@@ -126,16 +160,16 @@ def check_service(service: str, cfg: dict, lab_url: str, session: "requests.Sess
     """
     import requests
 
-    user = os.getenv(cfg["user_env"], MOCK_USER) if dry_run else os.getenv(cfg["user_env"])
-    token = os.getenv(cfg["token_env"], MOCK_TOKEN) if dry_run else os.getenv(cfg["token_env"])
+    user = os.getenv(cfg.user_env, MOCK_USER) if dry_run else os.getenv(cfg.user_env)
+    token = os.getenv(cfg.token_env, MOCK_TOKEN) if dry_run else os.getenv(cfg.token_env)
 
     if not user or not token:
         logging.error("CONFIG ERROR: missing credentials for %s (user=%s, token=%s)", service, user, sanitize_token(token))
         return False
 
     auth = (user, token)
-    read_url = lab_url.rstrip("/") + cfg["read"]
-    forbidden_url = lab_url.rstrip("/") + cfg["forbidden"]
+    read_url = lab_url.rstrip("/") + cfg.read
+    forbidden_url = lab_url.rstrip("/") + cfg.forbidden
 
     try:
         if dry_run:
@@ -143,7 +177,7 @@ def check_service(service: str, cfg: dict, lab_url: str, session: "requests.Sess
             forbidden_resp = get_mock_response(403)
         else:
             read_resp = session.get(read_url, auth=auth, timeout=10, verify=False)
-            forbidden_resp = session.request(cfg["forbidden_method"], forbidden_url, auth=auth, timeout=10, verify=False)
+            forbidden_resp = session.request(cfg.forbidden_method, forbidden_url, auth=auth, timeout=10, verify=False)
 
         if read_resp.status_code not in SUCCESS_CODES:
             logging.error("FAIL: %s read access denied: %s (auth=%s)", service, read_resp.status_code, sanitize_auth(auth))
@@ -162,18 +196,23 @@ def check_service(service: str, cfg: dict, lab_url: str, session: "requests.Sess
 
 
 def main() -> int:
+    """
+    Main function to verify credential permissions for services.
+
+    Returns:
+        0 if all services pass, 1 if any service fails.
+    """
     import requests
     from requests.adapters import HTTPAdapter
-    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    def create_session(max_workers: int) -> requests.Session:
+    def create_session(max_workers: int) -> Session:
         session = requests.Session()
         adapter = HTTPAdapter(pool_connections=max_workers, pool_maxsize=max_workers)
         session.mount("https://", adapter)
         session.mount("http://", adapter)
         return session
 
-    def process_results(results: list[tuple[str, bool]]) -> int:
+    def process_results(results: List[Tuple[str, bool]]) -> int:
         success = all(r[1] for r in results)
         for service, ok in results:
             status = "PASS" if ok else "FAIL"
