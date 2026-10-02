@@ -1,19 +1,42 @@
+"""Sanitization pipeline for redacting secrets and high-entropy content.
+
+This module scans string payloads (e.g. process arguments, command lines,
+script blocks) for known secret formats via regex, and for generic
+high-entropy tokens that may represent unrecognized secrets. Depending on
+the field being scanned, matches are either redacted inline or the entire
+payload is quarantined and replaced with a reference marker.
+"""
+
 import os
 import re
 import math
 import hashlib
-import json
 from typing import Optional, Dict, Any, Pattern, TypeAlias
 from collections import Counter
 
-# Type aliases for pattern dictionaries
-RegexPatternDict: TypeAlias = Dict[str, Pattern[str]]
-CompiledRegexDict: TypeAlias = Dict[str, Pattern[str]]
+# Type alias for allowlist pattern dictionaries
 AllowlistPatternDict: TypeAlias = Dict[str, Pattern[str]]
+
 
 # Configurable thresholds loaded from environment variables with validation
 def _load_env_float(name: str, default: str, min_val: float, max_val: float) -> float:
-    """Load and validate a float from environment variable."""
+    """Loads and validates a float value from an environment variable.
+
+    Args:
+        name: The name of the environment variable to read.
+        default: The default string value to use if the environment
+            variable is not set.
+        min_val: The exclusive lower bound for the parsed value.
+        max_val: The inclusive upper bound for the parsed value.
+
+    Returns:
+        The parsed and validated float value.
+
+    Raises:
+        ValueError: If the environment variable's value cannot be parsed
+            as a float, or if the parsed value falls outside the
+            (min_val, max_val] range.
+    """
     raw = os.getenv(name, default)
     try:
         value = float(raw)
@@ -25,7 +48,23 @@ def _load_env_float(name: str, default: str, min_val: float, max_val: float) -> 
 
 
 def _load_env_int(name: str, default: str, min_val: int, max_val: int) -> int:
-    """Load and validate an integer from environment variable."""
+    """Loads and validates an integer value from an environment variable.
+
+    Args:
+        name: The name of the environment variable to read.
+        default: The default string value to use if the environment
+            variable is not set.
+        min_val: The inclusive lower bound for the parsed value.
+        max_val: The inclusive upper bound for the parsed value.
+
+    Returns:
+        The parsed and validated integer value.
+
+    Raises:
+        ValueError: If the environment variable's value cannot be parsed
+            as an integer, or if the parsed value falls outside the
+            [min_val, max_val] range.
+    """
     raw = os.getenv(name, default)
     try:
         value = int(raw)
@@ -37,17 +76,32 @@ def _load_env_int(name: str, default: str, min_val: int, max_val: int) -> int:
 
 
 def _load_entropy_threshold() -> float:
-    """Load and validate entropy threshold from environment."""
+    """Loads and validates the Shannon entropy threshold from the environment.
+
+    Returns:
+        The entropy threshold above which a token is considered
+        high-entropy (a candidate secret).
+    """
     return _load_env_float('SANITIZER_ENTROPY_THRESHOLD', '4.5', 0.0, 8.0)
 
 
 def _load_min_token_length() -> int:
-    """Load and validate minimum token length from environment."""
+    """Loads and validates the minimum token length from the environment.
+
+    Returns:
+        The minimum length a substring must have to be considered a
+        candidate token for entropy analysis.
+    """
     return _load_env_int('SANITIZER_MIN_TOKEN_LENGTH', '17', 1, 1000)
 
 
 def _load_analytical_fields() -> set[str]:
-    """Load analytical fields from environment variable."""
+    """Loads the set of analytical field paths from the environment.
+
+    Returns:
+        A set of field path strings that are subject to the quarantine
+        policy for high-entropy payloads.
+    """
     default_fields = "process.args,process.command_line,powershell.encoded_command,script.block,bash.command,shell.args,file.contents"
     raw = os.getenv('SANITIZER_ANALYTICAL_FIELDS', default_fields)
     fields = {field.strip() for field in raw.split(',') if field.strip()}
@@ -55,18 +109,34 @@ def _load_analytical_fields() -> set[str]:
 
 
 def _load_max_quarantine_tokens() -> int:
-    """Load and validate maximum tokens to check for quarantine from environment."""
+    """Loads and validates the max tokens to inspect for quarantine.
+
+    Returns:
+        The maximum number of tokens to check per payload when
+        evaluating the quarantine policy.
+    """
     return _load_env_int('SANITIZER_MAX_QUARANTINE_TOKENS', '100', 1, 10000)
 
 
 def _load_max_quarantine_payload_length() -> int:
-    """Load and validate maximum payload length for quarantine scanning from environment."""
+    """Loads and validates the max payload length for quarantine scanning.
+
+    Returns:
+        The maximum payload length, in characters, that will be scanned
+        for quarantine-triggering tokens.
+    """
     return _load_env_int('SANITIZER_MAX_QUARANTINE_PAYLOAD_LENGTH', '100000', 1, 10000000)
 
 
 def _load_diversity_threshold() -> float:
-    """Load and validate character diversity threshold for fast pre-filter from environment."""
+    """Loads and validates the character diversity threshold.
+
+    Returns:
+        The minimum ratio of unique characters to token length required
+        for a token to pass the fast diversity pre-filter.
+    """
     return _load_env_float('SANITIZER_DIVERSITY_THRESHOLD', '0.3', 0.0, 1.0)
+
 
 # Module-level constants initialized with validation at import time
 ENTROPY_THRESHOLD: float = _load_entropy_threshold()
@@ -75,6 +145,7 @@ ANALYTICAL_FIELDS: set[str] = _load_analytical_fields()
 MAX_QUARANTINE_TOKENS: int = _load_max_quarantine_tokens()
 MAX_QUARANTINE_PAYLOAD_LENGTH: int = _load_max_quarantine_payload_length()
 DIVERSITY_THRESHOLD: float = _load_diversity_threshold()
+
 
 # Regex patterns for known secret formats - single source of truth
 # Each entry: (name, pattern, flags) where flags='i' for case-insensitive, '' for case-sensitive
@@ -95,18 +166,61 @@ REGEX_RULES: Dict[str, str] = {
     for name, pattern, flags in _REGEX_PATTERN_SPECS
 }
 
+
+def _neutralize_capturing_groups(pattern: str) -> str:
+    """Converts bare capturing groups in a pattern to non-capturing groups.
+
+    This is needed because each pattern is wrapped in its own named group
+    when building the combined regex; any bare capturing groups inside the
+    original pattern would otherwise shift group numbering. The conversion
+    is only applied when the pattern contains at least one capturing group
+    and does not already contain an explicit non-capturing group marker
+    ('(?:'), to avoid disturbing patterns that already manage their own
+    grouping.
+
+    Args:
+        pattern: The raw regex pattern to inspect and possibly rewrite.
+
+    Returns:
+        The pattern with bare capturing group parens replaced by
+        non-capturing group parens, or the original pattern unchanged if
+        no conversion is applicable.
+    """
+    if '(' in pattern and '(?:' not in pattern:
+        capturing_group_count = pattern.count('(') - pattern.count('(?:')
+        return pattern.replace('(', '(?:', capturing_group_count)
+    return pattern
+
+
+def _build_combined_regex_part(name: str, pattern: str, flags: str) -> str:
+    """Builds a single named alternative for the combined regex.
+
+    Args:
+        name: The name to use for the named capturing group, matching the
+            rule name in `_REGEX_PATTERN_SPECS`.
+        pattern: The raw regex pattern for this rule.
+        flags: Inline flag string ('i' for case-insensitive, '' for
+            case-sensitive).
+
+    Returns:
+        A regex fragment scoped with the appropriate inline flag and
+        wrapped in a named group, suitable for joining with '|' into a
+        combined pattern.
+    """
+    normalized_pattern = _neutralize_capturing_groups(pattern)
+    inline_flags = flags if flags else '-i'
+    return f"(?{inline_flags}:(?P<{name}>{normalized_pattern}))"
+
+
 # Build combined regex with named groups for single-pass scanning
-# Case-sensitive patterns use (?-i:...), case-insensitive use (?i:...)
-# Internal capturing groups converted to non-capturing (?:...)
 _COMBINED_REGEX_PARTS = [
-    (f"(?{flags if flags else '-i'}:(?P<{name}>{pattern.replace('(', '(?:', pattern.count('(') - pattern.count('(?:'))}))"
-     if '(' in pattern and '(?:' not in pattern
-     else f"(?{flags if flags else '-i'}:(?P<{name}>{pattern}))")
+    _build_combined_regex_part(name, pattern, flags)
     for name, pattern, flags in _REGEX_PATTERN_SPECS
 ]
 
 _COMBINED_REGEX_PATTERN = "|".join(_COMBINED_REGEX_PARTS)
 _COMBINED_REGEX: Pattern[str] = re.compile(_COMBINED_REGEX_PATTERN)
+
 
 # Allowlist patterns for known safe high-entropy strings
 # These prevent false positives on hashes, UUIDs, and other legitimate identifiers
@@ -124,7 +238,6 @@ ALLOWLIST_PATTERNS_COMPILED: AllowlistPatternDict = {
 # Pre-compiled token pattern for entropy analysis (uses configurable MIN_TOKEN_LENGTH)
 TOKEN_PATTERN: Pattern[str] = re.compile(rf'[a-zA-Z0-9+/=]{{{MIN_TOKEN_LENGTH},}}')
 
-import functools
 
 def calculate_entropy(data: str) -> float:
     """Calculates the Shannon entropy of a given string.
@@ -146,9 +259,11 @@ def calculate_entropy(data: str) -> float:
     length = len(data)
     entropy = 0.0
     for count in counts.values():
-        p_x = count / length
-        entropy += -p_x * math.log(p_x, 2)
+        probability = count / length
+        entropy += -probability * math.log(probability, 2)
     return entropy
+
+
 def _check_allowlist(token: str) -> bool:
     """Checks if a token matches any allowlisted pattern.
 
@@ -163,17 +278,19 @@ def _check_allowlist(token: str) -> bool:
         for pattern in ALLOWLIST_PATTERNS_COMPILED.values()
     )
 
+
 def _quick_diversity_check(token: str) -> bool:
     """Fast pre-filter: checks if token has sufficient character diversity.
-    
+
     Args:
         token: The token to check.
-        
+
     Returns:
         True if token passes diversity threshold, False otherwise.
     """
     unique_chars = len(set(token))
     return (unique_chars / len(token)) >= DIVERSITY_THRESHOLD
+
 
 def _should_quarantine(token: str) -> bool:
     """Checks if a token should trigger quarantine (high entropy, not allowlisted).
@@ -186,6 +303,7 @@ def _should_quarantine(token: str) -> bool:
     """
     return calculate_entropy(token) > ENTROPY_THRESHOLD and not _check_allowlist(token)
 
+
 def reload_allowlist() -> None:
     """Reloads and recompiles allowlist patterns from ALLOWLIST_PATTERNS.
 
@@ -197,6 +315,7 @@ def reload_allowlist() -> None:
         k: re.compile(v) for k, v in ALLOWLIST_PATTERNS.items()
     }
 
+
 def reload_analytical_fields() -> None:
     """Reloads analytical fields from environment variable.
 
@@ -205,6 +324,7 @@ def reload_analytical_fields() -> None:
     """
     global ANALYTICAL_FIELDS
     ANALYTICAL_FIELDS = _load_analytical_fields()
+
 
 def redact_regex_patterns(payload: str, metadata: Dict[str, Any]) -> str:
     """Redacts sensitive patterns using combined regex in single pass.
@@ -216,15 +336,17 @@ def redact_regex_patterns(payload: str, metadata: Dict[str, Any]) -> str:
     Returns:
         The payload with regex patterns redacted.
     """
-    count = 0
-    def replace_match(m: re.Match[str]) -> str:
-        nonlocal count
-        count += 1
-        return f"[REDACTED_{m.lastgroup.upper()}]" if m.lastgroup else m.group(0)
-    
-    result = _COMBINED_REGEX.sub(replace_match, payload)
-    metadata["regex_redaction_count"] = count
+    redaction_count = 0
+
+    def redact_match(match: re.Match[str]) -> str:
+        nonlocal redaction_count
+        redaction_count += 1
+        return f"[REDACTED_{match.lastgroup.upper()}]" if match.lastgroup else match.group(0)
+
+    result = _COMBINED_REGEX.sub(redact_match, payload)
+    metadata["regex_redaction_count"] = redaction_count
     return result
+
 
 def apply_quarantine_policy(payload: str, field_path: Optional[str], metadata: Dict[str, Any]) -> str:
     """Applies quarantine policy for analytical fields with high-entropy content.
@@ -240,29 +362,31 @@ def apply_quarantine_policy(payload: str, field_path: Optional[str], metadata: D
     is_analytical = field_path in ANALYTICAL_FIELDS
     if not is_analytical:
         return payload
-        
+
     if len(payload) > MAX_QUARANTINE_PAYLOAD_LENGTH:
         metadata["quarantine_skipped_reason"] = "payload_too_large"
         return payload
-        
+
     tokens_checked = 0
     for match in TOKEN_PATTERN.finditer(payload):
         if tokens_checked >= MAX_QUARANTINE_TOKENS:
             metadata["quarantine_skipped_reason"] = "max_tokens_reached"
             break
-            
+
         token = match.group()
         tokens_checked += 1
-        
+
         if not _quick_diversity_check(token):
             continue
-            
+
         if _should_quarantine(token):
             metadata["sanitization_action"] = "quarantine_ref"
             metadata["quarantine_reason"] = "high_entropy_analytical_payload"
             return "[QUARANTINED_REF]"
-            
+
     return payload
+
+
 def detect_high_entropy_tokens(payload: str, metadata: Dict[str, Any]) -> str:
     """Redacts high-entropy tokens inline using single-pass substitution.
 
@@ -282,6 +406,7 @@ def detect_high_entropy_tokens(payload: str, metadata: Dict[str, Any]) -> str:
 
     return TOKEN_PATTERN.sub(replace_token, payload)
 
+
 def build_metadata(payload: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
     """Builds final metadata including action determination and payload hash.
 
@@ -297,9 +422,10 @@ def build_metadata(payload: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
             metadata["sanitization_action"] = "preserve_allowlisted"
         else:
             metadata["sanitization_action"] = "redact_inline"
-    
+
     metadata["redaction_manifest_sha256"] = hashlib.sha256(payload.encode()).hexdigest()
     return metadata
+
 
 def sanitize_payload(payload: str, field_path: Optional[str] = None) -> Dict[str, Any]:
     """Sanitizes a payload by redacting sensitive patterns and high-entropy strings.
@@ -314,22 +440,22 @@ def sanitize_payload(payload: str, field_path: Optional[str] = None) -> Dict[str
         dictionary detailing the sanitization actions taken.
     """
     metadata = {"sanitizer_version": "11.6.0", "regex_redaction_count": 0, "entropy_redaction_count": 0}
-    
+
     # Pass 1: Regex Redaction (single pass with combined regex)
     payload = redact_regex_patterns(payload, metadata)
-    
+
     # Pass 2: Quarantine Policy Check
     payload = apply_quarantine_policy(payload, field_path, metadata)
-    
+
     # Early return if quarantined
     if payload == "[QUARANTINED_REF]":
         metadata = build_metadata(payload, metadata)
         return {"payload": payload, "metadata": metadata}
-    
+
     # Pass 3: High-Entropy Token Detection and Redaction
     payload = detect_high_entropy_tokens(payload, metadata)
-    
+
     # Build final metadata
     metadata = build_metadata(payload, metadata)
-    
+
     return {"payload": payload, "metadata": metadata}

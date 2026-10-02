@@ -94,7 +94,7 @@ def main() -> None:
 
     Command-line arguments:
         input_file (positional): Path to the text file containing the corpus to analyze.
-        --model: OpenRouter model ID (default: qwen/qwen-2.5-72b-instruct).
+        --model: OpenRouter model ID (default: qwen/qwen-2.5-72b-instruct:free).
         --prompt-file: Optional path to a custom prompt template file. Must contain
             the {corpus} placeholder where the input data should be inserted.
         --output: Optional explicit output file path (default: auto-generated
@@ -115,8 +115,8 @@ def main() -> None:
     parser.add_argument("input_file", help="Path to the text file to analyze")
     parser.add_argument(
         "--model",
-        default="qwen/qwen-2.5-72b-instruct",
-        help="OpenRouter model ID (default: qwen/qwen-2.5-72b-instruct)"
+        default="qwen/qwen-2.5-72b-instruct:free",
+        help="OpenRouter model ID (default: qwen/qwen-2.5-72b-instruct:free)"
     )
     parser.add_argument(
         "--prompt-file",

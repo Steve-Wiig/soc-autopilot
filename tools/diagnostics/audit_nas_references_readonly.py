@@ -13,11 +13,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-
-
-if __name__ != "__main__":
-    raise RuntimeError("diagnostic; run as main")
-
+from typing import Dict, List, Tuple, Union
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -37,6 +33,15 @@ PATTERNS = [
 
 
 def should_skip(p: Path) -> bool:
+    """
+    Determines if a file should be skipped based on its path.
+
+    Args:
+        p (Path): The file path to check.
+
+    Returns:
+        bool: True if the file should be skipped, False otherwise.
+    """
     if p.suffix in SKIP_SUFFIX:
         return True
     if any(s in p.name for s in SKIP_PATTERNS):
@@ -45,11 +50,17 @@ def should_skip(p: Path) -> bool:
 
 
 def main() -> int:
+    """
+    Main function to perform the read-only NAS reference audit.
+
+    Returns:
+        int: Exit code.
+    """
     print("soc-autopilot :: read-only NAS reference audit")
     print(f"repo root: {REPO_ROOT}")
     print()
 
-    hits_by_pattern = {label: [] for _, label in PATTERNS}
+    hits_by_pattern: Dict[str, List[Tuple[Path, int, str]]] = {label: [] for _, label in PATTERNS}
     files_scanned = 0
     files_with_hits = set()
 

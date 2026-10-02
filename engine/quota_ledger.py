@@ -1,3 +1,14 @@
+"""SQLite-backed quota ledger for tracking and enforcing per-adapter token usage.
+
+This module provides:
+- Schema initialization for the quota ledger, approvals, and audit tables.
+- Quota checks (`check_quota`) and usage recording (`record_usage`).
+- Approval token creation and validation for SOC audit compliance.
+- A CLI entry point (`main`) for scripting/administration.
+- Optional thread-local connection pooling controlled via the
+  QUOTA_LEDGER_POOL_CONNECTIONS environment variable.
+"""
+
 import sqlite3
 import argparse
 import sys
@@ -20,7 +31,20 @@ def _get_pool_enabled() -> bool:
 
 DB_PATH = _get_default_db_path()
 _POOL_ENABLED = _get_pool_enabled()
-_thread_local = threading.local()
+
+
+class _ThreadLocalConnectionCache(threading.local):
+    """Typed thread-local storage for a single pooled SQLite connection per thread.
+
+    Attributes:
+        conn: The cached connection for the current thread, or None if not yet created.
+        db_path: The database path the cached connection was opened against, or None.
+    """
+    conn: Optional[sqlite3.Connection] = None
+    db_path: Optional[str] = None
+
+
+_thread_local = _ThreadLocalConnectionCache()
 
 
 class QuotaLedgerError(Exception):
@@ -34,7 +58,12 @@ class QuotaExceededError(QuotaLedgerError):
 
 
 class QuotaAdapterNotFoundError(QuotaLedgerError):
-    """Raised when an adapter is not found in the ledger."""
+    """Raised when an adapter is not found in the ledger.
+
+    Note: This exception is reserved for future use. Currently,
+    `check_quota` returns False rather than raising this when an
+    adapter is not found in the ledger.
+    """
     pass
 
 
@@ -44,8 +73,19 @@ class ApprovalValidationError(QuotaLedgerError):
 
 
 def _get_pooled_connection(db_path: str) -> sqlite3.Connection:
-    """Get or create a thread-local pooled connection."""
-    if not hasattr(_thread_local, 'conn') or _thread_local.conn is None:
+    """Get or create the thread-local pooled connection for the given database path.
+
+    If a pooled connection already exists for this thread but points at a
+    different database path, it is closed and replaced with a new connection
+    to `db_path`.
+
+    Args:
+        db_path: Path to the SQLite database file.
+
+    Returns:
+        A live sqlite3.Connection cached for the current thread.
+    """
+    if _thread_local.conn is None:
         _thread_local.conn = sqlite3.connect(db_path, check_same_thread=False)
         _thread_local.conn.execute("PRAGMA foreign_keys = ON")
     elif _thread_local.db_path != db_path:
@@ -57,8 +97,8 @@ def _get_pooled_connection(db_path: str) -> sqlite3.Connection:
 
 
 def _release_pooled_connection() -> None:
-    """Close and clear the thread-local pooled connection."""
-    if hasattr(_thread_local, 'conn') and _thread_local.conn is not None:
+    """Close and clear the thread-local pooled connection, if one exists."""
+    if _thread_local.conn is not None:
         _thread_local.conn.close()
         _thread_local.conn = None
         _thread_local.db_path = None
@@ -70,6 +110,18 @@ def get_db_connection(db_path: Optional[str] = None) -> Generator[sqlite3.Connec
 
     If connection pooling is enabled (QUOTA_LEDGER_POOL_CONNECTIONS=1), reuses a
     thread-local connection instead of creating a new one each time.
+
+    Args:
+        db_path: Optional database path. Defaults to the module-level DB_PATH
+            (which itself defaults to the QUOTA_LEDGER_DB_PATH env var or
+            "quota_ledger.db").
+
+    Yields:
+        An active sqlite3.Connection. Commits on successful exit, rolls back
+        and raises QuotaLedgerError on sqlite3.Error.
+
+    Raises:
+        QuotaLedgerError: If a database error occurs during the transaction.
     """
     resolved_path = db_path or DB_PATH
 
@@ -103,7 +155,14 @@ def close_connection_pool() -> None:
 
 
 def init_db(db_path: Optional[str] = None) -> None:
-    """Initializes the quota ledger database and creates the table if it does not exist."""
+    """Initializes the quota ledger database and creates the table if it does not exist.
+
+    Args:
+        db_path: Optional database path for testing.
+
+    Raises:
+        QuotaLedgerError: If database initialization fails.
+    """
     try:
         with get_db_connection(db_path) as conn:
             cursor = conn.cursor()
@@ -157,11 +216,24 @@ def init_db(db_path: Optional[str] = None) -> None:
         raise QuotaLedgerError(f"Database initialization failed: {e}") from e
 
 
-def _reset_daily_if_needed(used: int, last_reset: str, today: str) -> int:
-    """Reset daily usage to zero if the reset date differs from today."""
-    if last_reset != today:
+def _get_effective_daily_usage(tokens_used_today: int, last_reset_date: str, today: str) -> int:
+    """Compute the effective daily token usage, accounting for day rollover.
+
+    If the stored last reset date differs from today's date, the daily
+    counter is treated as having been reset to zero (the rollover is applied
+    lazily at read/write time rather than via a scheduled job).
+
+    Args:
+        tokens_used_today: The tokens_used_today value currently stored for the adapter.
+        last_reset_date: The last_reset_date value currently stored for the adapter.
+        today: Today's date string, in the same format as last_reset_date (YYYY-MM-DD).
+
+    Returns:
+        The effective token usage count for today.
+    """
+    if last_reset_date != today:
         return 0
-    return used
+    return tokens_used_today
 
 
 def _validate_approval(cursor: sqlite3.Cursor, adapter_id: str, approval_token: str, tokens_requested: int) -> str:
@@ -201,7 +273,13 @@ def _validate_approval(cursor: sqlite3.Cursor, adapter_id: str, approval_token: 
 
 
 def _mark_approval_used(cursor: sqlite3.Cursor, approval_token: str, tokens_used: int) -> None:
-    """Mark approval as used and update tokens_used."""
+    """Mark approval as used and update tokens_used.
+
+    Args:
+        cursor: Database cursor.
+        approval_token: The approval token to update.
+        tokens_used: Number of tokens to add to the approval's running total.
+    """
     now = datetime.now(timezone.utc).isoformat()
     cursor.execute(
         "UPDATE approvals SET tokens_used = tokens_used + ?, used_at = ? WHERE token = ?",
@@ -218,7 +296,11 @@ def check_quota(adapter_id: str, estimated_tokens: int, db_path: Optional[str] =
         db_path: Optional database path for testing.
 
     Returns:
-        True if the usage is within limits, False otherwise.
+        True if the usage is within limits, False otherwise (including when
+        the adapter is not found in the ledger).
+
+    Raises:
+        QuotaLedgerError: If a database error occurs during the quota check.
     """
     try:
         with get_db_connection(db_path) as conn:
@@ -234,10 +316,10 @@ def check_quota(adapter_id: str, estimated_tokens: int, db_path: Optional[str] =
         if not row:
             return False
 
-        daily_limit, job_limit, used, last_reset = row
-        used = _reset_daily_if_needed(used, last_reset, today)
+        daily_limit, job_limit, tokens_used_today, last_reset_date = row
+        effective_usage = _get_effective_daily_usage(tokens_used_today, last_reset_date, today)
 
-        if (used + estimated_tokens) > daily_limit or estimated_tokens > job_limit:
+        if (effective_usage + estimated_tokens) > daily_limit or estimated_tokens > job_limit:
             return False
         return True
     except sqlite3.Error as e:
@@ -270,9 +352,9 @@ def record_usage(adapter_id: str, tokens_used: int, db_path: Optional[str] = Non
             row = cursor.fetchone()
 
             if row:
-                used, last_reset = row
-                previous_total = used if last_reset == today else 0
-                new_used = previous_total + tokens_used
+                tokens_used_today, last_reset_date = row
+                previous_total = tokens_used_today if last_reset_date == today else 0
+                new_total = previous_total + tokens_used
 
                 approval_id = None
                 if approval_token:
@@ -281,11 +363,11 @@ def record_usage(adapter_id: str, tokens_used: int, db_path: Optional[str] = Non
 
                 cursor.execute(
                     "UPDATE quota_ledger SET tokens_used_today = ?, last_reset_date = ? WHERE adapter_id = ?",
-                    (new_used, today, adapter_id)
+                    (new_total, today, adapter_id)
                 )
                 cursor.execute(
                     "INSERT INTO quota_audit (adapter_id, timestamp, tokens_delta, operation, previous_total, new_total, approval_token, approval_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (adapter_id, timestamp, tokens_used, 'usage', previous_total, new_used, approval_token, approval_id)
+                    (adapter_id, timestamp, tokens_used, 'usage', previous_total, new_total, approval_token, approval_id)
                 )
     except sqlite3.Error as e:
         raise QuotaLedgerError(f"Database error during usage recording: {e}") from e
@@ -303,6 +385,9 @@ def create_approval(adapter_id: str, approval_token: str, max_tokens: int, expir
 
     Returns:
         The generated approval_id.
+
+    Raises:
+        QuotaLedgerError: If a database error occurs while creating the approval.
     """
     try:
         with get_db_connection(db_path) as conn:

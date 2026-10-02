@@ -12,9 +12,11 @@ Trust boundary:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping
 import os
 
 from engine.openrouter_catalog import (
+    free_models,
     free_only_enabled,
     get_catalog,
     select_free_coding_model,
@@ -23,20 +25,36 @@ from engine.openrouter_catalog import (
 
 DEFAULT_GEMINI_MODEL = "gemini/gemini-3.8-flash"
 
+# Environment variable that must be truthy to allow any cloud
+# (non-local) development provider to be considered at all.
 CLOUD_ENABLE_ENV = "SOC_AUTOPILOT_DEVELOPMENT_CLOUD"
+
+# Environment variable used to request a specific OpenRouter model.
 OPENROUTER_MODEL_ENV = "AIDER_OPENROUTER_MODEL"
 
 
 @dataclass(frozen=True)
 class AiderProvider:
+    """A resolved, ready-to-use development inference provider.
+
+    Attributes:
+        name: Human-readable provider identifier (e.g. "openrouter").
+        model: The LiteLLM-style model reference to use for this provider.
+        api_base: Base URL for the provider's API.
+        api_key_env: Name of the environment variable holding the API key,
+            if any.
+    """
+
     name: str
     model: str
     api_base: str
     api_key_env: str | None = None
 
 
-def _cloud_enabled(environ: dict[str, str]) -> bool:
-    return environ.get(CLOUD_ENABLE_ENV, "").strip().lower() in {
+def _cloud_enabled(env: Mapping[str, str]) -> bool:
+    """Return True when cloud development providers are explicitly enabled."""
+
+    return env.get(CLOUD_ENABLE_ENV, "").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -53,9 +71,8 @@ def _openrouter_model_ref(model_id: str) -> str:
     return f"openrouter/{model_id}"
 
 
-def _select_openrouter_model(
-    env: dict[str, str],
-) -> str | None:
+def _select_openrouter_model(env: Mapping[str, str]) -> str | None:
+    from engine.openrouter_catalog import free_models # Moved to prevent circular import(env: Mapping[str, str]) -> str | None:
     """Resolve an OpenRouter model without permitting paid inference.
 
     When free-only mode is enabled, the OpenRouter catalog is authoritative.
@@ -76,8 +93,6 @@ def _select_openrouter_model(
     if free_only_enabled(env):
         try:
             catalog = get_catalog(api_key=api_key)
-
-            from engine.openrouter_catalog import free_models
 
             free_catalog = {
                 model.model_id
@@ -110,7 +125,7 @@ def _select_openrouter_model(
 
 def resolve_aider_providers(
     *,
-    environ: dict[str, str] | None = None,
+    environ: Mapping[str, str] | None = None,
 ) -> tuple[AiderProvider, ...]:
     """Return deterministic development-provider order.
 
@@ -124,7 +139,7 @@ def resolve_aider_providers(
     A failed OpenRouter catalog lookup never causes a paid model to be used.
     """
 
-    env = dict(os.environ if environ is None else environ)
+    env: dict[str, str] = dict(os.environ if environ is None else environ)
     providers: list[AiderProvider] = []
 
     if _cloud_enabled(env):

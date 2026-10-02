@@ -1,9 +1,6 @@
-import argparse
-import hashlib
 import json
 import logging
 import os
-import signal
 import sqlite3
 import time
 import re
@@ -11,8 +8,8 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from enum import Enum
-from functools import wraps, lru_cache
-from typing import Tuple, Dict, List, Optional, Any, Callable, Union
+from functools import lru_cache
+from typing import Tuple, Dict, List, Optional, Any, Union
 
 try:
     import psycopg2
@@ -63,13 +60,15 @@ class MockEnrichmentProvider(EnrichmentProvider):
         return {"status": "enriched", "data": f"mock_data_for_{ioc}"}
 
 
+# Matches long base64-like tokens (e.g. API keys/secrets) that are likely
+# sensitive even if the surrounding key name doesn't look sensitive.
 _HIGH_ENTROPY_PATTERN = re.compile(r'[A-Za-z0-9+/=]{32,}')
 _DEFAULT_SENSITIVE_PATTERNS = [
     'secret', 'token', 'password', 'key', 'api_key', 'apikey',
     'access_token', 'refresh_token', 'client_secret', 'private_key',
     _HIGH_ENTROPY_PATTERN
 ]
-_ENV_SENSITIVE_PATTERNS = 'SENSITIVE_PATTERNS'
+_SENSITIVE_PATTERNS_ENV_VAR = 'SENSITIVE_PATTERNS'
 
 
 def _load_sensitive_patterns_from_env() -> List[Union[str, re.Pattern]]:
@@ -81,7 +80,7 @@ def _load_sensitive_patterns_from_env() -> List[Union[str, re.Pattern]]:
     Returns:
         List of pattern strings and compiled regex patterns.
     """
-    env_value = os.getenv(_ENV_SENSITIVE_PATTERNS)
+    env_value = os.getenv(_SENSITIVE_PATTERNS_ENV_VAR)
     if not env_value:
         return []
     try:
@@ -96,6 +95,44 @@ def _load_sensitive_patterns_from_env() -> List[Union[str, re.Pattern]]:
     except (json.JSONDecodeError, re.error) as e:
         logger.warning("Failed to parse SENSITIVE_PATTERNS env var: %s", e)
         return []
+
+
+@lru_cache(maxsize=1)
+def _compile_string_patterns_cached(patterns: Tuple[str, ...]) -> Optional[re.Pattern]:
+    """Compile string patterns into a single case-insensitive regex.
+
+    This is a module-level (not bound-method) cached function so that the
+    `lru_cache` key is based solely on the pattern tuple, avoiding the
+    common pitfall of caching on bound instance methods (which would keep
+    every calling instance alive forever via the cache).
+
+    Args:
+        patterns: Tuple of string patterns for cache key.
+
+    Returns:
+        Compiled regex pattern or None if no patterns.
+    """
+    if not patterns:
+        return None
+    return re.compile('|'.join(map(re.escape, patterns)), re.IGNORECASE)
+
+
+@lru_cache(maxsize=1)
+def _compile_regex_patterns_cached(patterns: Tuple[str, ...]) -> Optional[re.Pattern]:
+    """Compile regex patterns into a single combined regex.
+
+    See `_compile_string_patterns_cached` for why this lives at module
+    level instead of being decorated directly on an instance method.
+
+    Args:
+        patterns: Tuple of regex pattern strings for cache key.
+
+    Returns:
+        Compiled regex pattern or None if no patterns.
+    """
+    if not patterns:
+        return None
+    return re.compile('|'.join(f'(?:{p})' for p in patterns))
 
 
 class Sanitizer:
@@ -128,11 +165,11 @@ class Sanitizer:
         self._string_patterns = [p for p in self._raw_patterns if isinstance(p, str)]
         self._regex_patterns = [p for p in self._raw_patterns if isinstance(p, re.Pattern)]
 
-    @lru_cache(maxsize=1)
     def _compile_string_patterns(self, patterns_tuple: Tuple[str, ...]) -> Optional[re.Pattern]:
         """Compile string patterns into a single case-insensitive regex.
 
-        Uses lru_cache to avoid recompilation when patterns haven't changed.
+        Delegates to a module-level cached helper so the LRU cache is not
+        keyed on (and does not retain a reference to) `self`.
 
         Args:
             patterns_tuple: Tuple of string patterns for cache key.
@@ -140,15 +177,13 @@ class Sanitizer:
         Returns:
             Compiled regex pattern or None if no patterns.
         """
-        if not patterns_tuple:
-            return None
-        return re.compile('|'.join(map(re.escape, patterns_tuple)), re.IGNORECASE)
+        return _compile_string_patterns_cached(patterns_tuple)
 
-    @lru_cache(maxsize=1)
     def _compile_regex_patterns(self, patterns_tuple: Tuple[str, ...]) -> Optional[re.Pattern]:
         """Compile regex patterns into a single combined regex.
 
-        Uses lru_cache to avoid recompilation when patterns haven't changed.
+        Delegates to a module-level cached helper so the LRU cache is not
+        keyed on (and does not retain a reference to) `self`.
 
         Args:
             patterns_tuple: Tuple of regex pattern strings for cache key.
@@ -156,9 +191,7 @@ class Sanitizer:
         Returns:
             Compiled regex pattern or None if no patterns.
         """
-        if not patterns_tuple:
-            return None
-        return re.compile('|'.join(f'(?:{p})' for p in patterns_tuple))
+        return _compile_regex_patterns_cached(patterns_tuple)
 
     def compile_patterns(self) -> None:
         """Compile string patterns into a single regex for efficient matching."""
@@ -305,10 +338,23 @@ class TTLCache:
     """
 
     def __init__(self, ttl_seconds: int = 60) -> None:
+        """Initialize the TTL cache.
+
+        Args:
+            ttl_seconds: Number of seconds an entry remains valid after being set.
+        """
         self._ttl_seconds = ttl_seconds
         self._cache: Dict[Tuple, Tuple[Any, float]] = {}
 
     def get(self, key: Tuple) -> Optional[Any]:
+        """Retrieve a cached value if present and not expired.
+
+        Args:
+            key: The cache key to look up.
+
+        Returns:
+            The cached value if found and still within its TTL, otherwise None.
+        """
         now = time.time()
         if key in self._cache:
             value, cached_at = self._cache[key]
@@ -317,6 +363,12 @@ class TTLCache:
         return None
 
     def set(self, key: Tuple, value: Any) -> None:
+        """Store a value in the cache, timestamped with the current time.
+
+        Args:
+            key: The cache key under which to store the value.
+            value: The value to cache.
+        """
         self._cache[key] = (value, time.time())
 
     def clear(self) -> None:

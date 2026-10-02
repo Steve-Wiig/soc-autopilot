@@ -69,3 +69,7 @@ __pycache__/
 docs/.gated-*
 tests/.gated-*
 
+REVIEW_*.md
+ai_review/
+llm_review_packets/
+*.py.bak

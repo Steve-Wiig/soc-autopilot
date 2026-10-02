@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
-import json, shutil, sys
+"""Ingest Raspberry Pi edge telemetry files into the engine's telemetry store.
+
+This script watches an incoming directory for newline-delimited JSON (.jsonl)
+files produced by Raspberry Pi edge nodes, normalizes each event into the
+canonical telemetry schema, writes it via TelemetryWriter, and also appends
+it to a pending findings file consumed by a separate bridge timer process.
+
+Processed files are moved to a "processed" directory on success, or to a
+"quarantine" directory if a fatal error occurs while processing the file.
+"""
+
+import json
+import shutil
+import sys
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Any, Dict
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -12,59 +26,103 @@ from engine.telemetry_identity import event_identity
 INCOMING_DIR = ROOT / "runtime" / "incoming" / "pi"
 PROCESSED_DIR = ROOT / "runtime" / "incoming" / "pi_processed"
 QUARANTINE_DIR = ROOT / "runtime" / "incoming" / "pi_quarantine"
+PENDING_FINDINGS_FILE = ROOT / "runtime" / "analysis" / "pi_findings_pending.jsonl"
 
-writer = TelemetryWriter()
+# Fields already captured explicitly in the canonical event and therefore
+# excluded from the generic "payload" bucket.
+_EXCLUDED_PAYLOAD_FIELDS = ("event_type", "source", "timestamp", "event_id")
 
-def normalize_pi_event(raw: dict) -> dict:
+
+def normalize_pi_event(raw_event: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a raw Pi edge event into the canonical telemetry schema.
+
+    Args:
+        raw_event: The raw JSON object parsed from a single line of the
+            incoming .jsonl file.
+
+    Returns:
+        A dictionary matching the canonical telemetry event shape expected
+        by TelemetryWriter.
+    """
     return {
-        "event_id": raw.get("event_id"),
-        "event_type": raw.get("event_type"),
-        "node_id": raw.get("source", "raspberry_pi"),
+        "event_id": raw_event.get("event_id"),
+        "event_type": raw_event.get("event_type"),
+        "node_id": raw_event.get("source", "raspberry_pi"),
         "source": "pi_edge",
-        "provider": raw.get("provider", "local_bandit"),
-        "model": raw.get("model", "bandit_pylint"),
-        "created_at": raw.get("timestamp") or datetime.now(timezone.utc).isoformat(),
-        "payload": {k: v for k, v in raw.items() if k not in ["event_type", "source", "timestamp", "event_id"]},
-        "signature": raw.get("event_id")
+        "provider": raw_event.get("provider", "local_bandit"),
+        "model": raw_event.get("model", "bandit_pylint"),
+        "created_at": raw_event.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+        "payload": {
+            key: value
+            for key, value in raw_event.items()
+            if key not in _EXCLUDED_PAYLOAD_FIELDS
+        },
+        "signature": raw_event.get("event_id"),
     }
 
-def process_file(filepath: Path):
+
+def process_file(filepath: Path, writer: TelemetryWriter) -> None:
+    """Process a single incoming .jsonl file line by line.
+
+    Each valid line is normalized and logged via the given TelemetryWriter,
+    then appended to the pending findings file for the bridge timer. On
+    success the source file is moved to PROCESSED_DIR; on a fatal error it
+    is moved to QUARANTINE_DIR instead.
+
+    Args:
+        filepath: Path to the incoming .jsonl file to process.
+        writer: The TelemetryWriter used to persist normalized events.
+    """
     temp_path = filepath.with_suffix(".processing")
     shutil.move(str(filepath), str(temp_path))
-    accepted, rejected = 0, 0
-    
+    accepted_count, rejected_count = 0, 0
+
     try:
-        with temp_path.open('r') as f:
-            for line in f:
+        with temp_path.open('r') as line_source:
+            for line in line_source:
                 line = line.strip()
-                if not line: continue
+                if not line:
+                    continue
                 try:
-                    raw = json.loads(line)
-                    if "event_type" not in raw: raise ValueError("Missing event_type")
-                    canonical = normalize_pi_event(raw)
-                    writer.log_attempt(canonical)
+                    raw_event = json.loads(line)
+                    if "event_type" not in raw_event:
+                        raise ValueError("Missing event_type")
 
-                    # ALSO write to pending findings file for the bridge timer
-                    pending_file = ROOT / "runtime" / "analysis" / "pi_findings_pending.jsonl"
-                    pending_file.parent.mkdir(parents=True, exist_ok=True)
-                    with open(pending_file, 'a') as pf:
-                        pf.write(json.dumps(canonical) + "\n")
+                    canonical_event = normalize_pi_event(raw_event)
+                    writer.log_attempt(canonical_event)
 
-                    accepted += 1
-                except Exception as e:
-                    print(f"Quarantine bad line: {e}")
-                    rejected += 1
-        
+                    # Also write to pending findings file for the bridge timer.
+                    PENDING_FINDINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    with open(PENDING_FINDINGS_FILE, 'a') as pending_handle:
+                        pending_handle.write(json.dumps(canonical_event) + "\n")
+
+                    accepted_count += 1
+                except Exception as exc:
+                    print(f"Quarantine bad line: {exc}")
+                    rejected_count += 1
+
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         shutil.move(str(temp_path), str(PROCESSED_DIR / filepath.name))
-        print(f"✅ Ingested {filepath.name}: {accepted} accepted, {rejected} rejected.")
-    except Exception as e:
-        print(f"❌ Fatal error processing {filepath.name}: {e}")
+        print(f"✅ Ingested {filepath.name}: {accepted_count} accepted, {rejected_count} rejected.")
+    except Exception as exc:
+        print(f"❌ Fatal error processing {filepath.name}: {exc}")
         QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
         shutil.move(str(temp_path), str(QUARANTINE_DIR / filepath.name))
 
-if __name__ == "__main__":
+
+def main() -> None:
+    """Entry point: find and process all incoming Pi .jsonl files."""
     INCOMING_DIR.mkdir(parents=True, exist_ok=True)
-    files = list(INCOMING_DIR.glob("*.jsonl"))
-    if not files: print("No incoming Pi files."); sys.exit(0)
-    for f in files: process_file(f)
+    incoming_files = list(INCOMING_DIR.glob("*.jsonl"))
+
+    if not incoming_files:
+        print("No incoming Pi files.")
+        sys.exit(0)
+
+    writer = TelemetryWriter()
+    for filepath in incoming_files:
+        process_file(filepath, writer)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,9 @@
 """
 The deterministic brain of the SOC Autopilot.
+
+This module implements a bounded, budgeted investigation loop that consumes
+an `AlertCluster`, consults a (mocked) LLM for hypotheses/actions, and
+produces a recommended action along with a dry-run simulation result.
 """
 from __future__ import annotations
 
@@ -12,7 +16,10 @@ from uuid import UUID, uuid4
 from engine.deterministic_dedup import AlertCluster
 from engine.dry_run_executor import ActionRequest, SimulationResult, simulate_action
 
+
 class InvestigationState(str, Enum):
+    """Lifecycle states of an investigation, in roughly chronological order."""
+
     RECEIVED = "RECEIVED"
     NORMALIZED = "NORMALIZED"
     INVESTIGATING = "INVESTIGATING"
@@ -23,12 +30,38 @@ class InvestigationState(str, Enum):
     COMPLETE = "COMPLETE"
     SAFE_STOP = "SAFE_STOP"
 
+
+class LLMAction(str, Enum):
+    """Actions the (mocked) LLM can propose during an investigation step."""
+
+    REQUEST_EVIDENCE = "request_evidence"
+    RECOMMEND_ACTION = "recommend_action"
+
+
+class LLMProposal(BaseModel):
+    """A single proposal returned by the (mocked) LLM for the current step.
+
+    Depending on `action`, either `tool` (for evidence requests) or
+    `proposed_action` (for action recommendations) will be populated.
+    """
+
+    action: LLMAction
+    hypothesis: str
+    tool: Optional[str] = None
+    proposed_action: Optional[ActionRequest] = None
+
+
 class InvestigationBudget(BaseModel):
+    """Hard limits that bound how much work an investigation may perform."""
+
     max_iterations: int = 3
     max_wall_time_seconds: int = 10
     max_tool_calls: int = 5
 
+
 class InvestigationContext(BaseModel):
+    """Mutable state accumulated while running a single investigation."""
+
     investigation_id: UUID = Field(default_factory=uuid4)
     cluster: AlertCluster
     state: InvestigationState = InvestigationState.RECEIVED
@@ -43,67 +76,111 @@ class InvestigationContext(BaseModel):
     recommended_action: Optional[ActionRequest] = None
     simulation_result: Optional[SimulationResult] = None
 
-def _mock_llm_proposal(ctx: InvestigationContext) -> dict:
-    payload = ctx.cluster.representative_payload
+
+def _generate_mock_llm_proposal(context: InvestigationContext) -> LLMProposal:
+    """Produce the next LLM proposal for the given investigation context.
+
+    On the first tool call, the mock always asks for more evidence. On
+    subsequent calls, it recommends a concrete containment action based on
+    the alert's rule ID.
+
+    Args:
+        context: The current investigation state.
+
+    Returns:
+        The proposed next step (evidence request or action recommendation).
+    """
+    payload = context.cluster.representative_payload
     rule_id = payload.get("rule", {}).get("id", "unknown")
     src_ip = payload.get("src_ip", "unknown")
 
-    if ctx.tool_calls == 0:
-        return {
-            "action": "request_evidence",
-            "hypothesis": f"Analyzing rule {rule_id} from {src_ip}.",
-            "tool": "internal_log_search"
-        }
-    else:
-        # Smart Mock LLM: Proposes different actions based on the alert type
-        if rule_id == "5710": # Wazuh SSH Brute Force
-            target = payload.get("data", {}).get("dstuser") or "attacker_account"
-            proposed = ActionRequest(action_type="disable_user", target_id=target, reason="SSH Brute Force confirmed")
-        else: # Default to C2 / Block IP
-            proposed = ActionRequest(action_type="block_ip", target_id=src_ip, reason="Malicious traffic confirmed")
+    if context.tool_calls == 0:
+        return LLMProposal(
+            action=LLMAction.REQUEST_EVIDENCE,
+            hypothesis=f"Analyzing rule {rule_id} from {src_ip}.",
+            tool="internal_log_search",
+        )
 
-        return {
-            "action": "recommend_action",
-            "hypothesis": f"Confirmed malicious activity via rule {rule_id}.",
-            "proposed_action": proposed
-        }
+    # Smart Mock LLM: Proposes different actions based on the alert type.
+    if rule_id == "5710":  # Wazuh SSH Brute Force
+        target = payload.get("data", {}).get("dstuser") or "attacker_account"
+        proposed_action = ActionRequest(
+            action_type="disable_user",
+            target_id=target,
+            reason="SSH Brute Force confirmed",
+        )
+    else:  # Default to C2 / Block IP
+        proposed_action = ActionRequest(
+            action_type="block_ip",
+            target_id=src_ip,
+            reason="Malicious traffic confirmed",
+        )
 
-def run_investigation(cluster: AlertCluster, budget: Optional[InvestigationBudget] = None) -> InvestigationContext:
-    ctx = InvestigationContext(cluster=cluster, budget=budget or InvestigationBudget())
+    return LLMProposal(
+        action=LLMAction.RECOMMEND_ACTION,
+        hypothesis=f"Confirmed malicious activity via rule {rule_id}.",
+        proposed_action=proposed_action,
+    )
 
-    ctx.state = InvestigationState.NORMALIZED
-    ctx.state = InvestigationState.INVESTIGATING
 
-    while ctx.state == InvestigationState.INVESTIGATING:
-        elapsed = (datetime.now(timezone.utc) - ctx.started_at).total_seconds()
-        if (ctx.iterations >= ctx.budget.max_iterations or
-            elapsed >= ctx.budget.max_wall_time_seconds or
-            ctx.tool_calls >= ctx.budget.max_tool_calls):
-            ctx.state = InvestigationState.SAFE_STOP
+def run_investigation(
+    cluster: AlertCluster, budget: Optional[InvestigationBudget] = None
+) -> InvestigationContext:
+    """Run a bounded investigation loop over the given alert cluster.
+
+    Repeatedly consults the (mocked) LLM for hypotheses and either gathers
+    evidence or produces a recommended action, subject to the iteration,
+    wall-time, and tool-call limits defined by `budget`. If a recommendation
+    is produced, it is dry-run simulated before the investigation completes.
+
+    Args:
+        cluster: The deduplicated alert cluster to investigate.
+        budget: Optional override of the default investigation budget.
+
+    Returns:
+        The final `InvestigationContext`, including its terminal state,
+        any recommended action, and the corresponding simulation result.
+    """
+    context = InvestigationContext(cluster=cluster, budget=budget or InvestigationBudget())
+
+    context.state = InvestigationState.NORMALIZED
+    context.state = InvestigationState.INVESTIGATING
+
+    while context.state == InvestigationState.INVESTIGATING:
+        elapsed_seconds = (datetime.now(timezone.utc) - context.started_at).total_seconds()
+        budget_exhausted = (
+            context.iterations >= context.budget.max_iterations
+            or elapsed_seconds >= context.budget.max_wall_time_seconds
+            or context.tool_calls >= context.budget.max_tool_calls
+        )
+        if budget_exhausted:
+            context.state = InvestigationState.SAFE_STOP
             break
 
-        ctx.iterations += 1
-        proposal = _mock_llm_proposal(ctx)
+        context.iterations += 1
+        proposal = _generate_mock_llm_proposal(context)
 
-        if proposal["action"] == "request_evidence":
-            ctx.hypotheses.append(proposal["hypothesis"])
-            ctx.state = InvestigationState.WAITING_FOR_EVIDENCE
-            ctx.evidence.append("Internal logs confirm malicious intent (Mocked).")
-            ctx.tool_calls += 1
-            ctx.state = InvestigationState.EVALUATING
-            ctx.state = InvestigationState.INVESTIGATING
+        if proposal.action == LLMAction.REQUEST_EVIDENCE:
+            context.hypotheses.append(proposal.hypothesis)
+            context.state = InvestigationState.WAITING_FOR_EVIDENCE
+            context.evidence.append("Internal logs confirm malicious intent (Mocked).")
+            context.tool_calls += 1
+            # Evidence gathered synchronously in this mock; transition through
+            # EVALUATING and back to INVESTIGATING to loop for the next proposal.
+            context.state = InvestigationState.EVALUATING
+            context.state = InvestigationState.INVESTIGATING
 
-        elif proposal["action"] == "recommend_action":
-            ctx.hypotheses.append(proposal["hypothesis"])
-            ctx.recommended_action = proposal["proposed_action"]
-            ctx.state = InvestigationState.READY_FOR_RECOMMENDATION
+        elif proposal.action == LLMAction.RECOMMEND_ACTION:
+            context.hypotheses.append(proposal.hypothesis)
+            context.recommended_action = proposal.proposed_action
+            context.state = InvestigationState.READY_FOR_RECOMMENDATION
 
-    if ctx.state == InvestigationState.READY_FOR_RECOMMENDATION and ctx.recommended_action:
-        ctx.simulation_result = simulate_action(ctx.recommended_action)
+    if context.state == InvestigationState.READY_FOR_RECOMMENDATION and context.recommended_action:
+        context.simulation_result = simulate_action(context.recommended_action)
 
-        if ctx.simulation_result.affected_critical_services > 0:
-            ctx.state = InvestigationState.REVIEW_REQUIRED
+        if context.simulation_result.affected_critical_services > 0:
+            context.state = InvestigationState.REVIEW_REQUIRED
         else:
-            ctx.state = InvestigationState.COMPLETE
+            context.state = InvestigationState.COMPLETE
 
-    return ctx
+    return context

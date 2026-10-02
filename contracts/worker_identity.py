@@ -8,7 +8,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass, asdict
-from typing import Dict, Optional, Set
+from typing import Any, Dict, Optional, Set
 
 
 @dataclass(frozen=True)
@@ -43,18 +43,20 @@ class WorkerVote:
     task_id: str
     signature: str
 
-    def __post_init__(self):
-        fields = [
+    def __post_init__(self) -> None:
+        """Validate that all string fields are non-empty and timestamp is numeric."""
+        string_fields = [
             self.worker_id, self.worker_class, self.worker_instance,
             self.execution_host, self.software_version, self.candidate_hash,
             self.decision, self.task_id, self.signature,
         ]
-        if not all(isinstance(f, str) and f.strip() for f in fields):
+        if not all(isinstance(field_value, str) and field_value.strip() for field_value in string_fields):
             raise ValueError("WorkerVote requires non-empty string fields.")
         if not isinstance(self.timestamp, (int, float)):
             raise ValueError("WorkerVote timestamp must be a number.")
 
     def canonical_json(self) -> str:
+        """Return the deterministic JSON serialization of all vote fields, including signature."""
         return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
 
     def signing_payload(self) -> str:
@@ -64,6 +66,7 @@ class WorkerVote:
         return json.dumps(data, sort_keys=True, separators=(",", ":"))
 
     def compute_hash(self) -> str:
+        """Return the SHA-256 hex digest of the canonical JSON representation."""
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
 
@@ -74,7 +77,15 @@ class VoteValidator:
     worker uniqueness, and Ed25519 signature verification.
     """
 
-    def __init__(self, key_registry=None, max_clock_skew_seconds: int = 300):
+    def __init__(self, key_registry: Optional[Any] = None, max_clock_skew_seconds: int = 300) -> None:
+        """
+        Initialize the validator.
+
+        :param key_registry: Optional object exposing get_public_key(worker_id) used
+            to verify Ed25519 signatures. If None, signature verification is skipped.
+        :param max_clock_skew_seconds: Maximum allowed difference, in seconds, between
+            the vote timestamp and the current time.
+        """
         if not isinstance(max_clock_skew_seconds, int) or max_clock_skew_seconds < 0:
             raise ValueError("max_clock_skew_seconds must be a non-negative integer.")
         self.max_clock_skew_seconds = max_clock_skew_seconds
@@ -83,6 +94,19 @@ class VoteValidator:
         self.key_registry = key_registry
 
     def validate(self, vote: WorkerVote, expected_candidate_hash: str) -> None:
+        """
+        Validate a WorkerVote against the expected candidate hash.
+
+        Performs, in order:
+          1. Candidate binding check.
+          2. Timestamp freshness check.
+          3. Replay protection (duplicate signature) check.
+          4. Worker independence check per candidate.
+          5. Ed25519 cryptographic signature verification (if key_registry is set).
+
+        Raises ValueError on any validation failure. On success, registers the
+        vote's signature and worker id so future duplicate votes are rejected.
+        """
         # 1. Candidate binding
         if vote.candidate_hash != expected_candidate_hash:
             raise ValueError("Wrong candidate hash.")

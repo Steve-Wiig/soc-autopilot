@@ -15,14 +15,22 @@ Provides:
 import hashlib
 import json
 from pathlib import Path
+from typing import Any, Callable, Dict, List
 
 
-def record_fingerprint(record: dict) -> str:
+def record_fingerprint(record: Dict[str, Any]) -> str:
     """
-    Stable identity for a memory record.
+    Compute a stable identity hash for a memory record.
 
     Excludes timestamp so repeated observations
     of the same failure deduplicate.
+
+    Args:
+        record: The memory record to fingerprint.
+
+    Returns:
+        A hex-encoded SHA-256 digest derived from the
+        record's identity-relevant fields.
     """
 
     keys = [
@@ -52,17 +60,26 @@ def record_fingerprint(record: dict) -> str:
     ).hexdigest()
 
 
-def load_records(path: Path):
+def load_records(path: Path) -> List[Dict[str, Any]]:
     """
-    Load JSONL safely.
+    Load JSONL records from disk safely.
 
-    Invalid lines are ignored.
+    Missing files yield an empty list. Invalid lines
+    (malformed JSON) are silently skipped rather than
+    raising, so a single corrupted line cannot break
+    retrieval of the rest of the file.
+
+    Args:
+        path: Path to the JSONL file.
+
+    Returns:
+        A list of parsed record dictionaries.
     """
 
     if not path.exists():
         return []
 
-    records = []
+    records: List[Dict[str, Any]] = []
 
     try:
         with path.open(
@@ -88,14 +105,21 @@ def load_records(path: Path):
 
 def append_unique(
     path: Path,
-    record: dict,
+    record: Dict[str, Any],
 ) -> bool:
     """
-    Append only if identical memory does not exist.
+    Append a record only if an identical memory does not already exist.
+
+    Identity is determined by record_fingerprint(), which
+    ignores volatile fields like timestamps.
+
+    Args:
+        path: Path to the JSONL file to append to.
+        record: The record to append.
 
     Returns:
-        True  = appended
-        False = duplicate/skipped
+        True if the record was appended, False if it was
+        a duplicate and therefore skipped.
     """
 
     existing = load_records(path)
@@ -111,15 +135,15 @@ def append_unique(
         exist_ok=True,
     )
 
-    record = dict(record)
-    record["memory_hash"] = new_hash
+    enriched_record = dict(record)
+    enriched_record["memory_hash"] = new_hash
 
     with path.open(
         "a",
         encoding="utf-8",
     ) as f:
         f.write(
-            json.dumps(record)
+            json.dumps(enriched_record)
             + "\n"
         )
 
@@ -128,7 +152,7 @@ def append_unique(
 
 def append_record(
     path: Path,
-    record: dict,
+    record: Dict[str, Any],
 ) -> None:
     """
     Append an event record without deduplication.
@@ -140,6 +164,10 @@ def append_record(
 
     Unlike append_unique(), repeated identical
     records are expected and preserved.
+
+    Args:
+        path: Path to the JSONL file to append to.
+        record: The record to append.
     """
 
     path.parent.mkdir(
@@ -159,14 +187,23 @@ def append_record(
 
 def find_matching(
     path: Path,
-    predicate,
-    limit=5,
-):
+    predicate: Callable[[Dict[str, Any]], bool],
+    limit: int = 5,
+) -> List[Dict[str, Any]]:
     """
-    Generic bounded retrieval.
+    Retrieve up to `limit` records satisfying `predicate`.
+
+    Args:
+        path: Path to the JSONL file to search.
+        predicate: A callable that receives a record and
+            returns True if it should be included.
+        limit: Maximum number of matching records to return.
+
+    Returns:
+        A bounded list of matching records, in file order.
     """
 
-    results = []
+    results: List[Dict[str, Any]] = []
 
     for item in load_records(path):
         try:
@@ -177,6 +214,9 @@ def find_matching(
                     break
 
         except Exception:
+            # Intentionally broad: a malformed record or a
+            # predicate that raises on unexpected shapes must
+            # not abort retrieval of the remaining records.
             continue
 
     return results
@@ -198,6 +238,17 @@ def fingerprint_failure(
     failure_signature: str,
     lesson: str,
 ) -> str:
+    """
+    Compute a fingerprint for a failure record.
+
+    Args:
+        target: The file or resource the failure relates to.
+        failure_signature: Identifier describing the failure mode.
+        lesson: The constraint/lesson learned from the failure.
+
+    Returns:
+        A hex-encoded SHA-256 digest identifying this failure.
+    """
     return record_fingerprint(
         {
             "file": target,
@@ -207,21 +258,57 @@ def fingerprint_failure(
     )
 
 
-def append_failure(path: Path, record: dict):
+def append_failure(
+    path: Path,
+    record: Dict[str, Any],
+) -> bool:
+    """
+    Append a failure record if it is not a duplicate.
+
+    Args:
+        path: Path to the JSONL file to append to.
+        record: The failure record to append.
+
+    Returns:
+        True if the record was appended, False if it was a duplicate.
+    """
     return append_unique(
         path,
         record,
     )
 
 
-def load_failures(path: Path):
+def load_failures(path: Path) -> List[Dict[str, Any]]:
+    """
+    Load all failure records from disk.
+
+    Args:
+        path: Path to the JSONL file.
+
+    Returns:
+        A list of parsed failure record dictionaries.
+    """
     return load_records(path)
 
 
 def find_matching_failures(
     path: Path,
     fingerprint: str,
-):
+) -> List[Dict[str, Any]]:
+    """
+    Find failure records matching a given fingerprint.
+
+    Matches either an explicit `fingerprint` field on the
+    record or a record whose computed fingerprint equals
+    the given value.
+
+    Args:
+        path: Path to the JSONL file to search.
+        fingerprint: The fingerprint to match against.
+
+    Returns:
+        A bounded list of matching failure records.
+    """
     return find_matching(
         path,
         lambda item: (

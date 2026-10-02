@@ -1,9 +1,18 @@
+"""Suricata EVE JSON intake pipeline.
+
+Reads Suricata EVE JSON events (either singly via `enqueue_event` or in bulk
+via `process_eve_file`), sanitizes them (redacting high-entropy values that
+may contain secrets), and stores them in the `triage_queue` SQLite table for
+downstream triage. Also maintains an `audit_log` table recording status
+transitions.
+"""
+
 import json
 import sqlite3
 import os
 import logging
 import math
-import hashlib
+from collections import Counter
 from typing import Any, Dict, List, Optional, Callable, TypeVar, Generator
 from datetime import datetime, timezone
 from contextlib import contextmanager
@@ -39,9 +48,19 @@ def configure_logging() -> None:
 
 
 @contextmanager
-@contextmanager
-def transaction(conn: sqlite3.Connection) -> Generator[sqlite3.Cursor, None, None]:
-    """Provide a transactional scope around a series of operations."""
+def transaction_scope(conn: sqlite3.Connection) -> Generator[sqlite3.Cursor, None, None]:
+    """Provide a transactional scope around a series of operations.
+
+    Yields a cursor for the given connection. On successful exit the
+    transaction is committed; if an exception is raised, the transaction is
+    rolled back and the exception re-raised.
+
+    Args:
+        conn: The database connection to run the transaction on.
+
+    Yields:
+        A cursor bound to the given connection.
+    """
     cursor = conn.cursor()
     try:
         yield cursor
@@ -53,7 +72,15 @@ def transaction(conn: sqlite3.Connection) -> Generator[sqlite3.Cursor, None, Non
 
 @contextmanager
 def get_connection() -> Generator[sqlite3.Connection, None, None]:
-    """Context manager for database connections with automatic cleanup."""
+    """Context manager for database connections with automatic cleanup.
+
+    Yields:
+        A SQLite connection with `row_factory` set to `sqlite3.Row`.
+
+    Raises:
+        RuntimeError: If logging has not been configured via
+            `configure_logging()` before this is called.
+    """
     if not logger.handlers:
         raise RuntimeError("Logging not configured. Call configure_logging() before using database.")
     conn = sqlite3.connect(DB_PATH)
@@ -65,13 +92,23 @@ def get_connection() -> Generator[sqlite3.Connection, None, None]:
 
 
 def with_db(transaction: bool = False) -> Callable[[Callable[..., T]], Callable[..., T]]:
-    """Parameterized decorator for database operations with optional transaction handling."""
+    """Parameterized decorator for database operations with optional transaction handling.
+
+    Args:
+        transaction: If True, the wrapped function receives a cursor bound to
+            a committed/rolled-back transaction; otherwise it receives the
+            raw connection.
+
+    Returns:
+        A decorator that injects a connection (or transactional cursor) as
+        the first argument of the wrapped function.
+    """
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         def wrapper(*args: Any, **kwargs: Any) -> T:
             try:
                 with get_connection() as conn:
                     if transaction:
-                        with transaction(conn) as cursor:
+                        with transaction_scope(conn) as cursor:
                             return func(cursor, *args, **kwargs)
                     else:
                         return func(conn, *args, **kwargs)
@@ -83,11 +120,15 @@ def with_db(transaction: bool = False) -> Callable[[Callable[..., T]], Callable[
 
 
 def execute_in_transaction(func: Callable[..., T]) -> Callable[..., T]:
-    """Decorator that provides a connection with transaction handling."""
+    """Decorator that provides a connection with transaction handling.
+
+    The wrapped function receives a cursor as its first argument, running
+    inside a committed/rolled-back transaction.
+    """
     def wrapper(*args: Any, **kwargs: Any) -> T:
         try:
             with get_connection() as conn:
-                with transaction(conn) as cursor:
+                with transaction_scope(conn) as cursor:
                     return func(cursor, *args, **kwargs)
         except Exception as e:
             logger.error(f"{func.__name__} error: {e}")
@@ -96,7 +137,11 @@ def execute_in_transaction(func: Callable[..., T]) -> Callable[..., T]:
 
 
 def execute_with_connection(func: Callable[..., T]) -> Callable[..., T]:
-    """Decorator that provides a connection and handles errors."""
+    """Decorator that provides a connection and handles errors.
+
+    The wrapped function receives the raw connection as its first argument
+    (no automatic transaction handling).
+    """
     def wrapper(*args: Any, **kwargs: Any) -> T:
         try:
             with get_connection() as conn:
@@ -118,7 +163,7 @@ def init_db() -> None:
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
         with get_connection() as conn:
-            with transaction(conn) as cursor:
+            with transaction_scope(conn) as cursor:
                 cursor.execute(
                     """
                     CREATE TABLE IF NOT EXISTS triage_queue (
@@ -208,6 +253,18 @@ def redact_value(value: Any) -> Any:
 
 
 def sanitize_recursive(obj: Any) -> Any:
+    """Recursively walk a JSON-like structure, redacting high-entropy strings.
+
+    Dicts and lists are mutated and traversed in place; all other values are
+    passed through `redact_value`.
+
+    Args:
+        obj: A dict, list, or scalar value (typically from parsed JSON).
+
+    Returns:
+        The same structure passed in, with any high-entropy string leaves
+        replaced by a redaction marker.
+    """
     if isinstance(obj, dict):
         for k, v in obj.items():
             obj[k] = sanitize_recursive(v)
@@ -322,7 +379,7 @@ def process_eve_file(filepath: str) -> int:
 
     try:
         with get_connection() as conn:
-            with transaction(conn) as cursor:
+            with transaction_scope(conn) as cursor:
                 cursor.executemany(
                     "INSERT INTO triage_queue (payload, severity) VALUES (?, ?)",
                     rows,
@@ -337,6 +394,7 @@ def get_pending_events(conn: sqlite3.Connection, limit: int = 100) -> List[Dict[
     """Retrieves pending events from the triage_queue.
 
     Args:
+        conn: An open database connection.
         limit: Maximum number of events to retrieve.
 
     Returns:

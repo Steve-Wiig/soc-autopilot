@@ -1,7 +1,18 @@
+"""
+IOC (Indicator of Compromise) extraction utilities.
+
+This module extracts, sanitizes, deduplicates, and persists IOCs
+(IPv4 addresses, domains, URLs, SHA256 hashes, and emails) found in
+sanitized alert payloads. It is compliant with soc-autopilot Section 30
+(audit) and Section 34 (sanitization).
+"""
+
 import json
 import logging
+import math
 import os
 import re
+from collections import Counter
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
@@ -64,11 +75,18 @@ _SECRET_PATTERNS = [
 
 
 def _calculate_entropy(s: str) -> float:
-    """Calculate Shannon entropy of a string (bits per character)."""
+    """
+    Calculate Shannon entropy of a string (bits per character).
+    
+    Args:
+        s: Input string to measure.
+    
+    Returns:
+        Shannon entropy in bits per character. 0.0 for empty strings.
+    """
     if not s:
         return 0.0
     
-    from collections import Counter
     counts = Counter(s)
     length = len(s)
     entropy = 0.0
@@ -76,7 +94,7 @@ def _calculate_entropy(s: str) -> float:
     for count in counts.values():
         probability = count / length
         if probability > 0:
-            entropy -= probability * (probability and __import__('math').log2(probability))
+            entropy -= probability * math.log2(probability)
     
     return entropy
 
@@ -154,6 +172,8 @@ def sanitize_ioc(value: str, ioc_type: str) -> Optional[str]:
 # ============================================================
 
 class IOCType(Enum):
+    """Supported IOC (Indicator of Compromise) categories."""
+
     IPV4 = "ipv4"
     DOMAIN = "domain"
     URL = "url"
@@ -186,6 +206,38 @@ _ALERT_TEXT_FIELDS = {'description', 'message', 'summary', 'details', 'text', 'c
 # Maximum text length to prevent regex catastrophic backtracking
 _MAX_TEXT_LENGTH = 100_000  # 100KB
 
+# Maximum recursion depth when walking nested alert structures
+_MAX_RECURSION_DEPTH = 10
+
+
+def _extract_alert_text_fields(obj: Any, depth: int = 0) -> str:
+    """
+    Recursively extract text from a dict/list, targeting known alert fields.
+    
+    Args:
+        obj: The object (dict, list, str, or other) to search.
+        depth: Current recursion depth, used to prevent unbounded recursion.
+    
+    Returns:
+        A single string containing all discovered text, space-joined.
+    """
+    if depth > _MAX_RECURSION_DEPTH:
+        return ''
+    
+    if isinstance(obj, dict):
+        text_parts = []
+        for key in _ALERT_TEXT_FIELDS:
+            if key in obj and isinstance(obj[key], str):
+                text_parts.append(obj[key])
+        for value in obj.values():
+            text_parts.append(_extract_alert_text_fields(value, depth + 1))
+        return ' '.join(text_parts)
+    elif isinstance(obj, list):
+        return ' '.join(_extract_alert_text_fields(item, depth + 1) for item in obj)
+    elif isinstance(obj, str):
+        return obj
+    return ''
+
 
 def extract_iocs_from_text(text: str, max_text_length: int = _MAX_TEXT_LENGTH) -> Dict[IOCType, set]:
     """
@@ -198,29 +250,10 @@ def extract_iocs_from_text(text: str, max_text_length: int = _MAX_TEXT_LENGTH) -
     Returns:
         Dictionary mapping IOCType to set of matched values.
     """
-    def _extract_text_fields(obj: Any, depth: int = 0) -> str:
-        """Recursively extract text from dict/list, targeting known alert fields."""
-        if depth > 10:  # Prevent infinite recursion
-            return ''
-        
-        if isinstance(obj, dict):
-            text_parts = []
-            for key in _ALERT_TEXT_FIELDS:
-                if key in obj and isinstance(obj[key], str):
-                    text_parts.append(obj[key])
-            for value in obj.values():
-                text_parts.append(_extract_text_fields(value, depth + 1))
-            return ' '.join(text_parts)
-        elif isinstance(obj, list):
-            return ' '.join(_extract_text_fields(item, depth + 1) for item in obj)
-        elif isinstance(obj, str):
-            return obj
-        return ''
-
     if text and text[0] in ('{', '['):
         try:
             data = json.loads(text)
-            text = _extract_text_fields(data)
+            text = _extract_alert_text_fields(data)
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -280,9 +313,9 @@ def persist_iocs(
         should_close = True
 
     try:
-        cur = conn.cursor()
+        cursor = conn.cursor()
 
-        query = """
+        upsert_and_audit_query = """
             WITH ins AS (
                 INSERT INTO iocs (value, type, enrichment_status, first_seen)
                 VALUES %s
@@ -292,10 +325,10 @@ def persist_iocs(
             INSERT INTO ioc_audit (value, type, action, timestamp)
             SELECT value, type, 'insert', first_seen FROM ins;
         """
-        execute_values(cur, query, extracted)
+        execute_values(cursor, upsert_and_audit_query, extracted)
 
         conn.commit()
-        cur.close()
+        cursor.close()
     finally:
         if should_close and conn is not None:
             conn.close()
@@ -363,7 +396,16 @@ def extract_iocs(
 
 
 def _extract_alert_id(alert_json: Dict[str, Any]) -> str:
-    """Extract alert ID from sanitized alert JSON using common field names."""
+    """
+    Extract alert ID from sanitized alert JSON using common field names.
+    
+    Args:
+        alert_json: Sanitized alert payload to search.
+    
+    Returns:
+        The first non-empty value found among known ID field names,
+        or "unknown" if none are present.
+    """
     for key in ("alert_id", "alertId", "id", "alert_id_str"):
         if key in alert_json and alert_json[key]:
             return str(alert_json[key])

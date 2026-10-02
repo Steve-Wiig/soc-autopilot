@@ -1,0 +1,2 @@
+
+tools/external_credential_permission_check.py
