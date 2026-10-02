@@ -1,0 +1,17 @@
+[
+    {
+        "file": "engine/aider_provider.py",
+        "task": "Extract a stable Provider-Selection Interface (ProviderCatalogABC) to decouple AI logic from volatile external APIs.",
+        "priority": "high"
+    },
+    {
+        "file": "contracts/worker_identity.py",
+        "task": "Extract a VoteSerializer adapter class with strict to_canonical_json() and signing_payload() methods.",
+        "priority": "high"
+    },
+    {
+        "file": "tools/dynamic_vram_budget_check.py",
+        "task": "Replace ad-hoc parse_mem_value() with a typed MemoryUnit dataclass and isolated parsing logic.",
+        "priority": "medium"
+    }
+]
