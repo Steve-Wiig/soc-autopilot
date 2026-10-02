@@ -159,67 +159,7 @@ def main() -> None:
     corpus = input_path.read_text(encoding="utf-8")
     print(f"   Loaded {len(corpus):,} characters ({len(corpus.split()):,} words)")
 
-    # CROSS-FILE DEPENDENCY MAPPING (Ripple Effect Warning)
-    print("🗺️  Mapping cross-file dependencies...")
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["python3", "tools/dependency_mapper.py", str(input_path)],
-            capture_output=True, text=True, timeout=10
-        )
-        dep_output = result.stdout.strip()
-        if dep_output.startswith("DEPENDENTS_FOUND:"):
-            dep_list = dep_output.replace("DEPENDENTS_FOUND:", "").strip()
-            ripple_warning = f"""
-
-### ⚠️ CRITICAL CROSS-FILE DEPENDENCIES (RIPPLE EFFECT)
-The following files IMPORT from this module. If you change function signatures, dataclass fields, or exported variables in this file, you MUST update these dependent files to prevent breaking the build:
-{dep_list}
-"""
-            print(f"   ⚠️  Found dependent files. Injecting ripple warning into prompt.")
-        else:
-            ripple_warning = "
-### ℹ️ No external files import from this module. Safe to refactor internally.
-"
-            print("   ✅ No external dependents found.")
-    except Exception as e:
-        ripple_warning = ""
-        print(f"   ⚠️  Dependency mapping failed: {e}")
-
-
-    # Build prompt
-    if args.prompt_file:
-        prompt_path = Path(args.prompt_file)
-        if not prompt_path.exists():
-            print(f"❌ Prompt file not found: {prompt_path}")
-            sys.exit(1)
-        prompt_template = prompt_path.read_text(encoding="utf-8")
-        if "{corpus}" not in prompt_template:
-            print("⚠️  Warning: Prompt file doesn't contain {corpus} placeholder. Appending data.")
-            prompt_template += "\n\n=== BEGIN DATA ===\n{corpus}\n=== END DATA ==="
-    else:
-        prompt_template = DEFAULT_PROMPT
-
-    # ARCHITECTURAL BACKLOG OVERRIDE (Implementation Mode)
-    if os.getenv("IS_BACKLOG_TASK") == "true":
-        task_desc = os.getenv("BACKLOG_TASK_DESCRIPTION", "Refactor this module.")
-        prompt_template = f"""You are a Senior Staff Engineer implementing a critical architectural refactor.
-
-TARGET FILE CONTENT:
-{{corpus}}
-
-CRITICAL TASK: {task_desc}
-
-RULES:
-- Output ONLY valid Python code or SEARCH/REPLACE blocks.
-- Ensure all existing tests pass.
-- Do not break existing API contracts unless explicitly required by the task.
-- Focus on decoupling, type safety, and testability.
-"""
-        system_content = "You are an expert Python engineer executing precise refactors."
-    else:
-        system_content = "You are a Staff Software Engineer and Security Architect. Provide structured, evidence-based analysis."
-
+    # AST Mapper temporarily disabled for syntax fix
     user_prompt = prompt_template.replace("{corpus}", corpus)
     user_prompt += ripple_warning
 
