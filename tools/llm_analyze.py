@@ -172,6 +172,26 @@ def main() -> None:
     else:
         prompt_template = DEFAULT_PROMPT
 
+    # ARCHITECTURAL BACKLOG OVERRIDE (Implementation Mode)
+    if os.getenv("IS_BACKLOG_TASK") == "true":
+        task_desc = os.getenv("BACKLOG_TASK_DESCRIPTION", "Refactor this module.")
+        prompt_template = f"""You are a Senior Staff Engineer implementing a critical architectural refactor.
+
+TARGET FILE CONTENT:
+{{corpus}}
+
+CRITICAL TASK: {task_desc}
+
+RULES:
+- Output ONLY valid Python code or SEARCH/REPLACE blocks.
+- Ensure all existing tests pass.
+- Do not break existing API contracts unless explicitly required by the task.
+- Focus on decoupling, type safety, and testability.
+"""
+        system_content = "You are an expert Python engineer executing precise refactors."
+    else:
+        system_content = "You are a Staff Software Engineer and Security Architect. Provide structured, evidence-based analysis."
+
     user_prompt = prompt_template.replace("{corpus}", corpus)
 
     # Initialize client
@@ -188,7 +208,7 @@ def main() -> None:
         response = client.chat.completions.create(
             model=args.model,
             messages=[
-                {"role": "system", "content": "You are a Staff Software Engineer and Security Architect. Provide structured, evidence-based analysis."},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": user_prompt}
             ],
             temperature=args.temperature,
