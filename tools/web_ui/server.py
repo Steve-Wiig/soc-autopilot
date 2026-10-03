@@ -100,6 +100,12 @@ async def get_logs():
         return {"logs": lines[-50:]}
     return {"logs": []}
 
+@app.get("/api/chat")
+async def chat(request: Request):
+    data = await request.json()
+    message = data.get("message", "")
+    return {"reply": f"AI is thinking about: {message}"}
+
 @app.get("/stream/logs")
 async def stream_logs():
     async def event_generator():
