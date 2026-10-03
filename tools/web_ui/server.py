@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import json
@@ -104,6 +104,13 @@ async def get_logs():
     if log_file.exists():
         return {"logs": log_file.read_text().splitlines()[-50:]}
     return {"logs": []}
+
+@app.get("/api/logs/download")
+async def download_logs():
+    log_file = BASE_DIR / "logs" / "swarm_systemd.log"
+    if log_file.exists():
+        return FileResponse(log_file, filename='swarm_systemd.log')
+    return JSONResponse(status_code=404, content={'detail': 'Log file not found'})
 
 @app.get("/api/usage")
 async def get_usage():
