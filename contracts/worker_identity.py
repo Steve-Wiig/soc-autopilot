@@ -161,8 +161,7 @@ class VoteValidator:
             raise ValueError("Wrong candidate hash.")
 
         # 2. Timestamp freshness
-        current_time = int(time.time())
-        if abs(current_time - int(vote.timestamp)) > self.max_clock_skew_seconds:
+        if abs(time.time() - vote.timestamp) > self.max_clock_skew_seconds:
             raise ValueError("Stale timestamp.")
 
         # 3. Replay protection
