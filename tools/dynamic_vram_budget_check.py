@@ -65,27 +65,20 @@ class MemoryUnit:
         except ValueError as e:
             raise ValueError(f"Invalid numeric value in '{val_str}': {e}")
 
-    unit = unit.lower()
-    if unit in ('gib', 'gi'):
-        value *= 1024  # Binary GiB to MiB
-    elif unit in ('gb', 'g'):
-        value *= 953.67431640625  # Decimal GB to MiB (10^9 / 2^20)
-    elif unit in ('mib', 'mi', 'mb', 'm', ''):
-        pass  # Already in MiB or default to MiB
-    elif unit in ('kib', 'ki'):
-        value /= 1024  # Binary KiB to MiB
-    elif unit in ('kb', 'k'):
-        value /= 1048.576  # Decimal KB to MiB (10^3 / 2^20)
-    else:
-        import logging
-        logging.warning(f"Unknown memory unit '{unit}', defaulting to MiB")
-    elif unit == 'gb':
-        value = value * 1000 / 1024  # Decimal GB to MiB
-    elif unit == 'g':
-        value *= 1024  # Default 'g' to GiB
-        elif unit in ('kib', 'kb', 'k'):
-            value /= 1024
-        # For 'mib', 'mb', 'm', or no unit, keep the value as-is (assumed MiB)
+        unit = unit.lower()
+        if unit in ('gib', 'gi'):
+            value *= 1024  # Binary GiB to MiB
+        elif unit in ('gb', 'g'):
+            value *= 953.67431640625  # Decimal GB to MiB (10^9 / 2^20)
+        elif unit in ('mib', 'mi', 'mb', 'm', ''):
+            pass  # Already in MiB or default to MiB
+        elif unit in ('kib', 'ki'):
+            value /= 1024  # Binary KiB to MiB
+        elif unit in ('kb', 'k'):
+            value /= 1048.576  # Decimal KB to MiB (10^3 / 2^20)
+        else:
+            import logging
+            logging.warning(f"Unknown memory unit '{unit}', defaulting to MiB")
 
         return cls(value_mib=int(value))
 
