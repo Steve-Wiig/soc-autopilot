@@ -34,7 +34,10 @@ async def get_status():
     if skip_file.exists():
         skip_count = sum(1 for line in skip_file.read_text().splitlines() if line.strip())
         
-    return {"current_task": current_task, "skipped_files": skip_count}
+    paused_file = BASE_DIR / ".swarm_paused"
+    is_paused = paused_file.exists()
+        
+    return {"current_task": current_task, "skipped_files": skip_count, "paused": is_paused}
 
 @app.post("/api/pause")
 async def toggle_pause():

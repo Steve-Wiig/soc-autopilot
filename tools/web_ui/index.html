@@ -97,6 +97,16 @@
                 const data = await res.json();
                 document.getElementById('current-task').textContent = data.current_task || 'Idle';
                 document.getElementById('skipped-files').textContent = data.skipped_files;
+                
+                // Sync Pause/Resume button state
+                const btn = document.getElementById('swarmToggle');
+                if (data.paused) {
+                    btn.textContent = 'RESUME';
+                    btn.className = 'bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm';
+                } else {
+                    btn.textContent = 'PAUSE';
+                    btn.className = 'bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm';
+                }
             } catch (e) { console.error(e); }
         }
         setInterval(updateStatus, 5000); updateStatus();
