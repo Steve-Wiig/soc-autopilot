@@ -153,9 +153,39 @@ def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
 
     try:
         gpus = gpu_data.findall('.//gpu')  # Use .// to handle potential XML namespaces
-        if not gpus:
-            return VramCheckResult(success=False, used_mb=0, budget_mb=0, message='CONFIG ERROR: No GPU elements found in nvidia-smi output', exit_code=EXIT_CONFIG_ERROR)
-        gpu = gpus[0]  # Check primary GPU (expand to loop if multi-GPU sum is required)
+    if not gpus:
+        return VramCheckResult(success=False, used_mb=0, budget_mb=0, message='CONFIG ERROR: No GPU elements found in nvidia-smi output', exit_code=EXIT_CONFIG_ERROR)
+    
+    # Check ALL GPUs. Fail if ANY exceeds the budget.
+    for gpu in gpus:
+        fb_memory = gpu.find('fb_memory_usage')
+        if fb_memory is None:
+            continue
+            
+        total_str = fb_memory.find('total').text if fb_memory.find('total') is not None else '0'
+        used_str = fb_memory.find('used').text if fb_memory.find('used') is not None else '0'
+        
+        try:
+            total_mb = MemoryUnit.parse(total_str)
+            used_mb = MemoryUnit.parse(used_str)
+        except ValueError as e:
+            return VramCheckResult(
+                success=False, used_mb=0, budget_mb=0,
+                message=f"CONFIG ERROR: Failed to parse GPU memory metrics. Check nvidia-smi output for missing tags or 'Unknown' values. ({e})",
+                exit_code=EXIT_CONFIG_ERROR
+            )
+            
+        budget_mb = int(total_mb * DEFAULT_VRAM_BUDGET_RATIO)
+        
+        if used_mb > budget_mb:
+            return VramCheckResult(
+                success=False, used_mb=used_mb, budget_mb=budget_mb,
+                message=f"VRAM BUDGET EXCEEDED: Using {used_mb} MiB / {budget_mb} MiB budget",
+                exit_code=EXIT_FAIL
+            )
+            
+    # If we get here, all GPUs are within budget. Return success for the last checked GPU's metrics.
+    return VramCheckResult(success=True, used_mb=used_mb, budget_mb=budget_mb, message="VRAM budget check passed", exit_code=EXIT_PASS)
         if gpu is None:
             raise ValueError("No GPU device found in nvidia-smi output")
 
