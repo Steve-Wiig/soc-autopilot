@@ -62,6 +62,8 @@ class ProviderCatalogABC(ABC):
     environment snapshot.
     """
 
+    priority: int = 100
+
     @abstractmethod
     def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
         """
@@ -95,6 +97,8 @@ class OpenRouterCatalog(ProviderCatalogABC):
 
     Encapsulates free-tier policy enforcement and catalog lookup logic.
     """
+
+    priority: int = 10
 
     def __init__(self, catalog_data: Optional[dict] = None):
         self.catalog_data = catalog_data
@@ -136,6 +140,8 @@ class GeminiCatalog(ProviderCatalogABC):
     Gemini provider catalog implementation.
     """
 
+    priority: int = 20
+
     def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
         providers: list[AiderProvider] = []
 
@@ -170,7 +176,7 @@ class CompositeCatalog(ProviderCatalogABC):
     """
 
     def __init__(self, catalogs: Sequence[ProviderCatalogABC]) -> None:
-        self._catalogs = catalogs
+        self._catalogs = sorted(list(catalogs), key=lambda c: c.priority)
 
     def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
         all_providers: list[AiderProvider] = []
