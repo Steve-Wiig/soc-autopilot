@@ -100,10 +100,12 @@ async def get_logs():
         return {"logs": lines[-50:]}
     return {"logs": []}
 
-@app.get("/api/chat")
+# NEW: AI Chat Endpoint (Using POST for proper JSON body handling)
+@app.post("/api/chat")
 async def chat(request: Request):
     data = await request.json()
     message = data.get("message", "")
+    # Mock response for now. We will connect this to OpenRouter in the next step!
     return {"reply": f"AI is thinking about: {message}"}
 
 @app.get("/stream/logs")
