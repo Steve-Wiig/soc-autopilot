@@ -219,25 +219,29 @@
 
         // OpenRouter API Usage
         async function updateUsage() {
-            try {
-                const res = await fetch('/api/usage');
-                const data = await res.json();
-                const used = data.used || 0;
-                const limit = data.limit || 1000;
-                const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-                
-                const localCalls = data.local_calls || 0;
-                const totalCredits = data.total_credits || 0;
-                document.getElementById('usage-text').innerHTML = `Local Tracked Calls: ${localCalls}<br>Account Credits: $${totalCredits} (Reality Check, updates daily)`;
-                document.getElementById('usage-bar').style.width = `${percent}%`;
-                document.getElementById('usage-percent').textContent = `${percent}%`;
-                
-                // Change color based on usage
-                const bar = document.getElementById('usage-bar');
-                if (percent >= 90) bar.className = 'h-full bg-red-500 rounded-full transition-all duration-500';
-                else if (percent >= 70) bar.className = 'h-full bg-yellow-500 rounded-full transition-all duration-500';
-                else bar.className = 'h-full bg-green-500 rounded-full transition-all duration-500';
-            } catch (e) {
+        try {
+            const res = await fetch('/api/usage');
+            const data = await res.json();
+            
+            const localCalls = data.local_calls || 0;
+            const totalCredits = data.total_credits || 0;
+            
+            // Calculate percentage based on the 1000 daily limit concept
+            const percent = Math.min(100, Math.round((localCalls / 1000) * 100));
+
+            document.getElementById('usage-text').innerHTML = `Local Tracked Calls: ${localCalls}<br>Account Credits: $${totalCredits.toFixed(2)} (Updates Daily)`;
+            document.getElementById('usage-bar').style.width = `${percent}%`;
+            document.getElementById('usage-percent').textContent = `${percent}%`;
+
+            const bar = document.getElementById('usage-bar');
+            if (percent >= 90) bar.className = 'h-full bg-red-500 rounded-full transition-all duration-500';
+            else if (percent >= 70) bar.className = 'h-full bg-yellow-500 rounded-full transition-all duration-500';
+            else bar.className = 'h-full bg-green-500 rounded-full transition-all duration-500';
+        } catch (e) {
+            console.error('Failed to fetch usage:', e);
+            document.getElementById('usage-text').textContent = 'Failed to load usage data';
+        }
+    } catch (e) {
                 console.error('Failed to fetch usage:', e);
                 document.getElementById('usage-text').textContent = 'Failed to load usage data';
             }
