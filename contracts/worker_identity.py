@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import time
+import threading
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, Optional, Set
 
@@ -126,7 +127,7 @@ class VoteValidator:
     worker uniqueness, and Ed25519 signature verification.
     """
 
-    def __init__(self, key_registry: Optional[Any] = None, max_clock_skew_seconds: int = 300) -> None:
+    def __init__(self, key_registry: Optional[Any] = None, max_clock_skew_seconds: int = 300, max_seen_signatures: int = 10000) -> None:
         """
         Initialize the validator.
 
@@ -134,13 +135,18 @@ class VoteValidator:
             to verify Ed25519 signatures. If None, signature verification is skipped.
         :param max_clock_skew_seconds: Maximum allowed difference, in seconds, between
             the vote timestamp and the current time.
+        :param max_seen_signatures: Maximum number of signatures to keep in replay cache.
         """
         if not isinstance(max_clock_skew_seconds, int) or max_clock_skew_seconds < 0:
             raise ValueError("max_clock_skew_seconds must be a non-negative integer.")
+        if not isinstance(max_seen_signatures, int) or max_seen_signatures <= 0:
+            raise ValueError("max_seen_signatures must be a positive integer.")
         self.max_clock_skew_seconds = max_clock_skew_seconds
-        self.seen_signatures: Set[str] = set()
+        self.max_seen_signatures = max_seen_signatures
+        self.seen_signatures: Dict[str, None] = {}  # Ordered dict for LRU eviction
         self.worker_votes_per_candidate: Dict[str, Set[str]] = {}
         self.key_registry = key_registry
+        self._lock = threading.RLock()
 
     def validate(self, vote: WorkerVote, expected_candidate_hash: str) -> None:
         """
@@ -156,9 +162,10 @@ class VoteValidator:
         Raises ValueError on any validation failure. On success, registers the
         vote's signature and worker id so future duplicate votes are rejected.
         """
-        # 1. Candidate binding
-        if vote.candidate_hash != expected_candidate_hash:
-            raise ValueError("Wrong candidate hash.")
+        with self._lock:
+            # 1. Candidate binding
+            if vote.candidate_hash != expected_candidate_hash:
+                raise ValueError("Wrong candidate hash.")
 
         # 2. Timestamp freshness
         if abs(time.time() - vote.timestamp) > self.max_clock_skew_seconds:
@@ -187,8 +194,13 @@ class VoteValidator:
             except Exception:
                 raise ValueError("Invalid cryptographic signature.")
 
-        # Register only after all validation succeeds
-        self.seen_signatures.add(vote.signature)
-        self.worker_votes_per_candidate.setdefault(
-            vote.candidate_hash, set()
-        ).add(vote.worker_id)
+            # Register only after all validation succeeds
+            self.seen_signatures[vote.signature] = None
+            # Evict oldest signatures if we exceed the maximum
+            while len(self.seen_signatures) > self.max_seen_signatures:
+                oldest = next(iter(self.seen_signatures))
+                del self.seen_signatures[oldest]
+
+            self.worker_votes_per_candidate.setdefault(
+                vote.candidate_hash, set()
+            ).add(vote.worker_id)
