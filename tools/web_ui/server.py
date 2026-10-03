@@ -160,6 +160,32 @@ async def chat(request: Request):
     data = await request.json()
     message = data.get("message", "")
     
+    file_path = data.get("file_path")
+    if file_path:
+        # Check for directory traversal
+        if ".." in file_path:
+            return {"reply": "Error: Directory traversal attempt detected in file_path"}
+        
+        try:
+            # Resolve path relative to BASE_DIR
+            resolved_path = (BASE_DIR / file_path).resolve()
+            
+            # Ensure the resolved path is within BASE_DIR
+            if not resolved_path.is_relative_to(BASE_DIR):
+                return {"reply": "Error: file_path must be within the project directory"}
+            
+            # Check if file exists and is a file
+            if not resolved_path.exists() or not resolved_path.is_file():
+                return {"reply": f"Error: File not found at {file_path}"}
+            
+            # Read file contents
+            file_contents = resolved_path.read_text()
+            
+            # Prepend to message
+            message = f"Here is the content of {file_path}:\n\n{file_contents}\n\nUser Question: {message}"
+        except Exception as e:
+            return {"reply": f"Error reading file: {str(e)}"}
+    
     try:
         completion = openrouter_client.chat.completions.create(
             model="nvidia/nemotron-3-ultra-550b-a55b:free",
