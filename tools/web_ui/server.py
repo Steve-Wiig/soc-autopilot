@@ -5,6 +5,7 @@ import os
 import json
 import asyncio
 from pathlib import Path
+from openai import OpenAI
 
 app = FastAPI()
 
@@ -17,6 +18,14 @@ app.add_middleware(
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# Initialize OpenRouter client
+openrouter_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+)
+
+SYSTEM_PROMPT = "You are an expert SOC/SIEM pipeline developer. Provide concise, actionable Python code or architectural advice."
 
 @app.get("/", response_class=HTMLResponse)
 async def get_home():
@@ -98,8 +107,22 @@ async def get_logs():
 async def chat(request: Request):
     data = await request.json()
     message = data.get("message", "")
-    # Mock response for now. We can connect this to OpenRouter in a future tiny Aider step!
-    return {"reply": f"AI is thinking about: {message}"}
+    
+    try:
+        completion = openrouter_client.chat.completions.create(
+            model="nvidia/nemotron-3-ultra-550b-a55b:free",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ],
+            temperature=0.3,
+            max_tokens=2048,
+        )
+        reply = completion.choices[0].message.content
+    except Exception as e:
+        reply = f"Error calling OpenRouter: {str(e)}"
+    
+    return {"reply": reply}
 
 @app.get("/stream/logs")
 async def stream_logs():
