@@ -103,6 +103,17 @@ async def get_logs():
         return {"logs": log_file.read_text().splitlines()[-50:]}
     return {"logs": []}
 
+@app.get("/api/usage")
+async def get_usage():
+    usage_file = BASE_DIR / "overnight" / "openrouter_usage.json"
+    if usage_file.exists():
+        try:
+            data = json.loads(usage_file.read_text())
+            return data
+        except json.JSONDecodeError:
+            pass
+    return {"used": 0, "limit": 1000}
+
 @app.post("/api/chat")
 async def chat(request: Request):
     data = await request.json()
@@ -120,6 +131,16 @@ async def chat(request: Request):
         )
         if completion.choices and len(completion.choices) > 0:
             reply = completion.choices[0].message.content
+            
+            # Increment usage on successful completion
+            usage_file = BASE_DIR / "overnight" / "openrouter_usage.json"
+            try:
+                usage_data = json.loads(usage_file.read_text()) if usage_file.exists() else {"used": 0, "limit": 1000}
+                usage_data["used"] = usage_data.get("used", 0) + 1
+                usage_file.write_text(json.dumps(usage_data, indent=4))
+            except Exception:
+                pass # Fail silently on usage tracking so chat still works
+                
         else:
             reply = "AI provider is currently overloaded. Please try again in a moment."
     except Exception as e:
