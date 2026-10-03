@@ -92,6 +92,14 @@ async def remove_backlog(request: Request):
             return []
     return []
 
+@app.get("/api/logs")
+async def get_logs():
+    log_file = BASE_DIR / "logs" / "swarm_systemd.log"
+    if log_file.exists():
+        lines = log_file.read_text().splitlines()
+        return {"logs": lines[-50:]}
+    return {"logs": []}
+
 @app.get("/stream/logs")
 async def stream_logs():
     async def event_generator():
