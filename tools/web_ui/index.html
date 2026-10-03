@@ -67,7 +67,10 @@
         <div id="tab-logs" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg font-semibold text-gray-100 flex items-center gap-2">📝 Recent Work Logs</h2>
-                <button onclick="fetchWorkLogs()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-1 px-3 rounded transition-colors">🔄 Refresh</button>
+                <div class="flex items-center gap-2">
+                    <button onclick="fetchWorkLogs()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-1 px-3 rounded transition-colors">🔄 Refresh</button>
+                    <a href="/api/logs/download" download="swarm_systemd.log" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-1 px-3 rounded transition-colors ml-2">⬇️ Download All Logs</a>
+                </div>
             </div>
             <div id="work-logs-viewer" class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-gray-300 whitespace-pre-wrap break-all"><span class="text-gray-600">Click Refresh to load the last 50 log entries...</span></div>
         </div>
