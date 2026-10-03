@@ -57,14 +57,10 @@
         </div>
 
         <div id="tab-ai" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
-            <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">💬 AI Workspace</h2>
-            <p class="text-gray-500 text-sm mb-4">Manual AI assistance for codebase questions and refactoring ideas.</p>
-            <div id="chat-log" class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 whitespace-pre-wrap break-all mb-4">
-                <div class="text-gray-500 text-sm mb-2">AI: Hello! I'm ready to help you with your SOC pipeline. What would you like to work on?</div>
-            </div>
+            <div id="chat-log" class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 mb-4"></div>
             <form id="chat-form" class="flex gap-2">
-                <input type="text" id="chat-input" placeholder="Ask the AI to analyze a file or suggest a refactor..." class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200">
-                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition-colors text-sm">Send</button>
+                <input id="chat-input" class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+                <button type="submit" class="bg-green-600 text-white font-semibold py-2 px-4 rounded text-sm">Send</button>
             </form>
         </div>
 
