@@ -199,8 +199,8 @@
             } catch (e) { viewer.innerHTML = '<span class="text-red-400">Failed to load logs.</span>'; }
         }
 
-        // Mock AI Chat Logic
-        document.getElementById('chat-form').addEventListener('submit', function(e) {
+        // AI Chat Logic
+        document.getElementById('chat-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             const input = document.getElementById('chat-input');
             const value = input.value.trim();
@@ -212,13 +212,26 @@
             log.appendChild(userDiv);
             input.value = '';
             log.scrollTop = log.scrollHeight;
-            setTimeout(() => {
+            
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: value })
+                });
+                const data = await res.json();
                 const aiDiv = document.createElement('div');
-                aiDiv.innerHTML = `<span class="text-green-400">AI:</span> I received your request: "${value}". In the next step, we will connect this to the OpenRouter API for real codebase analysis!`;
+                aiDiv.innerHTML = `<span class="text-green-400">AI:</span> ${data.reply || 'No response received'}`;
                 aiDiv.className = 'text-gray-300 mb-2';
                 log.appendChild(aiDiv);
                 log.scrollTop = log.scrollHeight;
-            }, 800);
+            } catch (err) {
+                const errDiv = document.createElement('div');
+                errDiv.innerHTML = `<span class="text-red-400">AI:</span> Error communicating with backend: ${err.message}`;
+                errDiv.className = 'text-gray-300 mb-2';
+                log.appendChild(errDiv);
+                log.scrollTop = log.scrollHeight;
+            }
         });
     </script>
 </body>
