@@ -33,6 +33,21 @@
 
     <main class="flex-1 max-w-7xl mx-auto w-full p-6">
         <div id="tab-swarm" class="tab-content grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- OpenRouter API Usage Card -->
+            <div class="lg:col-span-3 bg-gray-900 rounded-lg border border-gray-800 p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-lg font-semibold text-gray-100">🔑 OpenRouter API Usage</h2>
+                    <span id="usage-refresh" class="text-xs text-gray-500">Auto-refresh: 10s</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div id="usage-text" class="text-gray-300 font-mono text-sm">Loading...</div>
+                    <div class="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                        <div id="usage-bar" class="h-full bg-green-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div id="usage-percent" class="text-green-400 font-mono text-sm w-16 text-right">0%</div>
+                </div>
+            </div>
+
             <div class="lg:col-span-1 bg-gray-900 rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
                 <h2 class="text-lg font-semibold text-gray-100 mb-4">📋 Architectural Backlog</h2>
                 <form id="backlog-form" class="mb-4 space-y-3">
@@ -201,6 +216,31 @@
                 log.scrollTop = log.scrollHeight;
             }
         });
+
+        // OpenRouter API Usage
+        async function updateUsage() {
+            try {
+                const res = await fetch('/api/usage');
+                const data = await res.json();
+                const used = data.used || 0;
+                const limit = data.limit || 1000;
+                const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+                
+                document.getElementById('usage-text').textContent = `OpenRouter Daily Usage: ${used} / ${limit} calls`;
+                document.getElementById('usage-bar').style.width = `${percent}%`;
+                document.getElementById('usage-percent').textContent = `${percent}%`;
+                
+                // Change color based on usage
+                const bar = document.getElementById('usage-bar');
+                if (percent >= 90) bar.className = 'h-full bg-red-500 rounded-full transition-all duration-500';
+                else if (percent >= 70) bar.className = 'h-full bg-yellow-500 rounded-full transition-all duration-500';
+                else bar.className = 'h-full bg-green-500 rounded-full transition-all duration-500';
+            } catch (e) {
+                console.error('Failed to fetch usage:', e);
+                document.getElementById('usage-text').textContent = 'Failed to load usage data';
+            }
+        }
+        setInterval(updateUsage, 10000); updateUsage();
     </script>
 </body>
 </html>
