@@ -159,33 +159,28 @@ async def get_usage():
 async def chat(request: Request):
     data = await request.json()
     message = data.get("message", "")
-    
     file_path = data.get("file_path")
+
+    # If file_path provided, sanitize and read file contents
     if file_path:
-        # Check for directory traversal
         if ".." in file_path:
-            return {"reply": "Error: Directory traversal attempt detected in file_path"}
-        
+            return {"reply": "Error: Directory traversal attempt detected."}
         try:
-            # Resolve path relative to BASE_DIR
-            resolved_path = (BASE_DIR / file_path).resolve()
-            
-            # Ensure the resolved path is within BASE_DIR
-            if not resolved_path.is_relative_to(BASE_DIR):
-                return {"reply": "Error: file_path must be within the project directory"}
-            
-            # Check if file exists and is a file
-            if not resolved_path.exists() or not resolved_path.is_file():
+            requested_path = (BASE_DIR / file_path).resolve()
+            if not requested_path.is_relative_to(BASE_DIR):
+                return {"reply": "Error: File path must be within the project directory."}
+            if requested_path.exists() and requested_path.is_file():
+                file_contents = requested_path.read_text(encoding="utf-8")
+                message = f"Here is the content of {file_path}:
+
+{file_contents}
+
+User Question: {message}"
+            else:
                 return {"reply": f"Error: File not found at {file_path}"}
-            
-            # Read file contents
-            file_contents = resolved_path.read_text()
-            
-            # Prepend to message
-            message = f"Here is the content of {file_path}:\n\n{file_contents}\n\nUser Question: {message}"
         except Exception as e:
             return {"reply": f"Error reading file: {str(e)}"}
-    
+
     try:
         completion = openrouter_client.chat.completions.create(
             model="nvidia/nemotron-3-ultra-550b-a55b:free",
@@ -198,7 +193,7 @@ async def chat(request: Request):
         )
         if completion.choices and len(completion.choices) > 0:
             reply = completion.choices[0].message.content
-            
+
             # Increment local_calls on successful completion
             usage_file = BASE_DIR / "overnight" / "openrouter_usage.json"
             try:
@@ -207,12 +202,12 @@ async def chat(request: Request):
                 usage_file.write_text(json.dumps(usage_data, indent=4))
             except Exception:
                 pass # Fail silently on usage tracking so chat still works
-                
+
         else:
             reply = "AI provider is currently overloaded. Please try again in a moment."
     except Exception as e:
         reply = f"Error calling OpenRouter: {str(e)}"
-    
+
     return {"reply": reply}
 
 @app.get("/stream/logs")
