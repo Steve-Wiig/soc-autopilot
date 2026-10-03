@@ -73,6 +73,7 @@
 
         <div id="tab-ai" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
             <div id="chat-log" class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 mb-4"></div>
+            <input id="chat-context-file" placeholder="Optional: Context file path (e.g., engine/worker.py)" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mb-2 focus:outline-none focus:border-green-500 text-gray-200">
             <form id="chat-form" class="flex gap-2">
                 <input id="chat-input" class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
                 <button type="submit" class="bg-green-600 text-white font-semibold py-2 px-4 rounded text-sm">Send</button>
@@ -201,7 +202,13 @@
             input.value = '';
             log.scrollTop = log.scrollHeight;
             try {
-                const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: value }) });
+                const fileInput = document.getElementById('chat-context-file');
+                const filePath = fileInput.value.trim();
+                const body = { message: value };
+                if (filePath) {
+                    body.file_path = filePath;
+                }
+                const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                 const data = await res.json();
                 const aiDiv = document.createElement('div');
                 aiDiv.innerHTML = `<span class="text-green-400">AI:</span> ${data.reply || 'No response received'}`;
