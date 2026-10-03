@@ -157,63 +157,66 @@ def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
 
     try:
         gpus = gpu_data.findall('.//gpu')  # Use .// to handle potential XML namespaces
-    if not gpus:
-        return VramCheckResult(success=False, used_mb=0, budget_mb=0, message='CONFIG ERROR: No GPU elements found in nvidia-smi output', exit_code=EXIT_CONFIG_ERROR)
-    
-    # Check ALL GPUs. Fail if ANY exceeds the budget.
-    for gpu in gpus:
-        fb_memory = gpu.find('fb_memory_usage')
-        if fb_memory is None:
-            continue
-            
-        total_str = fb_memory.find('total').text if fb_memory.find('total') is not None else '0'
-        used_str = fb_memory.find('used').text if fb_memory.find('used') is not None else '0'
-        
-        try:
-            total_mb = MemoryUnit.parse(total_str)
-            used_mb = MemoryUnit.parse(used_str)
-        except ValueError as e:
-            return VramCheckResult(
-                success=False, used_mb=0, budget_mb=0,
-                message=f"CONFIG ERROR: Failed to parse GPU memory metrics. Check nvidia-smi output for missing tags or 'Unknown' values. ({e})",
-                exit_code=EXIT_CONFIG_ERROR
-            )
-            
-        budget_mb = int(total_mb * DEFAULT_VRAM_BUDGET_RATIO)
-        
-        if used_mb > budget_mb:
-            return VramCheckResult(
-                success=False, used_mb=used_mb, budget_mb=budget_mb,
-                message=f"VRAM BUDGET EXCEEDED: Using {used_mb} MiB / {budget_mb} MiB budget",
-                exit_code=EXIT_FAIL
-            )
-            
-    # If we get here, all GPUs are within budget. Return success for the last checked GPU's metrics.
-    return VramCheckResult(success=True, used_mb=used_mb, budget_mb=budget_mb, message="VRAM budget check passed", exit_code=EXIT_PASS)
-        if gpu is None:
-            raise ValueError("No GPU device found in nvidia-smi output")
+        if not gpus:
+            return VramCheckResult(success=False, used_mb=0, budget_mb=0, message='CONFIG ERROR: No GPU elements found in nvidia-smi output', exit_code=EXIT_CONFIG_ERROR)
 
-        fb_memory = gpu.find('fb_memory_usage')
-        total_mb = MemoryUnit.parse(fb_memory.find('total').text if fb_memory.find('total') is not None else '0' if fb_memory.find('total') is not None else 'Unknown').to_mib()
-        used_mb = MemoryUnit.parse(fb_memory.find('used').text if fb_memory.find('used') is not None else '0' if fb_memory.find('used') is not None else '0').to_mib()
-
-        # Handle VRAM_BUDGET_MB override with validation
+        # Read and validate VRAM_BUDGET_MB once
         env_budget = os.getenv('VRAM_BUDGET_MB')
+        budget_override = None
         if env_budget:
             try:
-                budget_mb = int(env_budget)
-                if budget_mb <= 0:
+                budget_override = int(env_budget)
+                if budget_override <= 0:
                     raise ValueError
             except ValueError:
                 return VramCheckResult(
                     success=False,
-                    used_mb=used_mb,
+                    used_mb=0,
                     budget_mb=0,
                     message="CONFIG ERROR: VRAM_BUDGET_MB must be a positive integer",
                     exit_code=EXIT_CONFIG_ERROR
                 )
-        else:
-            budget_mb = int(total_mb * DEFAULT_VRAM_BUDGET_RATIO)
+
+        # We'll store the last GPU's metrics for the success message
+        last_used_mb = 0
+        last_budget_mb = 0
+
+        # Check ALL GPUs. Fail if ANY exceeds the budget.
+        for gpu in gpus:
+            fb_memory = gpu.find('fb_memory_usage')
+            if fb_memory is None:
+                continue
+
+            total_str = fb_memory.find('total').text if fb_memory.find('total') is not None else '0'
+            used_str = fb_memory.find('used').text if fb_memory.find('used') is not None else '0'
+
+            try:
+                total_mb = MemoryUnit.parse(total_str).to_mib()
+                used_mb = MemoryUnit.parse(used_str).to_mib()
+            except ValueError as e:
+                return VramCheckResult(
+                    success=False, used_mb=0, budget_mb=0,
+                    message=f"CONFIG ERROR: Failed to parse GPU memory metrics. Check nvidia-smi output for missing tags or 'Unknown' values. ({e})",
+                    exit_code=EXIT_CONFIG_ERROR
+                )
+
+            if budget_override is not None:
+                budget_mb = budget_override
+            else:
+                budget_mb = int(total_mb * DEFAULT_VRAM_BUDGET_RATIO)
+
+            if used_mb > budget_mb:
+                return VramCheckResult(
+                    success=False, used_mb=used_mb, budget_mb=budget_mb,
+                    message=f"VRAM BUDGET EXCEEDED: Using {used_mb} MiB / {budget_mb} MiB budget",
+                    exit_code=EXIT_FAIL
+                )
+
+            last_used_mb = used_mb
+            last_budget_mb = budget_mb
+
+        # If we get here, all GPUs are within budget. Return success for the last checked GPU's metrics.
+        return VramCheckResult(success=True, used_mb=last_used_mb, budget_mb=last_budget_mb, message="VRAM budget check passed", exit_code=EXIT_PASS)
 
     except (AttributeError, ValueError, TypeError) as e:
         return VramCheckResult(
@@ -223,23 +226,6 @@ def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
             message=f"CONFIG ERROR: Failed to parse or validate GPU memory metrics: {e}",
             exit_code=EXIT_CONFIG_ERROR
         )
-
-    if used_mb > budget_mb:
-        return VramCheckResult(
-            success=False,
-            used_mb=used_mb,
-            budget_mb=budget_mb,
-            message=f"FAIL: VRAM usage {used_mb}MB exceeds budget {budget_mb}MB",
-            exit_code=EXIT_FAIL
-        )
-
-    return VramCheckResult(
-        success=True,
-        used_mb=used_mb,
-        budget_mb=budget_mb,
-        message=f"PASS: VRAM usage {used_mb}MB within budget {budget_mb}MB",
-        exit_code=EXIT_PASS
-    )
 
 
 def create_mock_gpu_xml(total_mb: int = 16384, used_mb: int = 8192, unit: str = "MiB") -> ET.Element:
