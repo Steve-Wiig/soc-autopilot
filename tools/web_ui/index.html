@@ -226,7 +226,9 @@
                 const limit = data.limit || 1000;
                 const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
                 
-                document.getElementById('usage-text').textContent = `OpenRouter Daily Usage: ${used} / ${limit} calls`;
+                const localCalls = data.local_calls || 0;
+                const totalCredits = data.total_credits || 0;
+                document.getElementById('usage-text').innerHTML = `Local Tracked Calls: ${localCalls}<br>Account Credits: $${totalCredits} (Reality Check, updates daily)`;
                 document.getElementById('usage-bar').style.width = `${percent}%`;
                 document.getElementById('usage-percent').textContent = `${percent}%`;
                 
