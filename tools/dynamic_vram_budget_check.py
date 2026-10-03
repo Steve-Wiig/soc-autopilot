@@ -148,13 +148,13 @@ def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
         )
 
     try:
-        gpu = gpu_data.find('gpu')
+        gpu = gpu_data.findall('.//gpu')  # Use .// to handle potential XML namespaces and get all GPUs
         if gpu is None:
             raise ValueError("No GPU device found in nvidia-smi output")
 
         fb_memory = gpu.find('fb_memory_usage')
-        total_mb = MemoryUnit.parse(fb_memory.find('total').text).to_mib()
-        used_mb = MemoryUnit.parse(fb_memory.find('used').text).to_mib()
+        total_mb = MemoryUnit.parse(fb_memory.find('total').text if fb_memory.find('total') is not None else 'Unknown').to_mib()
+        used_mb = MemoryUnit.parse(fb_memory.find('used').text if fb_memory.find('used') is not None else '0').to_mib()
 
         # Handle VRAM_BUDGET_MB override with validation
         env_budget = os.getenv('VRAM_BUDGET_MB')
