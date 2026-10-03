@@ -217,6 +217,26 @@
             }
         });
 
+        async function hardenFile(filePath) {
+            if (!confirm('Force the swarm to target this file now?')) {
+                return;
+            }
+            try {
+                const res = await fetch('/api/target', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file: filePath })
+                });
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+                alert('Swarm will now target: ' + filePath);
+            } catch (err) {
+                console.error('Failed to target file:', err);
+                alert('Error targeting file: ' + err.message);
+            }
+        }
+
         // OpenRouter API Usage
         async function updateUsage() {
             try {
