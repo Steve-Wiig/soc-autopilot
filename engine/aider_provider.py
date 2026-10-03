@@ -212,7 +212,7 @@ def _openrouter_model_ref(model_id: str) -> str:
     return f"openrouter/{model_id}"
 
 
-def _select_openrouter_model(env: Mapping[str, str]) -> str | None:
+def _select_openrouter_model(env: Mapping[str, str], catalog_data: Optional[dict] = None) -> str | None:
     """Resolve an OpenRouter model without permitting paid inference.
 
     When free-only mode is enabled, the OpenRouter catalog is authoritative.
@@ -232,7 +232,7 @@ def _select_openrouter_model(env: Mapping[str, str]) -> str | None:
     # Free-only mode is catalog-authoritative and fails closed.
     if free_only_enabled(env):
         try:
-            catalog = get_catalog(api_key=api_key)
+            catalog = catalog_data if catalog_data is not None else get_catalog(api_key=api_key)
 
             free_catalog = {
                 model.model_id
