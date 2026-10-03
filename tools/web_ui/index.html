@@ -231,16 +231,7 @@
                 document.getElementById('usage-text').innerHTML = `Local Tracked Calls: ${localCalls}<br>Account Credits: $${totalCredits.toFixed(2)} (Updates Daily)`;
                 document.getElementById('usage-bar').style.width = `${percent}%`;
                 document.getElementById('usage-percent').textContent = `${percent}%`;
-
-                const bar = document.getElementById('usage-bar');
-                if (percent >= 90) bar.className = 'h-full bg-red-500 rounded-full transition-all duration-500';
-                else if (percent >= 70) bar.className = 'h-full bg-yellow-500 rounded-full transition-all duration-500';
-                else bar.className = 'h-full bg-green-500 rounded-full transition-all duration-500';
             } catch (e) {
-                console.error('Failed to fetch usage:', e);
-                document.getElementById('usage-text').textContent = 'Failed to load usage data';
-            }
-        } catch (e) {
                 console.error('Failed to fetch usage:', e);
                 document.getElementById('usage-text').textContent = 'Failed to load usage data';
             }
