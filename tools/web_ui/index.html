@@ -22,7 +22,6 @@
         </div>
     </header>
     
-    <!-- Tab Navigation -->
     <div class="bg-gray-900 border-b border-gray-800">
         <div class="max-w-7xl mx-auto flex gap-0 px-6">
             <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-swarm')">Swarm Monitor</button>
@@ -33,7 +32,6 @@
     </div>
 
     <main class="flex-1 max-w-7xl mx-auto w-full p-6">
-        <!-- Tab 1: Swarm Monitor -->
         <div id="tab-swarm" class="tab-content grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-1 bg-gray-900 rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
                 <h2 class="text-lg font-semibold text-gray-100 mb-4">📋 Architectural Backlog</h2>
@@ -45,28 +43,19 @@
                 <div id="backlog-list" class="flex-1 overflow-y-auto space-y-2 pr-2"></div>
             </div>
             <div class="lg:col-span-2 bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
-                <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">
-                    📡 Live Swarm Activity
-                    <span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
-                </h2>
-                <div id="log-viewer" class="flex-1 bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 overflow-y-auto whitespace-pre-wrap break-all">
-                    <span class="text-gray-600">Connecting to log stream...</span>
-                </div>
+                <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">📡 Live Swarm Activity <span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span></h2>
+                <div id="log-viewer" class="flex-1 bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 overflow-y-auto whitespace-pre-wrap break-all"><span class="text-gray-600">Connecting to log stream...</span></div>
             </div>
         </div>
 
-        <!-- Tab 2: Work Logs -->
         <div id="tab-logs" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg font-semibold text-gray-100 flex items-center gap-2">📝 Recent Work Logs</h2>
                 <button onclick="fetchWorkLogs()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-1 px-3 rounded transition-colors">🔄 Refresh</button>
             </div>
-            <div id="work-logs-viewer" class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-gray-300 whitespace-pre-wrap break-all">
-                <span class="text-gray-600">Click Refresh to load the last 50 log entries...</span>
-            </div>
+            <div id="work-logs-viewer" class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-gray-300 whitespace-pre-wrap break-all"><span class="text-gray-600">Click Refresh to load the last 50 log entries...</span></div>
         </div>
 
-        <!-- Tab 3: AI Workspace -->
         <div id="tab-ai" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
             <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">💬 AI Workspace</h2>
             <p class="text-gray-500 text-sm mb-4">Manual AI assistance for codebase questions and refactoring ideas.</p>
@@ -79,7 +68,6 @@
             </form>
         </div>
 
-        <!-- Tab 4: Settings -->
         <div id="tab-settings" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
             <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">⚙️ Settings</h2>
             <p class="text-gray-500 text-sm mb-4">System configuration and preferences.</p>
@@ -92,25 +80,17 @@
     </main>
 
     <script>
-        // Tab Switching Logic
         function openTab(evt, tabName) {
             document.querySelectorAll('.tab-content').forEach(p => p.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(b => {
-                b.classList.remove('text-green-400', 'border-green-500');
-                b.classList.add('text-gray-400', 'border-transparent');
-            });
+            document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('text-green-400', 'border-green-500'); b.classList.add('text-gray-400', 'border-transparent'); });
             document.getElementById(tabName).classList.remove('hidden');
             if (tabName === 'tab-swarm') document.getElementById(tabName).classList.add('grid');
             else document.getElementById(tabName).classList.add('block');
-            
             evt.currentTarget.classList.remove('text-gray-400', 'border-transparent');
             evt.currentTarget.classList.add('text-green-400', 'border-green-500');
         }
-        window.addEventListener('load', () => {
-            document.querySelector('.tab-btn').click();
-        });
+        window.addEventListener('load', () => { document.querySelector('.tab-btn').click(); });
 
-        // Existing Dashboard Logic (Fully Restored)
         async function updateStatus() {
             try {
                 const res = await fetch('/api/status');
@@ -125,13 +105,8 @@
             const res = await fetch('/api/pause', { method: 'POST' });
             const data = await res.json();
             const btn = document.getElementById('swarmToggle');
-            if (data.paused) {
-                btn.textContent = 'RESUME';
-                btn.className = 'bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm';
-            } else {
-                btn.textContent = 'PAUSE';
-                btn.className = 'bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm';
-            }
+            if (data.paused) { btn.textContent = 'RESUME'; btn.className = 'bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm'; }
+            else { btn.textContent = 'PAUSE'; btn.className = 'bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded transition-colors text-sm'; }
         });
 
         async function updateBacklog() {
@@ -149,19 +124,13 @@
                 });
             } catch (e) { console.error(e); }
         }
-        async function removeBacklog(file) {
-            await fetch(`/api/backlog?file=${encodeURIComponent(file)}`, { method: 'DELETE' });
-            updateBacklog();
-        }
+        async function removeBacklog(file) { await fetch(`/api/backlog?file=${encodeURIComponent(file)}`, { method: 'DELETE' }); updateBacklog(); }
         setInterval(updateBacklog, 10000); updateBacklog();
 
         document.getElementById('backlog-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const file = document.getElementById('task-file').value;
-            const task = document.getElementById('task-desc').value;
-            await fetch('/api/backlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file, task }) });
-            document.getElementById('task-file').value = '';
-            document.getElementById('task-desc').value = '';
+            await fetch('/api/backlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: document.getElementById('task-file').value, task: document.getElementById('task-desc').value }) });
+            document.getElementById('task-file').value = ''; document.getElementById('task-desc').value = '';
             updateBacklog();
         });
 
@@ -178,7 +147,6 @@
             logViewer.scrollTop = logViewer.scrollHeight;
         };
 
-        // Work Logs Fetcher
         async function fetchWorkLogs() {
             const viewer = document.getElementById('work-logs-viewer');
             viewer.innerHTML = '<span class="text-gray-500">Loading...</span>';
@@ -199,7 +167,6 @@
             } catch (e) { viewer.innerHTML = '<span class="text-red-400">Failed to load logs.</span>'; }
         }
 
-        // AI Chat Logic
         document.getElementById('chat-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             const input = document.getElementById('chat-input');
@@ -212,13 +179,8 @@
             log.appendChild(userDiv);
             input.value = '';
             log.scrollTop = log.scrollHeight;
-            
             try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: value })
-                });
+                const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: value }) });
                 const data = await res.json();
                 const aiDiv = document.createElement('div');
                 aiDiv.innerHTML = `<span class="text-green-400">AI:</span> ${data.reply || 'No response received'}`;
@@ -227,7 +189,7 @@
                 log.scrollTop = log.scrollHeight;
             } catch (err) {
                 const errDiv = document.createElement('div');
-                errDiv.innerHTML = `<span class="text-red-400">AI:</span> Error communicating with backend: ${err.message}`;
+                errDiv.innerHTML = `<span class="text-red-400">AI:</span> Error: ${err.message}`;
                 errDiv.className = 'text-gray-300 mb-2';
                 log.appendChild(errDiv);
                 log.scrollTop = log.scrollHeight;

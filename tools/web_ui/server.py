@@ -60,20 +60,13 @@ async def get_backlog():
 async def add_backlog(request: Request):
     data = await request.json()
     backlog_file = BASE_DIR / "overnight" / "architectural_backlog.json"
-    
     items = []
     if backlog_file.exists():
         try:
             items = json.loads(backlog_file.read_text())
         except json.JSONDecodeError:
             items = []
-            
-    items.append({
-        "file": data.get("file", "unknown.py"),
-        "task": data.get("task", "No description"),
-        "priority": "high"
-    })
-    
+    items.append({"file": data.get("file", "unknown.py"), "task": data.get("task", "No description"), "priority": "high"})
     backlog_file.write_text(json.dumps(items, indent=4))
     return {"status": "success"}
 
@@ -81,7 +74,6 @@ async def add_backlog(request: Request):
 async def remove_backlog(request: Request):
     file_to_remove = request.query_params.get("file")
     backlog_file = BASE_DIR / "overnight" / "architectural_backlog.json"
-    
     if file_to_remove and backlog_file.exists():
         try:
             data = json.loads(backlog_file.read_text())
@@ -96,16 +88,14 @@ async def remove_backlog(request: Request):
 async def get_logs():
     log_file = BASE_DIR / "logs" / "swarm_systemd.log"
     if log_file.exists():
-        lines = log_file.read_text().splitlines()
-        return {"logs": lines[-50:]}
+        return {"logs": log_file.read_text().splitlines()[-50:]}
     return {"logs": []}
 
-# NEW: AI Chat Endpoint (Using POST for proper JSON body handling)
 @app.post("/api/chat")
 async def chat(request: Request):
     data = await request.json()
     message = data.get("message", "")
-    # Mock response for now. We will connect this to OpenRouter in the next step!
+    # Mock response for now. We can connect this to OpenRouter in a future tiny Aider step!
     return {"reply": f"AI is thinking about: {message}"}
 
 @app.get("/stream/logs")
@@ -127,7 +117,6 @@ async def stream_logs():
         else:
             yield "data: ⚠️ Log file not found yet. Waiting for swarm...\n\n"
             await asyncio.sleep(2)
-            
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
