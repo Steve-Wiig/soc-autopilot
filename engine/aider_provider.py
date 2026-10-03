@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, Optional
 import os
+import logging
 
 from engine.openrouter_catalog import (
     free_models,
@@ -95,6 +96,9 @@ class OpenRouterCatalog(ProviderCatalogABC):
     Encapsulates free-tier policy enforcement and catalog lookup logic.
     """
 
+    def __init__(self, catalog_data: Optional[dict] = None):
+        self.catalog_data = catalog_data
+
     def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
         providers: list[AiderProvider] = []
 
@@ -103,6 +107,10 @@ class OpenRouterCatalog(ProviderCatalogABC):
 
         api_key = env.get("OPENROUTER_API_KEY", "").strip()
         if not api_key:
+            return providers
+
+        if free_only_enabled(env) and self.catalog_data is None:
+            logging.warning("OpenRouter free-only mode requires catalog data but none provided; skipping.")
             return providers
 
         model = _select_openrouter_model(env)
@@ -238,7 +246,8 @@ def _select_openrouter_model(env: Mapping[str, str]) -> str | None:
             selected = select_free_coding_model(catalog)
             return _openrouter_model_ref(selected.model_id)
 
-        except Exception:
+        except (ValueError, KeyError, TypeError, Exception) as e:
+            logging.error(f"OpenRouter catalog error: {e}")
             return None
 
     # Paid/custom mode is intentionally explicit for now.
