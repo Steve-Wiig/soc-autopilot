@@ -231,8 +231,10 @@ def _select_openrouter_model(env: Mapping[str, str], catalog_data: Optional[dict
 
     # Free-only mode is catalog-authoritative and fails closed.
     if free_only_enabled(env):
+        if catalog_data is None:
+            return None
         try:
-            catalog = catalog_data if catalog_data is not None else get_catalog(api_key=api_key)
+            catalog = catalog_data
 
             free_catalog = {
                 model.model_id
@@ -252,8 +254,8 @@ def _select_openrouter_model(env: Mapping[str, str], catalog_data: Optional[dict
             selected = select_free_coding_model(catalog)
             return _openrouter_model_ref(selected.model_id)
 
-        except (ValueError, KeyError, TypeError, Exception) as e:
-            logging.error(f"OpenRouter catalog error: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logging.error(f"OpenRouter catalog data parsing error: {e}")
             return None
 
     # Paid/custom mode is intentionally explicit for now.
