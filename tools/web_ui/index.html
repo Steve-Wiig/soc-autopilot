@@ -140,7 +140,7 @@
                 items.forEach(item => {
                     const div = document.createElement('div');
                     div.className = 'bg-gray-800 border border-gray-700 rounded p-3 text-sm flex justify-between items-start';
-                    div.innerHTML = `<div class="flex-1"><div class="flex justify-between items-center mb-1"><span class="font-mono text-blue-400 font-semibold">${item.file}</span><span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">${item.priority || 'high'}</span></div><p class="text-gray-300 leading-snug">${item.task}</p></div><button onclick="removeBacklog('${item.file}')" class="ml-2 text-red-400 hover:text-red-300 font-bold px-2" title="Remove">×</button>`;
+                    div.innerHTML = `<div class="flex-1"><div class="flex justify-between items-center mb-1"><span class="font-mono text-blue-400 font-semibold">${item.file}</span><span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">${item.priority || 'high'}</span></div><p class="text-gray-300 leading-snug">${item.task}</p></div><button onclick="hardenFile('${item.file}')" class="ml-2 text-yellow-400 hover:text-yellow-300 font-bold px-2" title="Force swarm to target this file">🔨</button><button onclick="removeBacklog('${item.file}')" class="ml-2 text-red-400 hover:text-red-300 font-bold px-2" title="Remove">×</button>`;
                     list.appendChild(div);
                 });
             } catch (e) { console.error(e); }
