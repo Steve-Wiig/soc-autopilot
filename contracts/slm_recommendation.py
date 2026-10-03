@@ -1,14 +1,13 @@
-"""Data contracts for Small Language Model (SLM) security recommendations.
+// """Data contracts for Small Language Model (SLM) security recommendations.
 
 This module defines the schema for recommendations produced by an SLM when
 analyzing security events, along with the envelope used to transport those
 recommendations, and the errors raised when a recommendation violates the
 expected contract or when the local model is unavailable.
-"""
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Final, List
+from typing import Final, List, Optional, Tuple
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
@@ -146,3 +145,76 @@ class ContractViolationError(Exception):
 
 class LocalModelUnavailableError(Exception):
     """Raised when the local SLM cannot be reached or fails to respond."""
+
+
+# --- Validation error codes ---
+
+
+class ValidationErrorCode:
+    """Standardized error codes returned by validate_and_normalize."""
+
+    SCHEMA_DRIFT = "SCHEMA_DRIFT"
+    TYPE_MISMATCH = "TYPE_MISMATCH"
+    PARSE_FAILURE = "PARSE_FAILURE"
+    MISSING_FIELD = "MISSING_FIELD"
+
+
+# --- Validation adapter ---
+
+
+def validate_and_normalize(raw_input) -> Tuple[bool, Optional[SLMRawRecommendation], Optional[str]]:
+    """
+    Adapter function to strip whitespace, coerce types leniently, and map loose inputs
+    to the strict SLMRawRecommendation Pydantic model.
+
+    Args:
+        raw_input: A string (JSON), dict, or SLMRawRecommendation instance.
+
+    Returns:
+        (is_valid: bool, cleaned_data: Optional[SLMRawRecommendation], error_code: Optional[str])
+    """
+    if raw_input is None:
+        return False, None, ValidationErrorCode.PARSE_FAILURE.value
+
+    if isinstance(raw_input, SLMRawRecommendation):
+        return True, raw_input, None
+
+    # Parse input into a dict
+    if isinstance(raw_input, str):
+        try:
+            raw_dict = json.loads(raw_input)
+        except json.JSONDecodeError:
+            return False, None, ValidationErrorCode.PARSE_FAILURE.value
+    elif isinstance(raw_input, dict):
+        raw_dict = raw_input
+    else:
+        return False, None, ValidationErrorCode.TYPE_MISMATCH.value
+
+    # Recursively strip whitespace from string values
+    def strip_strings(obj):
+        if isinstance(obj, dict):
+            return {k: strip_strings(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [strip_strings(item) for item in obj]
+        elif isinstance(obj, str):
+            return obj.strip()
+        return obj
+
+    raw_dict = strip_strings(raw_dict)
+
+    # Ensure schema_version defaults if missing, to avoid immediate validation error
+    if 'schema_version' not in raw_dict:
+        raw_dict['schema_version'] = EXPECTED_SCHEMA_VERSION
+
+    # Attempt Pydantic validation
+    try:
+        cleaned = SLMRawRecommendation(**raw_dict)
+        return True, cleaned, None
+    except Exception as e:
+        error_msg = str(e)
+        if 'schema_version' in error_msg.lower():
+            return False, None, ValidationErrorCode.SCHEMA_DRIFT.value
+        elif 'missing' in error_msg.lower() or 'required' in error_msg.lower():
+            return False, None, ValidationErrorCode.MISSING_FIELD.value
+        else:
+            return False, None, ValidationErrorCode.TYPE_MISMATCH.value
