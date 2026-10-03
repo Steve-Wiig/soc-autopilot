@@ -28,6 +28,7 @@
             <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-logs')">Work Logs</button>
             <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-ai')">AI Workspace</button>
             <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-settings')">Settings</button>
+            <button id="tab-dev-btn" class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-dev')">Dev Workspace</button>
         </div>
     </div>
 
@@ -87,6 +88,20 @@
                 <span class="text-green-500">$</span> Settings panel initialized.<br>
                 <span class="text-green-500">$</span> Ready for configuration management.<br>
                 <span class="text-green-500">$</span> _
+            </div>
+        </div>
+
+        <div id="tab-dev" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
+            <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">🛠️ Development Workspace</h2>
+            <div class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-gray-400 whitespace-pre-wrap">
+                <div class="mb-4">
+                    <h3 class="text-green-400 font-semibold mb-2">Recent Swarm Commits</h3>
+                    <pre id="recent-commits" class="text-xs text-gray-400 whitespace-pre-wrap">Loading...</pre>
+                </div>
+                <div>
+                    <h3 class="text-green-400 font-semibold mb-2">Uncommitted Changes</h3>
+                    <pre id="uncommitted-changes" class="text-xs text-gray-400 whitespace-pre-wrap">Loading...</pre>
+                </div>
             </div>
         </div>
     </main>
@@ -264,6 +279,25 @@
             }
         }
         setInterval(updateUsage, 10000); updateUsage();
+
+        // Development Workspace
+        async function fetchWorkspace() {
+            try {
+                const res = await fetch('/api/workspace');
+                const data = await res.json();
+                document.getElementById('recent-commits').textContent = data.recent_commits || 'No recent commits';
+                document.getElementById('uncommitted-changes').textContent = data.uncommitted_changes || 'No uncommitted changes';
+            } catch (e) {
+                console.error('Failed to fetch workspace:', e);
+                document.getElementById('recent-commits').textContent = 'Failed to load';
+                document.getElementById('uncommitted-changes').textContent = 'Failed to load';
+            }
+        }
+
+        // Call fetchWorkspace when tab is clicked
+        document.getElementById('tab-dev-btn').addEventListener('click', fetchWorkspace);
+        // Also call on page load
+        window.addEventListener('load', fetchWorkspace);
     </script>
 </body>
 </html>
