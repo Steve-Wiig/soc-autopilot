@@ -118,7 +118,10 @@ async def chat(request: Request):
             temperature=0.3,
             max_tokens=2048,
         )
-        reply = completion.choices[0].message.content
+        if completion.choices and len(completion.choices) > 0:
+            reply = completion.choices[0].message.content
+        else:
+            reply = "AI provider is currently overloaded. Please try again in a moment."
     except Exception as e:
         reply = f"Error calling OpenRouter: {str(e)}"
     
