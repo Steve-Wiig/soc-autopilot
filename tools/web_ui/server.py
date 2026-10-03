@@ -171,11 +171,7 @@ async def chat(request: Request):
                 return {"reply": "Error: File path must be within the project directory."}
             if requested_path.exists() and requested_path.is_file():
                 file_contents = requested_path.read_text(encoding="utf-8")
-                message = f"Here is the content of {file_path}:
-
-{file_contents}
-
-User Question: {message}"
+                message = f"Here is the content of {file_path}:\n\n{file_contents}\n\nUser Question: {message}"
             else:
                 return {"reply": f"Error: File not found at {file_path}"}
         except Exception as e:
@@ -201,7 +197,7 @@ User Question: {message}"
                 usage_data["local_calls"] = usage_data.get("local_calls", 0) + 1
                 usage_file.write_text(json.dumps(usage_data, indent=4))
             except Exception:
-                pass # Fail silently on usage tracking so chat still works
+                pass  # Fail silently on usage tracking so chat still works
 
         else:
             reply = "AI provider is currently overloaded. Please try again in a moment."
