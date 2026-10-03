@@ -25,10 +25,10 @@
     <!-- Tab Navigation -->
     <div class="bg-gray-900 border-b border-gray-800">
         <div class="max-w-7xl mx-auto flex gap-0 px-6">
-            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-swarm')">Swarm Monitor</button>
-            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-logs')">Work Logs</button>
-            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-ai')">AI Workspace</button>
-            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-settings')">Settings</button>
+            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab('tab-swarm')">Swarm Monitor</button>
+            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab('tab-logs')">Work Logs</button>
+            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab('tab-ai')">AI Workspace</button>
+            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab('tab-settings')">Settings</button>
         </div>
     </div>
 
@@ -93,7 +93,7 @@
 
     <script>
         // Tab Switching Logic
-        function openTab(evt, tabName) {
+        function openTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(p => p.classList.add('hidden'));
             document.querySelectorAll('.tab-btn').forEach(b => {
                 b.classList.remove('text-green-400', 'border-green-500');
@@ -106,11 +106,12 @@
             } else {
                 document.getElementById(tabName).classList.add('block');
             }
-            evt.currentTarget.classList.remove('text-gray-400', 'border-transparent');
-            evt.currentTarget.classList.add('text-green-400', 'border-green-500');
+            // Highlight active tab button
+            event.target.classList.remove('text-gray-400', 'border-transparent');
+            event.target.classList.add('text-green-400', 'border-green-500');
         }
         window.addEventListener('load', () => {
-            document.querySelector('.tab-btn').click();
+            openTab('tab-swarm');
         });
 
         // Existing Dashboard Logic
