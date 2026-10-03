@@ -66,8 +66,12 @@ class MemoryUnit:
             raise ValueError(f"Invalid numeric value in '{val_str}': {e}")
 
         unit = unit.lower()
-        if unit in ('gib', 'gb', 'g'):
-            value *= 1024
+        if unit == 'gib':
+        value *= 1024  # Binary GiB to MiB
+    elif unit == 'gb':
+        value = value * 1000 / 1024  # Decimal GB to MiB
+    elif unit == 'g':
+        value *= 1024  # Default 'g' to GiB
         elif unit in ('kib', 'kb', 'k'):
             value /= 1024
         # For 'mib', 'mb', 'm', or no unit, keep the value as-is (assumed MiB)
@@ -148,13 +152,16 @@ def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
         )
 
     try:
-        gpu = gpu_data.findall('.//gpu')  # Use .// to handle potential XML namespaces and get all GPUs
+        gpus = gpu_data.findall('.//gpu')  # Use .// to handle potential XML namespaces
+        if not gpus:
+            return VramCheckResult(success=False, used_mb=0, budget_mb=0, message='CONFIG ERROR: No GPU elements found in nvidia-smi output', exit_code=EXIT_CONFIG_ERROR)
+        gpu = gpus[0]  # Check primary GPU (expand to loop if multi-GPU sum is required)
         if gpu is None:
             raise ValueError("No GPU device found in nvidia-smi output")
 
         fb_memory = gpu.find('fb_memory_usage')
-        total_mb = MemoryUnit.parse(fb_memory.find('total').text if fb_memory.find('total') is not None else 'Unknown').to_mib()
-        used_mb = MemoryUnit.parse(fb_memory.find('used').text if fb_memory.find('used') is not None else '0').to_mib()
+        total_mb = MemoryUnit.parse(fb_memory.find('total').text if fb_memory.find('total') is not None else '0' if fb_memory.find('total') is not None else 'Unknown').to_mib()
+        used_mb = MemoryUnit.parse(fb_memory.find('used').text if fb_memory.find('used') is not None else '0' if fb_memory.find('used') is not None else '0').to_mib()
 
         # Handle VRAM_BUDGET_MB override with validation
         env_budget = os.getenv('VRAM_BUDGET_MB')
