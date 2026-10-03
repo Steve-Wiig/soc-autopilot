@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import json
+import asyncio
 from pathlib import Path
 
 app = FastAPI()
@@ -15,12 +16,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Determine project root (parent of tools/web_ui)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 @app.get("/", response_class=HTMLResponse)
 async def get_home():
     return FileResponse(BASE_DIR / "tools" / "web_ui" / "index.html")
+
+@app.get("/api/status")
+async def get_status():
+    current_task = "Idle"
+    task_file = BASE_DIR / ".current_task"
+    if task_file.exists():
+        current_task = task_file.read_text().strip()
+    
+    skip_count = 0
+    skip_file = BASE_DIR / "skip_list.txt"
+    if skip_file.exists():
+        skip_count = sum(1 for line in skip_file.read_text().splitlines() if line.strip())
+        
+    return {"current_task": current_task, "skipped_files": skip_count}
 
 @app.post("/api/pause")
 async def toggle_pause():
@@ -32,18 +46,6 @@ async def toggle_pause():
         paused_file.touch()
         return {"paused": True}
 
-@app.delete("/api/skip")
-async def remove_skip(request: Request):
-    file_to_remove = request.query_params.get("file")
-    skip_file = BASE_DIR / "tools" / "skip_list.txt"
-    
-    if file_to_remove and skip_file.exists():
-        lines = skip_file.read_text().splitlines()
-        new_lines = [line for line in lines if line.strip() != file_to_remove]
-        skip_file.write_text("\n".join(new_lines) + ("\n" if new_lines else ""))
-        
-    return {"status": "ok"}
-
 @app.get("/api/backlog")
 async def get_backlog():
     backlog_file = BASE_DIR / "overnight" / "architectural_backlog.json"
@@ -53,6 +55,27 @@ async def get_backlog():
         except json.JSONDecodeError:
             return []
     return []
+
+@app.post("/api/backlog")
+async def add_backlog(request: Request):
+    data = await request.json()
+    backlog_file = BASE_DIR / "overnight" / "architectural_backlog.json"
+    
+    items = []
+    if backlog_file.exists():
+        try:
+            items = json.loads(backlog_file.read_text())
+        except json.JSONDecodeError:
+            items = []
+            
+    items.append({
+        "file": data.get("file", "unknown.py"),
+        "task": data.get("task", "No description"),
+        "priority": "high"
+    })
+    
+    backlog_file.write_text(json.dumps(items, indent=4))
+    return {"status": "success"}
 
 @app.delete("/api/backlog")
 async def remove_backlog(request: Request):
@@ -69,12 +92,27 @@ async def remove_backlog(request: Request):
             return []
     return []
 
-@app.get("/api/skip-list")
-async def get_skip_list():
-    skip_file = BASE_DIR / "tools" / "skip_list.txt"
-    if skip_file.exists():
-        return skip_file.read_text().splitlines()
-    return []
+@app.get("/stream/logs")
+async def stream_logs():
+    async def event_generator():
+        yield "data: 🟢 Connected to live log stream...\n\n"
+        log_file = BASE_DIR / "logs" / "swarm_systemd.log"
+        if log_file.exists():
+            with open(log_file, "r") as f:
+                lines = f.readlines()
+                for line in lines[-30:]:
+                    yield f"data: {line}\n\n"
+                while True:
+                    line = f.readline()
+                    if not line:
+                        await asyncio.sleep(0.5)
+                        continue
+                    yield f"data: {line}\n\n"
+        else:
+            yield "data: ⚠️ Log file not found yet. Waiting for swarm...\n\n"
+            await asyncio.sleep(2)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn

@@ -21,37 +21,89 @@
             </div>
         </div>
     </header>
-    <main class="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <section class="lg:col-span-1 bg-gray-900 rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
-            <h2 class="text-lg font-semibold text-gray-100 mb-4">📋 Architectural Backlog</h2>
-            <form id="backlog-form" class="mb-4 space-y-3">
-                <input type="text" id="task-file" placeholder="File path (e.g., engine/worker.py)" required class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200">
-                <textarea id="task-desc" placeholder="Describe the refactor or feature..." required rows="3" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200"></textarea>
-                <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition-colors text-sm">➕ Add to Backlog</button>
-            </form>
-            <div id="backlog-list" class="flex-1 overflow-y-auto space-y-2 pr-2"></div>
-        </section>
-        <section class="lg:col-span-2 bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
-            <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">
-                📡 Live Swarm Activity
-                <span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
-            </h2>
-            <div id="log-viewer" class="flex-1 bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 overflow-y-auto whitespace-pre-wrap break-all">
-                <span class="text-gray-600">Connecting to log stream...</span>
+    
+    <!-- Tab Navigation -->
+    <div class="bg-gray-900 border-b border-gray-800">
+        <div class="max-w-7xl mx-auto flex gap-1 px-6">
+            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-swarm')">Swarm Control</button>
+            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-dev')">Development Workspace</button>
+            <button class="tab-btn px-4 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 hover:border-gray-600 transition-colors" onclick="openTab(event, 'tab-ai')">AI Assistant</button>
+        </div>
+    </div>
+
+    <main class="flex-1 max-w-7xl mx-auto w-full p-6">
+        <!-- Tab 1: Swarm Control -->
+        <div id="tab-swarm" class="tab-content grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-1 bg-gray-900 rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
+                <h2 class="text-lg font-semibold text-gray-100 mb-4">📋 Architectural Backlog</h2>
+                <form id="backlog-form" class="mb-4 space-y-3">
+                    <input type="text" id="task-file" placeholder="File path (e.g., engine/worker.py)" required class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200">
+                    <textarea id="task-desc" placeholder="Describe the refactor or feature..." required rows="3" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200"></textarea>
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition-colors text-sm">➕ Add to Backlog</button>
+                </form>
+                <div id="backlog-list" class="flex-1 overflow-y-auto space-y-2 pr-2"></div>
             </div>
-        </section>
+            <div class="lg:col-span-2 bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
+                <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">
+                    📡 Live Swarm Activity
+                    <span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
+                </h2>
+                <div id="log-viewer" class="flex-1 bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 overflow-y-auto whitespace-pre-wrap break-all">
+                    <span class="text-gray-600">Connecting to log stream...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Development Workspace -->
+        <div id="tab-dev" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
+            <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">💻 Development Workspace</h2>
+            <p class="text-gray-500 text-sm mb-4">Placeholder for file-tree, diff views, and code editor integration.</p>
+            <div class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-4 terminal text-xs text-gray-400 whitespace-pre-wrap">
+                <span class="text-green-500">$</span> Initializing development environment...<br>
+                <span class="text-green-500">$</span> Ready for file-tree and diff views.<br>
+                <span class="text-green-500">$</span> _
+            </div>
+            <button id="request-refactor" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded transition-colors text-sm w-full">
+                ✨ Request AI Refactor for Current Task
+            </button>
+        </div>
+
+        <!-- Tab 3: AI Assistant -->
+        <div id="tab-ai" class="tab-content hidden bg-black rounded-lg border border-gray-800 p-4 flex flex-col h-[600px]">
+            <h2 class="text-lg font-semibold text-gray-100 mb-2 flex items-center gap-2">💬 AI Assistant</h2>
+            <div id="chat-log" class="flex-1 overflow-y-auto bg-gray-950 rounded border border-gray-800 p-3 terminal text-xs text-green-400 whitespace-pre-wrap break-all mb-4">
+                <div class="text-gray-500 text-sm mb-2">AI: Hello! I'm your autonomous development assistant. How can I help with your SOC pipeline today?</div>
+            </div>
+            <form id="chat-form" class="flex gap-2">
+                <input type="text" id="chat-input" placeholder="Type a prompt or ask about the codebase..." class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 text-gray-200">
+                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition-colors text-sm">Send</button>
+            </form>
+        </div>
     </main>
+
     <script>
+        // Tab Switching Logic
+        function openTab(evt, tabName) {
+            document.querySelectorAll('.tab-content').forEach(p => p.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('text-green-400', 'border-green-500');
+                b.classList.add('text-gray-400', 'border-transparent');
+            });
+            document.getElementById(tabName).style.display = (tabName === 'tab-swarm' ? 'grid' : 'block');
+            evt.currentTarget.classList.remove('text-gray-400', 'border-transparent');
+            evt.currentTarget.classList.add('text-green-400', 'border-green-500');
+        }
+        window.addEventListener('load', () => {
+            document.querySelector('.tab-btn').click(); // Activate first tab
+        });
+
+        // Existing Dashboard Logic
         async function updateStatus() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
                 document.getElementById('current-task').textContent = data.current_task || 'Idle';
                 document.getElementById('skipped-files').textContent = data.skipped_files;
-                
-                // Update pause button state
-                const pauseRes = await fetch('/api/pause', { method: 'POST' }); // Just to check state, or we can add a GET /api/pause
-                // For simplicity, we'll just toggle on click and let the swarm read the file
             } catch (e) { console.error(e); }
         }
         setInterval(updateStatus, 5000); updateStatus();
@@ -93,12 +145,10 @@
                 });
             } catch (e) { console.error(e); }
         }
-        
         async function removeBacklog(file) {
             await fetch(`/api/backlog?file=${encodeURIComponent(file)}`, { method: 'DELETE' });
             updateBacklog();
         }
-
         setInterval(updateBacklog, 10000); updateBacklog();
 
         document.getElementById('backlog-form').addEventListener('submit', async (e) => {
@@ -111,18 +161,43 @@
             updateBacklog();
         });
 
+        // Live Log Stream
         const logViewer = document.getElementById('log-viewer');
         const eventSource = new EventSource('/stream/logs');
         eventSource.onmessage = function(event) {
             const line = document.createElement('div');
             line.textContent = event.data;
             if (event.data.includes('✅')) line.className = 'text-green-400';
-            else if (event.data.includes('❌') || event.data.includes('Error')) line.className = 'text-red-400';
+            else if (event.data.includes('❌') || event.data.includes('Error') || event.data.includes('failed')) line.className = 'text-red-400';
             else if (event.data.includes('⚠️')) line.className = 'text-yellow-400';
             else line.className = 'text-gray-300';
             logViewer.appendChild(line);
             logViewer.scrollTop = logViewer.scrollHeight;
         };
+
+        // Mock AI Chat Logic
+        document.getElementById('chat-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const value = input.value.trim();
+            if (!value) return;
+            const log = document.getElementById('chat-log');
+            
+            const userDiv = document.createElement('div');
+            userDiv.innerHTML = `<span class="text-blue-400">You:</span> ${value}`;
+            userDiv.className = 'text-gray-300 mb-2';
+            log.appendChild(userDiv);
+            input.value = '';
+            log.scrollTop = log.scrollHeight;
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.innerHTML = `<span class="text-green-400">AI:</span> I received your request: "${value}". In a future update, I will connect this to the OpenRouter API to provide real codebase analysis!`;
+                aiDiv.className = 'text-gray-300 mb-2';
+                log.appendChild(aiDiv);
+                log.scrollTop = log.scrollHeight;
+            }, 800);
+        });
     </script>
 </body>
 </html>
