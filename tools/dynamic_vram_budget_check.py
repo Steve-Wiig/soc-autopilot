@@ -7,6 +7,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Optional
+import re
 
 EXIT_PASS = 0
 EXIT_FAIL = 1
@@ -15,6 +16,73 @@ EXIT_CONFIG_ERROR = 2
 """Default fraction of total GPU memory to use as VRAM budget (90%).
 Leaves 10% headroom for system/other processes."""
 DEFAULT_VRAM_BUDGET_RATIO = 0.9
+
+
+@dataclass(frozen=True)
+class MemoryUnit:
+    """
+    Typed representation of a memory quantity with unit conversion.
+
+    Encapsulates parsing, validation, and conversion logic for memory values
+    expressed in various units (MiB, GiB, MB, GB, etc.).
+    """
+    value_mib: int
+
+    @classmethod
+    def parse(cls, val_str: str) -> "MemoryUnit":
+        """
+        Parse a memory string into a MemoryUnit.
+
+        Args:
+            val_str: String containing a memory value, typically in formats like
+                     "16384 MiB", "8 GiB", "1024", "  2048 MB  ", etc.
+
+        Returns:
+            MemoryUnit instance with value normalized to MiB.
+
+        Raises:
+            ValueError: If the input string cannot be parsed as a valid memory value.
+        """
+        if not val_str or not val_str.strip():
+            raise ValueError("Empty memory value string")
+
+        parts = val_str.strip().split()
+        if not parts:
+            raise ValueError("No tokens in memory value string")
+
+        num_str = parts[0]
+        unit = parts[1] if len(parts) > 1 else ''
+
+        # Handle cases where the unit is attached to the number without a space
+        if not unit and any(c.isalpha() for c in num_str):
+            m = re.match(r'(?P<num>[0-9]*\.?[0-9]+)\s*(?P<unit>[a-zA-Z]+)?', num_str)
+            if m:
+                num_str = m.group('num')
+                unit = m.group('unit') or ''
+
+        try:
+            value = float(num_str)
+        except ValueError as e:
+            raise ValueError(f"Invalid numeric value in '{val_str}': {e}")
+
+        unit = unit.lower()
+        if unit in ('gib', 'gb', 'g'):
+            value *= 1024
+        elif unit in ('kib', 'kb', 'k'):
+            value /= 1024
+        # For 'mib', 'mb', 'm', or no unit, keep the value as-is (assumed MiB)
+
+        return cls(value_mib=int(value))
+
+    def to_mib(self) -> int:
+        """Return the value in MiB."""
+        return self.value_mib
+
+    def __str__(self) -> str:
+        return f"{self.value_mib} MiB"
+
+    def __int__(self) -> int:
+        return self.value_mib
 
 
 @dataclass
@@ -52,45 +120,6 @@ def get_gpu_info() -> Optional[ET.Element]:
     except (subprocess.CalledProcessError, FileNotFoundError, ET.ParseError):
         return None
 
-def parse_mem_value(val_str: str) -> int:
-    """
-    Extract integer memory value from a string containing numeric digits.
-
-    Args:
-        val_str: String containing a memory value, typically in formats like
-                 "16384 MiB", "8 GiB", "1024", "  2048 MB  ", etc.
-                 The function extracts the first whitespace-separated token.
-
-    Returns:
-        int: The extracted integer value in the original units (typically MiB).
-             Returns 0 if no valid integer is found or if the input is empty/None.
-    """
-    if not val_str:
-        return 0
-    parts = val_str.strip().split()
-    if not parts:
-        return 0
-    num_str = parts[0]
-    unit = parts[1] if len(parts) > 1 else ''
-    # Handle cases where the unit is attached to the number without a space
-    if not unit and any(c.isalpha() for c in num_str):
-        import re
-        m = re.match(r'(?P<num>[0-9]*\.?[0-9]+)\s*(?P<unit>[a-zA-Z]+)?', num_str)
-        if m:
-            num_str = m.group('num')
-            unit = m.group('unit') or ''
-    try:
-        value = float(num_str)
-    except ValueError:
-        return 0
-    unit = unit.lower()
-    if unit in ('gib', 'gb', 'g'):
-        value *= 1024
-    elif unit in ('kib', 'kb', 'k'):
-        value /= 1024
-    # For 'mib', 'mb', 'm', or no unit, keep the value as‑is
-    return int(value)
-
 
 def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
     """
@@ -124,8 +153,8 @@ def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
             raise ValueError("No GPU device found in nvidia-smi output")
 
         fb_memory = gpu.find('fb_memory_usage')
-        total_mb = parse_mem_value(fb_memory.find('total').text)
-        used_mb = parse_mem_value(fb_memory.find('used').text)
+        total_mb = MemoryUnit.parse(fb_memory.find('total').text).to_mib()
+        used_mb = MemoryUnit.parse(fb_memory.find('used').text).to_mib()
 
         # Handle VRAM_BUDGET_MB override with validation
         env_budget = os.getenv('VRAM_BUDGET_MB')
@@ -145,12 +174,12 @@ def check_vram_budget(gpu_data: Optional[ET.Element] = None) -> VramCheckResult:
         else:
             budget_mb = int(total_mb * DEFAULT_VRAM_BUDGET_RATIO)
 
-    except (AttributeError, ValueError, TypeError):
+    except (AttributeError, ValueError, TypeError) as e:
         return VramCheckResult(
             success=False,
             used_mb=0,
             budget_mb=0,
-            message="CONFIG ERROR: Failed to parse or validate GPU memory metrics",
+            message=f"CONFIG ERROR: Failed to parse or validate GPU memory metrics: {e}",
             exit_code=EXIT_CONFIG_ERROR
         )
 

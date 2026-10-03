@@ -11,6 +11,57 @@ from dataclasses import dataclass, asdict
 from typing import Any, Dict, Optional, Set
 
 
+class VoteSerializer:
+    """
+    Adapter for deterministic serialization of WorkerVote data.
+
+    Encapsulates the canonical JSON format and signing payload generation
+    to ensure consistent encoding across all consumers. This class is
+    stateless and thread-safe.
+    """
+
+    @staticmethod
+    def to_canonical_json(data: Dict[str, Any]) -> str:
+        """
+        Return deterministic JSON serialization with sorted keys and minimal separators.
+
+        Args:
+            data: Dictionary to serialize.
+
+        Returns:
+            Canonical JSON string.
+        """
+        return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+    @staticmethod
+    def signing_payload(vote_data: Dict[str, Any]) -> str:
+        """
+        Generate the signing payload by clearing the signature field.
+
+        Args:
+            vote_data: Dictionary containing vote fields including 'signature'.
+
+        Returns:
+            Canonical JSON string with signature set to empty string.
+        """
+        data = dict(vote_data)
+        data["signature"] = ""
+        return VoteSerializer.to_canonical_json(data)
+
+    @staticmethod
+    def compute_hash(canonical_json: str) -> str:
+        """
+        Return the SHA-256 hex digest of the canonical JSON representation.
+
+        Args:
+            canonical_json: Output from to_canonical_json().
+
+        Returns:
+            Hex digest string.
+        """
+        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class WorkerVote:
     """
@@ -57,17 +108,15 @@ class WorkerVote:
 
     def canonical_json(self) -> str:
         """Return the deterministic JSON serialization of all vote fields, including signature."""
-        return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
+        return VoteSerializer.to_canonical_json(asdict(self))
 
     def signing_payload(self) -> str:
         """Canonical JSON with signature cleared for signing/verification."""
-        data = asdict(self)
-        data["signature"] = ""
-        return json.dumps(data, sort_keys=True, separators=(",", ":"))
+        return VoteSerializer.signing_payload(asdict(self))
 
     def compute_hash(self) -> str:
         """Return the SHA-256 hex digest of the canonical JSON representation."""
-        return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
+        return VoteSerializer.compute_hash(self.canonical_json())
 
 
 class VoteValidator:

@@ -11,8 +11,9 @@ Trust boundary:
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, Sequence
 import os
 
 from engine.openrouter_catalog import (
@@ -51,6 +52,132 @@ class AiderProvider:
     api_key_env: str | None = None
 
 
+class ProviderCatalogABC(ABC):
+    """
+    Abstract interface for provider catalogs.
+
+    Decouples provider selection logic from external API implementations.
+    Implementations must be deterministic and side-effect-free for a given
+    environment snapshot.
+    """
+
+    @abstractmethod
+    def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
+        """
+        Return all available providers for the given environment.
+
+        Args:
+            env: Environment variable mapping.
+
+        Returns:
+            Sequence of available AiderProvider instances, ordered by preference.
+        """
+        ...
+
+    @abstractmethod
+    def select_primary(self, env: Mapping[str, str]) -> AiderProvider | None:
+        """
+        Return the single best provider for the given environment.
+
+        Args:
+            env: Environment variable mapping.
+
+        Returns:
+            The primary AiderProvider, or None if no providers are available.
+        """
+        ...
+
+
+class OpenRouterCatalog(ProviderCatalogABC):
+    """
+    OpenRouter provider catalog implementation.
+
+    Encapsulates free-tier policy enforcement and catalog lookup logic.
+    """
+
+    def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
+        providers: list[AiderProvider] = []
+
+        if not _cloud_enabled(env):
+            return providers
+
+        api_key = env.get("OPENROUTER_API_KEY", "").strip()
+        if not api_key:
+            return providers
+
+        model = _select_openrouter_model(env)
+        if model:
+            providers.append(
+                AiderProvider(
+                    name="openrouter",
+                    model=model,
+                    api_base="https://openrouter.ai/api/v1",
+                    api_key_env="OPENROUTER_API_KEY",
+                )
+            )
+
+        return providers
+
+    def select_primary(self, env: Mapping[str, str]) -> AiderProvider | None:
+        available = self.list_available(env)
+        return available[0] if available else None
+
+
+class GeminiCatalog(ProviderCatalogABC):
+    """
+    Gemini provider catalog implementation.
+    """
+
+    def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
+        providers: list[AiderProvider] = []
+
+        if not _cloud_enabled(env):
+            return providers
+
+        api_key = env.get("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            return providers
+
+        providers.append(
+            AiderProvider(
+                name="gemini",
+                model=env.get("AIDER_GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+                api_base="https://generativelanguage.googleapis.com",
+                api_key_env="GEMINI_API_KEY",
+            )
+        )
+
+        return providers
+
+    def select_primary(self, env: Mapping[str, str]) -> AiderProvider | None:
+        available = self.list_available(env)
+        return available[0] if available else None
+
+
+class CompositeCatalog(ProviderCatalogABC):
+    """
+    Composite catalog that aggregates multiple provider catalogs.
+
+    Maintains a fixed priority order: OpenRouter first, then Gemini.
+    """
+
+    def __init__(self, catalogs: Sequence[ProviderCatalogABC]) -> None:
+        self._catalogs = catalogs
+
+    def list_available(self, env: Mapping[str, str]) -> Sequence[AiderProvider]:
+        all_providers: list[AiderProvider] = []
+        for catalog in self._catalogs:
+            all_providers.extend(catalog.list_available(env))
+        return all_providers
+
+    def select_primary(self, env: Mapping[str, str]) -> AiderProvider | None:
+        for catalog in self._catalogs:
+            primary = catalog.select_primary(env)
+            if primary:
+                return primary
+        return None
+
+
 def _cloud_enabled(env: Mapping[str, str]) -> bool:
     """Return True when cloud development providers are explicitly enabled."""
 
@@ -72,7 +199,6 @@ def _openrouter_model_ref(model_id: str) -> str:
 
 
 def _select_openrouter_model(env: Mapping[str, str]) -> str | None:
-    from engine.openrouter_catalog import free_models # Moved to prevent circular import(env: Mapping[str, str]) -> str | None:
     """Resolve an OpenRouter model without permitting paid inference.
 
     When free-only mode is enabled, the OpenRouter catalog is authoritative.
@@ -126,6 +252,7 @@ def _select_openrouter_model(env: Mapping[str, str]) -> str | None:
 def resolve_aider_providers(
     *,
     environ: Mapping[str, str] | None = None,
+    catalog: ProviderCatalogABC | None = None,
 ) -> tuple[AiderProvider, ...]:
     """Return deterministic development-provider order.
 
@@ -140,33 +267,11 @@ def resolve_aider_providers(
     """
 
     env: dict[str, str] = dict(os.environ if environ is None else environ)
-    providers: list[AiderProvider] = []
 
-    if _cloud_enabled(env):
-        if env.get("OPENROUTER_API_KEY", "").strip():
-            openrouter_model = _select_openrouter_model(env)
+    if catalog is None:
+        catalog = CompositeCatalog([
+            OpenRouterCatalog(),
+            GeminiCatalog(),
+        ])
 
-            if openrouter_model:
-                providers.append(
-                    AiderProvider(
-                        name="openrouter",
-                        model=openrouter_model,
-                        api_base="https://openrouter.ai/api/v1",
-                        api_key_env="OPENROUTER_API_KEY",
-                    )
-                )
-
-        if env.get("GEMINI_API_KEY", "").strip():
-            providers.append(
-                AiderProvider(
-                    name="gemini",
-                    model=env.get(
-                        "AIDER_GEMINI_MODEL",
-                        DEFAULT_GEMINI_MODEL,
-                    ),
-                    api_base="https://generativelanguage.googleapis.com",
-                    api_key_env="GEMINI_API_KEY",
-                )
-            )
-
-    return tuple(providers)
+    return tuple(catalog.list_available(env))
