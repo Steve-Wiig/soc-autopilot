@@ -6,6 +6,8 @@ import json
 import asyncio
 from pathlib import Path
 from openai import OpenAI
+import time
+import urllib.request
 
 app = FastAPI()
 
@@ -106,13 +108,59 @@ async def get_logs():
 @app.get("/api/usage")
 async def get_usage():
     usage_file = BASE_DIR / "overnight" / "openrouter_usage.json"
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    
+    # Try to read cached data
+    cached_data = None
     if usage_file.exists():
         try:
-            data = json.loads(usage_file.read_text())
-            return data
+            cached_data = json.loads(usage_file.read_text())
         except json.JSONDecodeError:
             pass
-    return {"used": 0, "limit": 1000}
+    
+    # Check if cache is fresh (< 24 hours)
+    now = time.time()
+    if cached_data and "last_updated" in cached_data:
+        if now - cached_data["last_updated"] < 86400:
+            return cached_data
+    
+    # Cache is stale or missing - fetch from OpenRouter API
+    total_credits = 0
+    if api_key:
+        try:
+            req = urllib.request.Request(
+                "https://openrouter.ai/api/v1/credits",
+                headers={"Authorization": f"Bearer {api_key}"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode())
+                total_credits = data.get("data", {}).get("total_credits", 0)
+        except Exception:
+            # If API call fails, fall back to cached data or defaults
+            pass
+    
+    # Preserve local_calls from cache
+    local_calls = 0
+    if cached_data and "local_calls" in cached_data:
+        local_calls = cached_data["local_calls"]
+    elif cached_data and "used" in cached_data:
+        # Backward compatibility with old "used" field
+        local_calls = cached_data["used"]
+    
+    # Build new cache
+    new_data = {
+        "total_credits": total_credits,
+        "local_calls": local_calls,
+        "last_updated": now
+    }
+    
+    # Write cache
+    try:
+        usage_file.write_text(json.dumps(new_data, indent=4))
+    except Exception:
+        pass
+    
+    return new_data
 
 @app.post("/api/chat")
 async def chat(request: Request):
@@ -135,8 +183,8 @@ async def chat(request: Request):
             # Increment usage on successful completion
             usage_file = BASE_DIR / "overnight" / "openrouter_usage.json"
             try:
-                usage_data = json.loads(usage_file.read_text()) if usage_file.exists() else {"used": 0, "limit": 1000}
-                usage_data["used"] = usage_data.get("used", 0) + 1
+                usage_data = json.loads(usage_file.read_text()) if usage_file.exists() else {"local_calls": 0, "total_credits": 0, "last_updated": time.time()}
+                usage_data["local_calls"] = usage_data.get("local_calls", 0) + 1
                 usage_file.write_text(json.dumps(usage_data, indent=4))
             except Exception:
                 pass # Fail silently on usage tracking so chat still works
