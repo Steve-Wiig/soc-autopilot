@@ -1898,6 +1898,10 @@ def compute_scorecard(days=None):
 # ============================================================
 # QUEUE DRAINING
 # ============================================================
+def is_duplicate(item):
+    """Stub to prevent NameError crash."""
+    return False
+
 def drain_fix_backlog(api_keys, max_fixes=3):
     backlog = _load_json(FIX_BACKLOG)
     if not backlog: return 0
