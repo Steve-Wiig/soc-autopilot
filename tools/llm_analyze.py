@@ -137,7 +137,12 @@ The following files IMPORT from this module. If you change function signatures, 
         print(f"❌ API request failed: {e}")
         sys.exit(1)
 
-    result = response.choices[0].message.content if response.choices and response.choices[0].message else "[LLM returned empty response]" if response.choices and response.choices[0].message else "[LLM returned empty response]"
+    try:
+        result = response.choices[0].message.content
+        if not result:
+            result = "[LLM returned empty response]"
+    except Exception:
+        result = "[LLM returned empty response]"
 
     print("\n" + "=" * 70)
     print(f"📊 ANALYSIS REPORT ({args.model})")
@@ -150,7 +155,7 @@ The following files IMPORT from this module. If you change function signatures, 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = Path(f"overnight/llm_analysis_{timestamp}.md")
 
-    output_path.write_text(result or "[LLM returned empty response]", encoding="utf-8")
+    output_path.write_text(str(result), encoding="utf-8")
     print(f"\n✅ Report saved to: {output_path}")
 
     if hasattr(response, "usage") and response.usage:
