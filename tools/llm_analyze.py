@@ -38,7 +38,8 @@ Output a structured, executive-level report. Be ruthless and analytical.
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Send a large text file to a high-context LLM via OpenRouter for analysis.")
-    parser.add_argument("input_file", help="Path to the text file to analyze")
+    parser.add_argument("--file", dest="input_file", help=argparse.SUPPRESS)
+    parser.add_argument("input_file", nargs="?", help="Path to the text file to analyze")
     parser.add_argument("--model", default="nvidia/nemotron-3.5-lightning:free", help="OpenRouter model ID")
     parser.add_argument("--prompt-file", help="Optional: path to a custom prompt file. Use {corpus} as placeholder.")
     parser.add_argument("--output", help="Optional: explicit output file path")
