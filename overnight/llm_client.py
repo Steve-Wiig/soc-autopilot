@@ -1,3 +1,5 @@
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from overnight.redis_state import swarm_state
 """
 Dual-Model LLM Client with DYNAMIC model discovery and fallback.

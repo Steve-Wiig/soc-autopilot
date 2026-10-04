@@ -1,3 +1,5 @@
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from overnight.redis_state import swarm_state
 # HARDENED: 2026-09-13T05:47:53.023705+00:00
 #!/usr/bin/env python3
