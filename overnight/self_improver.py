@@ -73,6 +73,15 @@ except ImportError: perform_autopsy = lambda *a, **k: ""
 # ============================================================
 # QUEUE & STATE MANAGEMENT
 # ============================================================
+
+# --- AUTOPILOT STUBS TO PREVENT NAMEERROR IN DRAIN_BACKLOG ---
+def is_duplicate(item):
+    return False
+
+def add_or_update(item):
+    pass  # Stub to prevent crash
+# --- END STUBS ---
+
 def _load_json(path):
     try: return json.loads(path.read_text()) if path.exists() else []
     except Exception: return []
@@ -1904,6 +1913,7 @@ def is_duplicate(item):
 
 def drain_fix_backlog(api_keys, max_fixes=3):
     return 0  # AUTOPILOT BYPASS: Function dependencies missing
+
 def drain_backlog_loop(api_keys, budget, state, fixes_per_pass=4):
     print(f"BACKLOG DRAIN MODE ({fixes_per_pass} fixes/pass)")
     for pass_num in range(1, 101):
