@@ -64,3 +64,8 @@ def is_available():
 def check_quota_or_raise(*args, **kwargs):
     """Stub to prevent ImportError."""
     return True
+
+
+def record_attempt(*args, **kwargs):
+    """Stub to prevent AttributeError when tracking API usage."""
+    return True
