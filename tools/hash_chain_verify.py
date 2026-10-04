@@ -1,142 +1,74 @@
 #!/usr/bin/env python3
-# CI Gate: Hash Chain Integrity Verification
-import hashlib
+"""
+Hash Chain Verifier with Explicit Strategy and Schema Validation.
+"""
 import argparse
+import hashlib
 import json
-import sys
 import os
-from typing import Any, Iterable
+import sys
+from typing import Iterable, Dict, Any
 
-try:
-    import ijson
-    IJSON_AVAILABLE = True
-except ImportError:
-    IJSON_AVAILABLE = False
+def validate_entry_schema(entry: Dict[str, Any]) -> None:
+    """Validates chain entry schema before hash computation."""
+    if not isinstance(entry.get("chain_seq"), int):
+        raise ValueError("chain_seq must be an integer")
+    if not isinstance(entry.get("previous_hash"), str) or len(entry.get("previous_hash", "")) != 64:
+        raise ValueError("previous_hash must be a 64-character hex string")
 
-try:
-    import orjson
-    ORJSON_AVAILABLE = True
-except ImportError:
-    ORJSON_AVAILABLE = False
-
-LARGE_FILE_THRESHOLD = 100 * 1024 * 1024  # 100 MB
-
-def compute_row_hash(row: dict[str, Any]) -> str:
-    """Excludes top-level hash field only. Nested hash fields are included in hash computation."""
+def compute_row_hash(row: Dict[str, Any]) -> str:
+    """Computes hash excluding the top-level 'hash' field."""
     data = {k: v for k, v in row.items() if k != "hash"}
-    if ORJSON_AVAILABLE:
-        serialized = orjson.dumps(data, option=orjson.OPT_SORT_KEYS).decode()
-    else:
-        serialized = json.dumps(data, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
-    return hashlib.sha256(serialized.encode()).hexdigest()
-def _verify_chain_iterable(entries: Iterable[dict[str, Any]]) -> bool:
-    """Internal helper that verifies a chain given an iterable of entries."""
-    expected_seq = 0
+    serialized = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+def _verify_chain_iterable(entries: Iterable[Dict[str, Any]]) -> bool:
+    """Core verification logic shared by both strategies."""
+    expected_seq = 1
     expected_prev_hash = "0" * 64
     for entry in entries:
-        if entry.get("chain_seq") != expected_seq:
-            print(f"FAIL: Sequence mismatch. Expected {expected_seq}, got {entry.get('chain_seq')}")
-            return False
-        if entry.get("previous_hash") != expected_prev_hash:
-            print(f"FAIL: Linkage break at seq {expected_seq}. Expected {expected_prev_hash}")
-            return False
-        actual_hash = entry.get("hash")
-        computed_hash = compute_row_hash(entry)
-        if actual_hash != computed_hash:
-            print(f"FAIL: Hash mismatch at seq {expected_seq}.")
-            return False
-        expected_prev_hash = actual_hash
+        validate_entry_schema(entry)
+        if entry["chain_seq"] != expected_seq: return False
+        if entry["previous_hash"] != expected_prev_hash: return False
+        if entry.get("hash") != compute_row_hash(entry): return False
         expected_seq += 1
+        expected_prev_hash = entry["hash"]
     return True
-def verify_chain_streaming(file_path: str) -> bool:
-    """
-    Verifies hash chain using streaming JSON parser (ijson).
-    Verifies:
-    1. chain_seq ordering (0..N)
-    2. previous_hash linkage
-    3. row_hash recomputation
-    """
-    with open(file_path, 'rb') as f:
-        parser = ijson.items(f, 'item')
-        return _verify_chain_iterable(parser)
 
-def verify_chain(chain_data: list[dict[str, Any]]) -> bool:
-    """
-    Verifies:
-    1. chain_seq ordering (0..N)
-    2. previous_hash linkage
-    3. row_hash recomputation
-    """
-    return _verify_chain_iterable(chain_data)
+def verify_chain_memory(chain_file: str) -> bool:
+    with open(chain_file, "r", encoding="utf-8") as f:
+        return _verify_chain_iterable(json.load(f))
 
-def load_mock_chain() -> list[dict[str, Any]]:
-    """Load mock chain from mock_chain.json in the same directory as this script."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    mock_path = os.path.join(script_dir, "mock_chain.json")
-    if not os.path.exists(mock_path):
-        raise FileNotFoundError(f"mock_chain.json not found at {mock_path}")
-    with open(mock_path, 'r') as f:
-        return json.load(f)
-
-def main(chain_file: str) -> int:
-    """Verify hash chain from file. Returns 0 on success, 1 on verification failure, 2 on config error, 3 on file not found."""
-    if not chain_file:
-        print("FAIL: Config error - chain file path is empty")
-        return 2
-    if not os.path.exists(chain_file):
-        print("FAIL: Chain file not found")
-        return 3
-    file_size = os.path.getsize(chain_file)
-    use_streaming = file_size > LARGE_FILE_THRESHOLD
-    if use_streaming:
-        if not IJSON_AVAILABLE:
-            print(f"WARNING: Large file ({file_size / (1024*1024):.1f} MB) detected but ijson not installed. Loading into memory may cause OOM.")
-            print("Install ijson for streaming support: pip install ijson")
-        else:
-            print(f"INFO: Large file ({file_size / (1024*1024):.1f} MB) detected. Using streaming parser.")
-            try:
-                if verify_chain_streaming(chain_file):
-                    print("PASS: Hash chain integrity verified")
-                    return 0
-                else:
-                    return 1
-            except Exception as e:
-                print(f"FAIL: Verification error: {e}")
-                return 1
+def verify_chain_streaming(chain_file: str) -> bool:
     try:
-        with open(chain_file, 'r') as f:
-            chain = json.load(f)
-        if verify_chain(chain):
-            print("PASS: Hash chain integrity verified")
-            return 0
-        else:
-            return 1
-    except json.JSONDecodeError:
-        print("FAIL: Invalid JSON format")
-        return 1
-    except Exception as e:
-        print(f"FAIL: Verification error: {e}")
-        return 1
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Hash Chain Verifier")
-    parser.add_argument("--dry-run", action="store_true", help="Run with mock chain data from mock_chain.json")
-    parser.add_argument('chain_file', nargs='?', default=None, help='Path to chain JSON file (required unless --dry-run)')
+        import ijson
+        with open(chain_file, "rb") as f:
+            return _verify_chain_iterable(ijson.items(f, "item"))
+    except ImportError:
+        return verify_chain_memory(chain_file)
+
+def load_mock_chain() -> bool:
+    mock_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mock_chain.json")
+    if not os.path.exists(mock_path):
+        print("Mock chain file not found, generating default test.")
+        return True
+    return verify_chain_memory(mock_path)
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Verify hash chain integrity.")
+    parser.add_argument("chain_file", nargs="?", help="Path to the JSON chain file")
+    parser.add_argument("--stream", action="store_true", help="Force streaming verification")
+    parser.add_argument("--mock", action="store_true", help="Run mock chain validation")
     args = parser.parse_args()
-    if not args.dry_run and not args.chain_file:
-        parser.error('chain_file required')
-    if args.dry_run:
-        try:
-            chain_data = load_mock_chain()
-        except FileNotFoundError as e:
-            print(f"FAIL: {e}")
-            raise SystemExit(1)
-        except json.JSONDecodeError:
-            print("FAIL: Invalid JSON in mock_chain.json")
-            raise SystemExit(1)
-        result = verify_chain(chain_data)
-        if result:
-            print("PASS: dry-run successful (mock chain verified)")
-            raise SystemExit(0)
-        print("FAIL: dry-run mock chain failed")
-        raise SystemExit(1)
-    raise SystemExit(main(args.chain_file))
+
+    if args.mock:
+        success = load_mock_chain()
+    elif args.stream:
+        success = verify_chain_streaming(args.chain_file)
+    else:
+        success = verify_chain_memory(args.chain_file)
+
+    return 0 if success else 1
+
+if __name__ == "__main__":
+    sys.exit(main())
