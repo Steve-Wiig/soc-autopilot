@@ -1904,7 +1904,6 @@ def is_duplicate(item):
 
 def drain_fix_backlog(api_keys, max_fixes=3):
     return 0  # AUTOPILOT BYPASS: Function dependencies missing
-
 def drain_backlog_loop(api_keys, budget, state, fixes_per_pass=4):
     print(f"BACKLOG DRAIN MODE ({fixes_per_pass} fixes/pass)")
     for pass_num in range(1, 101):
