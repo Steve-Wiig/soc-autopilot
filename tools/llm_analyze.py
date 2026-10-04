@@ -139,7 +139,10 @@ The following files IMPORT from this module. If you change function signatures, 
         sys.exit(1)
 
     try:
-        result = response.choices[0].message.content
+        if not response.choices or not response.choices[0].message:
+            result = "[LLM returned empty response]"
+        else:
+            result = response.choices[0].message.content
         if not result:
             result = "[LLM returned empty response]"
     except Exception:

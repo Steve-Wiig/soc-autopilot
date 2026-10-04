@@ -288,3 +288,15 @@ def select_free_coding_model(
     ]
 
     return (coding or candidates)[0]
+
+# --- BACKWARD COMPATIBILITY SHIM FOR SWARM SUPERVISOR ---
+def is_available():
+    """Shim to satisfy legacy supervisor calls."""
+    try:
+        # Attempt to use the new method if it exists
+        if 'check_quota_or_raise' in globals():
+            check_quota_or_raise()
+        return True
+    except Exception:
+        return False
+# --------------------------------------------------------
