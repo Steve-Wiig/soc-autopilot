@@ -194,13 +194,13 @@ class VoteValidator:
             except Exception:
                 raise ValueError("Invalid cryptographic signature.")
 
-            # Register only after all validation succeeds
-            self.seen_signatures[vote.signature] = None
-            # Evict oldest signatures if we exceed the maximum
-            while len(self.seen_signatures) > self.max_seen_signatures:
-                oldest = next(iter(self.seen_signatures))
-                del self.seen_signatures[oldest]
+        # Register only after all validation succeeds (regardless of key_registry)
+        self.seen_signatures[vote.signature] = None
+        # Evict oldest signatures if we exceed the maximum
+        while len(self.seen_signatures) > self.max_seen_signatures:
+            oldest = next(iter(self.seen_signatures))
+            del self.seen_signatures[oldest]
 
-            self.worker_votes_per_candidate.setdefault(
-                vote.candidate_hash, set()
-            ).add(vote.worker_id)
+        self.worker_votes_per_candidate.setdefault(
+            vote.candidate_hash, set()
+        ).add(vote.worker_id)
