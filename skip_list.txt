@@ -1,3 +1,4 @@
 
 tools/external_credential_permission_check.py
 ./engine/investigation_controller.py
+./tools/hash_chain_verify.py
