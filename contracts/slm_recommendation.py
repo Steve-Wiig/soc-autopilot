@@ -1,9 +1,10 @@
-// """Data contracts for Small Language Model (SLM) security recommendations.
+"""Data contracts for Small Language Model (SLM) security recommendations.
 
 This module defines the schema for recommendations produced by an SLM when
 analyzing security events, along with the envelope used to transport those
 recommendations, and the errors raised when a recommendation violates the
 expected contract or when the local model is unavailable.
+"""
 
 from datetime import datetime, timezone
 from enum import Enum
