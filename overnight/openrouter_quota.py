@@ -59,3 +59,8 @@ def _remaining():
 
 def is_available():
         return True  # NEUTRALIZED
+
+
+def check_quota_or_raise(*args, **kwargs):
+    """Stub to prevent ImportError."""
+    return True
