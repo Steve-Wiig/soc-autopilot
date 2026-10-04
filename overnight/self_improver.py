@@ -1917,6 +1917,17 @@ def is_duplicate(item):
 def drain_fix_backlog(api_keys, max_fixes=3):
     return 0  # AUTOPILOT BYPASS: Function dependencies missing
 
+    # --- AUTOPILOT REDIS WIRING ---
+    # Pull all queued fixes from Redis into the local backlog list
+    backlog = []
+    while True:
+        _item = swarm_state.pop_from_backlog()
+        if not _item:
+            break
+        backlog.append(_item)
+    print(f"📥 Pulled {len(backlog)} fixes from Redis backlog.")
+    # --------------------------------
+
 def drain_backlog_loop(api_keys, budget, state, fixes_per_pass=4):
     print(f"BACKLOG DRAIN MODE ({fixes_per_pass} fixes/pass)")
     for pass_num in range(1, 101):
@@ -2176,7 +2187,7 @@ def process_advisory_queue(api_keys, budget, state):
                         entry["source_hash"] = current_hash
                     if data.get("advisory_fingerprint"):
                         entry["advisory_fingerprint"] = data["advisory_fingerprint"]
-                    backlog.append(entry)
+                    swarm_state.add_to_backlog(entry)
                 _save_json(FIX_BACKLOG, backlog)
                 qpath.unlink()
             else:
