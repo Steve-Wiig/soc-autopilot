@@ -142,7 +142,7 @@ The following files IMPORT from this module. If you change function signatures, 
         if not response.choices or not response.choices[0].message:
             result = "[LLM returned empty response]"
         else:
-            result = response.choices[0].message.content
+            result = response.choices[0].message.content if response.choices and response.choices[0].message and response.choices[0].message.content else "[LLM returned empty response]"
         if not result:
             result = "[LLM returned empty response]"
     except Exception:
