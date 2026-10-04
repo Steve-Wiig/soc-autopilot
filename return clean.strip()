@@ -1,0 +1,7 @@
+
+**Prompt Hardening Pattern**
+Always use a structured prompt template with explicit system-role boundaries. Never concatenate raw user data into the model context without validation first.
+
+### Mitigation 2: Redis Compromise Defenses
+
+**Enforce Redis Authentication & TLS**

@@ -1,0 +1,11 @@
+
+## 5. Additional Recommendations
+
+- Conduct regular RED TEAM exercises targeting the LLM prompt pipeline
+- Deploy Redis Cluster mode with Sentinel for failover resilience
+- Implement zero-trust edge device provisioning using mutual TLS (mTLS) with short-lived certificates
+- Maintain a comprehensive inventory of all API keys with automated expiration alerts
+
+---
+
+*This threat model is a living document. Review quarterly or upon any critical CVE disclosure affecting dependent libraries (e.g., redis-py, ed25519, model adapter frameworks).*
