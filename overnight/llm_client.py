@@ -12,7 +12,7 @@ import os
 
 def _enforce_free_tier(model: str) -> None:
     """Hard guard: Physically prevents any paid model from being called."""
-    if os.getenv("ALLOW_PAID_CALLS", "").lower() in ("true", "1", "yes"):
+    if os.getenv("ALLOW_PAID_CALLS", "").strip().lower() == "true":
         return
     if not str(model).strip().endswith(":free"):
         raise RuntimeError(
@@ -408,7 +408,7 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
     """Call Gemini (Google)."""
     if not api_key:
         return ""
-    if not _budget_allow('gemini'):
+    if not _budget_allow("gemini"):
         return ""
 
     headers = {
