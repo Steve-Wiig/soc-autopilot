@@ -1,3 +1,4 @@
+from overnight.redis_state import swarm_state
 """
 Dual-Model LLM Client with DYNAMIC model discovery and fallback.
 
@@ -759,7 +760,27 @@ Keep it brief - this is a preliminary pass, not a final review."""
 
 
 
-def generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0.2, allow_fallback=True, system_prompt=None):
+
+def generate(*args, **kwargs):
+    model = kwargs.get('model')
+    
+    # Check circuit breaker before calling API
+    if model and swarm_state.is_model_blocked(model):
+        print(f"🚫 Circuit Breaker: {model} is blocked due to recent failures.")
+        raise Exception(f"Circuit breaker tripped for {model}")
+        
+    try:
+        result = _original_generate(*args, **kwargs)
+        # Reset breaker on success
+        if model: swarm_state.reset_model_breaker(model)
+        return result
+    except Exception as e:
+        # Record failure
+        if model: swarm_state.record_model_failure(model)
+        raise
+
+
+def _original_generate(prompt, api_keys, model_type="code", max_tokens=8192, temperature=0.2, allow_fallback=True, system_prompt=None):
     """Generate content with multi-provider fallback.
 
     Order: OpenRouter -> Groq -> Mistral -> wait & retry.
