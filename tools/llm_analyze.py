@@ -137,7 +137,7 @@ The following files IMPORT from this module. If you change function signatures, 
         print(f"❌ API request failed: {e}")
         sys.exit(1)
 
-    result = response.choices[0].message.content if response.choices and response.choices[0].message else "[LLM returned empty response]"
+    result = response.choices[0].message.content if response.choices and response.choices[0].message else "[LLM returned empty response]" if response.choices and response.choices[0].message else "[LLM returned empty response]"
 
     print("\n" + "=" * 70)
     print(f"📊 ANALYSIS REPORT ({args.model})")
