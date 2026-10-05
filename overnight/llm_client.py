@@ -9,17 +9,86 @@ this queries OpenRouter's API to find currently-available free instruct models
 and builds the fallback list automatically.
 """
 import os
-from pathlib import Path
 
 def _enforce_free_tier(model: str) -> None:
     """Hard guard: Physically prevents any paid model from being called."""
-    if os.getenv("ALLOW_PAID_CALLS", "").strip().lower() == "true":
+    if os.getenv("ALLOW_PAID_CALLS", "").lower() in ("true", "1", "yes"):
         return
     if not str(model).strip().endswith(":free"):
         raise RuntimeError(
             f"SECURITY VIOLATION: Attempted to call paid model '{model}'. "
             "Only ':free' models are permitted to prevent API drain."
         )
+
+import re
+import json
+import time
+from pathlib import Path
+
+try:
+    import requests
+except ImportError:
+    raise ImportError("requests library required: pip install requests")
+
+from overnight.openrouter_quota import check_quota_or_raise
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+CRITIC_MODEL = "gemini-3.1-flash-lite"
+GENERATOR_MODEL = "nvidia/nemotron-3.5-lightning:free"  # Primary (dynamic discovery may switch at runtime)
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
+
+RATE_LIMIT_SLEEP = 7
+MAX_RETRIES = 3
+
+# LLM_FIX_HELPERS_V1
+
+CODE_SYSTEM_PROMPT = """You are a senior Python engineer writing production-ready code for a SOC automation platform.
+RULES:
+- Output ONLY valid Python code
+- No markdown fences, no explanations, no preamble
+- No reasoning, analysis, planning, or thinking process
+- Do NOT start with Let me / Here / I will / First or any prose
+- The first non-empty line MUST be valid Python code
+- Use real sqlite3.connect(":memory:") for SQLite, not mocks
+- Expect RuntimeError not SystemExit (library code auto-fixed)
+- Import from actual modules, don't hallucinate"""
+
+PATCH_SYSTEM_PROMPT = """You are a senior Python engineer producing a machine-readable patch.
+Output ONLY Aider-style SEARCH/REPLACE blocks.
+
+Use exactly this format:
+<<<<<<< path/to/file.py
+[exact search text]
+=======
+[replacement text]
+>>>>>>> REPLACE
+
+RULES:
+- No prose
+- No explanations
+- No markdown fences
+- No line numbers
+- Preserve indentation exactly
+- The search block must match the existing file exactly
+- If you cannot produce a safe patch, output nothing"""
+
+JSON_SYSTEM_PROMPT = """You are a precise API assistant.
+Output ONLY valid JSON.
+No markdown fences.
+No prose.
+No comments.
+No trailing commas.
+The first non-empty character must be { or [."""
+
+DOCS_SYSTEM_PROMPT = """You are a technical writer.
+Output ONLY the document content.
+No reasoning, planning, or meta-commentary.
+Start directly with the content."""
 
 
 def _budget_record(provider):
@@ -287,9 +356,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
 
         try:
             check_quota_or_raise()
-            _enforce_free_tier(model)
-            if not _budget_allow("openrouter", model):
-                return ""
+            _enforce_free_tier(try_model)
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
@@ -864,7 +931,7 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
             print("    🔒 Mistral budget wait timeout")
             return ""
         
-        _enforce_free_tier(model)
+        _enforce_free_tier(try_model)
         
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         budget.record_call("mistral")
