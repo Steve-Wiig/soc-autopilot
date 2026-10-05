@@ -9,6 +9,7 @@ this queries OpenRouter's API to find currently-available free instruct models
 and builds the fallback list automatically.
 """
 import os
+from pathlib import Path
 
 def _enforce_free_tier(model: str) -> None:
     """Hard guard: Physically prevents any paid model from being called."""
