@@ -113,7 +113,8 @@ class OpenRouterCatalog(ProviderCatalogABC):
         if not api_key:
             return providers
 
-        if free_only_enabled(env) and self.catalog_data is None:
+        catalog = self.catalog_data
+        if free_only_enabled(env) and catalog is None:
             try:
                 catalog = get_catalog(api_key=api_key)
                 if not catalog:
@@ -122,14 +123,8 @@ class OpenRouterCatalog(ProviderCatalogABC):
             except Exception:
                 logging.warning("OpenRouter free-only mode requires catalog data but none provided; skipping.")
                 return providers
-                if not catalog:
-                    logging.warning("OpenRouter free-only mode requires catalog data but none provided; skipping.")
-                    return providers
-            except Exception:
-                logging.warning("OpenRouter free-only mode requires catalog data but none provided; skipping.")
-                return providers
 
-        model = _select_openrouter_model(env)
+        model = _select_openrouter_model(env, catalog_data=catalog)
         if model:
             providers.append(
                 AiderProvider(

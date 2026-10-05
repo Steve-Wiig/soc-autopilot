@@ -19,6 +19,8 @@ def _enforce_free_tier(model: str) -> None:
             f"SECURITY VIOLATION: Attempted to call paid model '{model}'. "
             "Only ':free' models are permitted to prevent API drain."
         )
+
+
 import re
 import json
 import time
