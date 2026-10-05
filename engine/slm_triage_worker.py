@@ -110,8 +110,8 @@ def _start_lease_heartbeat(
             )
             ready_event.set()
 
-                manager.heartbeat(job_id)
             while not stop_event.wait(interval):
+                manager.heartbeat(job_id)
 
         except Exception as exc:
             failure.append(exc)
