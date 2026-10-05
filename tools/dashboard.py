@@ -345,7 +345,7 @@ def main():
         try:
             res = subprocess.run(
                 [sys.executable, "-m", "pytest", "-q", "--tb=line", "tests/"],
-                cwd=ROOT, capture_output=True, text=True, timeout=120,
+                cwd=ROOT, capture_output=True, text=True, timeout=30,
             )
             out_lines = res.stdout.strip().split(chr(10))
             print(chr(10).join(out_lines[-3:]) if len(out_lines) >= 3 else res.stdout)
