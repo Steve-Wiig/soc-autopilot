@@ -355,7 +355,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
 
         try:
             check_quota_or_raise()
-            _enforce_free_tier(try_model)
+            _enforce_free_tier(model)
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
@@ -407,7 +407,7 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
     """Call Gemini (Google)."""
     if not api_key:
         return ""
-    if not _budget_allow('gemini'):
+    if not _budget_allow("gemini"):
         return ""
 
     headers = {
@@ -930,7 +930,7 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
             print("    🔒 Mistral budget wait timeout")
             return ""
         
-        _enforce_free_tier(try_model)
+        _enforce_free_tier(model)
         
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         budget.record_call("mistral")
