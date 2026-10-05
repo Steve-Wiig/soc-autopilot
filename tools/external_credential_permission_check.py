@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests import Session
-from pydantic import BaseModel, validator, Field
+from pydantic import BaseModel, field_validator, Field
 
 DEFAULT_CONFIG_PATH: str = str(Path(__file__).parent / "config.json")
 
@@ -45,14 +45,16 @@ class Config(BaseModel):
     forbidden: str = Field(..., description="Path for the forbidden endpoint (must start with '/')")
     forbidden_method: str = Field(..., description="HTTP method to test (must be in VALID_METHODS)")
 
-    @validator("forbidden_method")
+    @field_validator("forbidden_method")
+    @classmethod
     def validate_forbidden_method(cls, v: str) -> str:
         v = v.upper()
         if v not in VALID_METHODS:
             raise ValueError(f"Invalid forbidden_method: {v}. Must be one of {VALID_METHODS}")
         return v
 
-    @validator("read", "forbidden")
+    @field_validator("read", "forbidden")
+    @classmethod
     def validate_paths(cls, v: str) -> str:
         if not v.startswith("/"):
             raise ValueError(f"Path must start with '/': {v}")
