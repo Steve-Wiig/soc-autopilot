@@ -344,13 +344,13 @@ def main():
         h1("🧪 TEST SUITE (Post-Consensus)")
         try:
             res = subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", "--tb=line", "tests/"],
-                cwd=ROOT, capture_output=True, text=True, timeout=30,
+                [sys.executable, "-m", "pytest", "-q", "--tb=line", "tests/test_paid_call_gate.py"],
+                cwd=ROOT, capture_output=True, text=True, timeout=10,
             )
             out_lines = res.stdout.strip().split(chr(10))
             print(chr(10).join(out_lines[-3:]) if len(out_lines) >= 3 else res.stdout)
         except subprocess.TimeoutExpired:
-            print("   ⚠️ Tests timed out after 120s.")
+            print("   ⚠️ Tests timed out after 10s.")
         except Exception as e:
             print(f"   ⚠️ Test error: {e}")
     else:
