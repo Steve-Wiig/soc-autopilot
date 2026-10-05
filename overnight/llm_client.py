@@ -12,7 +12,7 @@ import os
 
 def _enforce_free_tier(model: str) -> None:
     """Hard guard: Physically prevents any paid model from being called."""
-    if os.getenv("ALLOW_PAID_CALLS", "").strip().lower() == "true":
+    if os.getenv("ALLOW_PAID_CALLS", "").lower() in ("true", "1", "yes"):
         return
     if not str(model).strip().endswith(":free"):
         raise RuntimeError(
@@ -323,9 +323,7 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     attempts = 0
     max_attempts = 1 if not allow_fallback else 3
 
-    for try_model in models_to_try:            check_quota_or_raise()
-            _enforce_free_tier(model)
-
+    for try_model in models_to_try:
         attempts += 1
         if attempts > max_attempts:
             break
@@ -359,8 +357,6 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
         try:
             check_quota_or_raise()
             _enforce_free_tier(model)
-            check_quota_or_raise()
-            _enforce_free_tier(try_model)
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
@@ -412,7 +408,7 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
     """Call Gemini (Google)."""
     if not api_key:
         return ""
-    if not _budget_allow("gemini"):
+    if not _budget_allow('gemini'):
         return ""
 
     headers = {
@@ -426,8 +422,6 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
 
     for attempt in range(MAX_RETRIES):
         try:
-            check_quota_or_raise()
-            _enforce_free_tier(model)
             resp = requests.post(GEMINI_URL, json=payload, headers=headers, timeout=90)
 
             if resp.status_code == 429:
@@ -464,8 +458,6 @@ def _call_gemini(prompt, api_key, max_tokens=8192, temperature=0.2):
 def discover_groq_models(api_key):
     """Query Groq API for available free models."""
     try:
-        check_quota_or_raise()
-        _enforce_free_tier(model)
         resp = requests.get(
             GROQ_MODELS_URL,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -501,8 +493,6 @@ def get_groq_models(api_key):
     """Get Groq model list with caching."""
     if GROQ_CACHE_FILE.exists():
         try:
-            check_quota_or_raise()
-            _enforce_free_tier(model)
             cache = json.loads(GROQ_CACHE_FILE.read_text())
             if time.time() - cache.get("timestamp", 0) < CACHE_TTL:
                 return cache["models"]
@@ -582,8 +572,6 @@ def _parse_dur(s):
 
 def _groq_note_rl(model, headers):
     try:
-        check_quota_or_raise()
-        _enforce_free_tier(model)
         now = time.time()
         e = _groq_rl.setdefault(model, {})
         rr = headers.get("x-ratelimit-remaining-requests")
@@ -614,9 +602,6 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
     """Call Groq with cooldown tracking so we never waste requests probing
     models that are already rate-limited."""
     if not api_key:
-        return ""
-
-    if not _budget_allow("gemini"):
         return ""
 
     global _last_groq_call
@@ -667,8 +652,6 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                 payload = {"model": try_model, "messages": messages,
                            "temperature": temperature, "max_tokens": max_out}
                 try:
-                    check_quota_or_raise()
-                    _enforce_free_tier(model)
                     _pace()
                     resp = requests.post(GROQ_URL, json=payload, headers=headers, timeout=90)
                     _groq_note_rl(try_model, resp.headers)
@@ -692,8 +675,6 @@ def _call_groq(prompt, api_key, model=None, system_prompt=None, max_tokens=8192,
                 elif resp.status_code == 429:
                     ra = resp.headers.get("retry-after", "5")
                     try:
-                        check_quota_or_raise()
-                        _enforce_free_tier(model)
                         base = min(int(ra), 30)
                     except ValueError:
                         base = 5
@@ -772,8 +753,6 @@ Provide 3-5 bullet points of observations. Be specific about line numbers.
 Keep it brief - this is a preliminary pass, not a final review."""
 
     try:
-        check_quota_or_raise()
-        _enforce_free_tier(model)
         response = _call_gemini(prompt, api_keys.get("gemini", ""),
                                 max_tokens=1500, temperature=0.3)
         if response:
@@ -795,8 +774,6 @@ def generate(*args, **kwargs):
         raise Exception(f"Circuit breaker tripped for {model}")
         
     try:
-        check_quota_or_raise()
-        _enforce_free_tier(model)
         result = _original_generate(*args, **kwargs)
         # Reset breaker on success
         if model: swarm_state.reset_model_breaker(model)
@@ -844,8 +821,6 @@ def _original_generate(prompt, api_keys, model_type="code", max_tokens=8192, tem
             return ""
         generate.last_model_used = provider
         try:
-            check_quota_or_raise()
-            _enforce_free_tier(model)
             from engine.reasoning_ledger import record_interaction
             record_interaction("heavy_generation", prompt, result, provider)
         except Exception:
@@ -929,9 +904,6 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
     if not api_key:
         return ""
     
-    if not _budget_allow("gemini"):
-        return ""
-
     url = "https://api.mistral.ai/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
@@ -950,8 +922,6 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
     }
     
     try:
-        check_quota_or_raise()
-        _enforce_free_tier(model)
         from overnight.budget_manager import APIBudgetManager
         budget = APIBudgetManager()
         if not budget.can_proceed("mistral"):
@@ -961,7 +931,7 @@ def _call_mistral(prompt, api_key, system_prompt="", max_tokens=8192, temperatur
             print("    🔒 Mistral budget wait timeout")
             return ""
         
-        _enforce_free_tier(try_model)
+        _enforce_free_tier(model)
         
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         budget.record_call("mistral")
