@@ -323,7 +323,9 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
     attempts = 0
     max_attempts = 1 if not allow_fallback else 3
 
-    for try_model in models_to_try:
+    for try_model in models_to_try:            check_quota_or_raise()
+            _enforce_free_tier(model)
+
         attempts += 1
         if attempts > max_attempts:
             break
