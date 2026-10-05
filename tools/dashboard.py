@@ -343,14 +343,10 @@ def main():
     if not args.fast:
         h1("🧪 TEST SUITE (Post-Consensus)")
         try:
-                try:
-        res = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--tb=line", "tests/test_paid_call_gate.py", "tests/test_queue_authority_hardening.py", "tests/pipeline/test_llm_client_budget_reservation.py"],
-            cwd=ROOT, capture_output=True, text=True, timeout=30,
-        )
-    except subprocess.TimeoutExpired:
-        res = None
-        print("   ⚠️  Test suite timed out (skipped for dashboard speed).")
+            res = subprocess.run(
+                [sys.executable, "-m", "pytest", "-q", "--tb=line", "tests/"],
+                cwd=ROOT, capture_output=True, text=True, timeout=120,
+            )
             out_lines = res.stdout.strip().split(chr(10))
             print(chr(10).join(out_lines[-3:]) if len(out_lines) >= 3 else res.stdout)
         except subprocess.TimeoutExpired:
