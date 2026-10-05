@@ -358,6 +358,8 @@ def _call_openrouter(prompt, api_key, model=None, system_prompt=None, max_tokens
         try:
             check_quota_or_raise()
             _enforce_free_tier(model)
+            if not _budget_allow("openrouter", model):
+                return ""
             resp = requests.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
 
             if resp.status_code == 200:
