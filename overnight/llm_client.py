@@ -12,14 +12,13 @@ import os
 
 def _enforce_free_tier(model: str) -> None:
     """Hard guard: Physically prevents any paid model from being called."""
-    if os.getenv("ALLOW_PAID_CALLS", "").lower() in ("true", "1", "yes"):
+    if os.getenv("ALLOW_PAID_CALLS", "").strip().lower() == "true":
         return
     if not str(model).strip().endswith(":free"):
         raise RuntimeError(
             f"SECURITY VIOLATION: Attempted to call paid model '{model}'. "
             "Only ':free' models are permitted to prevent API drain."
         )
-
 import re
 import json
 import time

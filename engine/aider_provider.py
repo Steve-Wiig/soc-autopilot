@@ -122,6 +122,12 @@ class OpenRouterCatalog(ProviderCatalogABC):
             except Exception:
                 logging.warning("OpenRouter free-only mode requires catalog data but none provided; skipping.")
                 return providers
+                if not catalog:
+                    logging.warning("OpenRouter free-only mode requires catalog data but none provided; skipping.")
+                    return providers
+            except Exception:
+                logging.warning("OpenRouter free-only mode requires catalog data but none provided; skipping.")
+                return providers
 
         model = _select_openrouter_model(env)
         if model:
